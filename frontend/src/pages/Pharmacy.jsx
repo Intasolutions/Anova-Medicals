@@ -88,6 +88,25 @@ const Pharmacy = () => {
 
     // Inventory
     const [stockData, setStockData] = useState({ results: [], count: 0 });
+
+    const startEditing = async (item) => {
+        const stockId = item.med_id || item.id;
+        try {
+            setLoading(true);
+            // Fetch the full purchase invoice for this stock item
+            const { data } = await api.get(`pharmacy/stock/${stockId}/purchase-invoice/`);
+
+            // Navigate to Purchases tab and selected the import to show details modal
+            setActiveTab('purchases');
+            setSelectedImport(data);
+            showToast('success', 'Purchase invoice loaded');
+        } catch (error) {
+            console.error(error);
+            showToast('error', error.response?.data?.detail || 'Failed to locate related purchase invoice. This stock might have been imported differently.');
+        } finally {
+            setLoading(false);
+        }
+    };
     const [page, setPage] = useState(1);
     const [rowsPerPage, setRowsPerPage] = useState(50);
     const [selectedStockItem, setSelectedStockItem] = useState(null);
@@ -95,29 +114,6 @@ const Pharmacy = () => {
     const [filterSupplier, setFilterSupplier] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
     const [inventorySearch, setInventorySearch] = useState(''); // New State
-    const [editingStockId, setEditingStockId] = useState(null);
-    const [editQty, setEditQty] = useState('');
-
-    const startEditing = (item) => {
-        setEditingStockId(item.med_id || item.id);
-        setEditQty(item.qty_available);
-    };
-
-    const cancelEdit = () => {
-        setEditingStockId(null);
-        setEditQty('');
-    };
-
-    const saveStockUpdate = async (id) => {
-        try {
-            await api.patch(`pharmacy/stock/${id}/`, { qty_available: parseInt(editQty) });
-            showToast('success', 'Stock Updated');
-            setEditingStockId(null);
-            fetchStock();
-        } catch (err) {
-            showToast('error', 'Failed to update stock');
-        }
-    };
 
     // POS
     const [cart, setCart] = useState([]);
@@ -146,11 +142,39 @@ const Pharmacy = () => {
     const [showAddSupplierModal, setShowAddSupplierModal] = useState(false);
     const [newSupplierName, setNewSupplierName] = useState('');
     const [showManualPurchaseModal, setShowManualPurchaseModal] = useState(false);
+    const [confirmModal, setConfirmModal] = useState({ show: false });
     const [manualInvoice, setManualInvoice] = useState({
         supplier: '', supplier_invoice_no: '', invoice_date: new Date().toISOString().split('T')[0], purchase_type: 'CASH', items: [], gst_percent: 0,
         category: 'PHARMACY',
         cash_discount: 0, courier_charge: 0 // New Extra Expenses
     });
+
+    const proceedWithEditInvoice = () => {
+        if (!selectedImport) return;
+        setManualInvoice({
+            id: selectedImport.id,
+            supplier: selectedImport.supplier,
+            supplier_invoice_no: selectedImport.supplier_invoice_no,
+            invoice_date: selectedImport.invoice_date,
+            purchase_type: selectedImport.purchase_type,
+            cash_discount: parseFloat(selectedImport.cash_discount) || 0,
+            courier_charge: parseFloat(selectedImport.courier_charge) || 0,
+            category: selectedImport.category || 'PHARMACY',
+            // Flatten items back to manual entry format
+            items: selectedImport.items_detail.map(d => ({
+                ...d,
+                // Ensure numeric types match manual entry expectations
+                qty: d.qty,
+                gst_percent: parseFloat(d.gst_percent).toString(),
+                discount_percent: parseFloat(d.discount_percent || 0).toString(),
+                selling_price_per_tab: (parseFloat(d.selling_price) / (d.tablets_per_strip || 1)).toFixed(2)
+            }))
+        });
+        setConfirmModal({ show: false });
+        setSelectedImport(null);
+        setShowManualPurchaseModal(true);
+    };
+
     const medicineTypes = ['TABLET', 'SYRUP', 'DROP', 'INJECTION', 'GEL', 'CREAM', 'OINTMENT', 'POWDER', 'SPRAY', 'OTHER'];
     const [scannedBarcode, setScannedBarcode] = useState('');
     const [manualProductSearch, setManualProductSearch] = useState({ rowIdx: null, results: [] });
@@ -746,24 +770,14 @@ const Pharmacy = () => {
                                             <td className="px-6 py-3 font-mono text-xs font-bold text-slate-600">{s.batch_no}</td>
                                             <td className="px-6 py-3 font-mono text-xs font-bold text-slate-600">{new Date(s.expiry_date).toLocaleDateString(undefined, { month: 'short', year: '2-digit' })}</td>
                                             <td className="px-6 py-3">
-                                                {(editingStockId === (s.med_id || s.id)) ? (
-                                                    <Input
-                                                        type="number"
-                                                        value={editQty}
-                                                        onChange={(e) => setEditQty(e.target.value)}
-                                                        className="w-24 h-8 text-xs font-bold"
-                                                        autoFocus
-                                                    />
-                                                ) : (
-                                                    <div className="flex flex-col">
-                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold ${s.qty_available < 10 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                                                            {s.qty_available} TAB
-                                                        </span>
-                                                        <span className="text-[10px] font-bold text-slate-400 mt-1 uppercase">
-                                                            ({Math.floor(s.qty_available / (s.tablets_per_strip || 1))} STR, {s.qty_available % (s.tablets_per_strip || 1)} TAB)
-                                                        </span>
-                                                    </div>
-                                                )}
+                                                <div className="flex flex-col">
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold ${s.qty_available < 10 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                                        {s.qty_available} TAB
+                                                    </span>
+                                                    <span className="text-[10px] font-bold text-slate-400 mt-1 uppercase">
+                                                        ({Math.floor(s.qty_available / (s.tablets_per_strip || 1))} STR, {s.qty_available % (s.tablets_per_strip || 1)} TAB)
+                                                    </span>
+                                                </div>
                                             </td>
                                             <td className="px-6 py-3 font-bold text-sm text-slate-500">
                                                 <div className="flex flex-col">
@@ -791,25 +805,14 @@ const Pharmacy = () => {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-3">
-                                                {(editingStockId === (s.med_id || s.id)) ? (
-                                                    <div className="flex items-center gap-1">
-                                                        <ActionTooltip text="Save">
-                                                            <button onClick={() => saveStockUpdate(s.med_id || s.id)} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"><Check size={16} /></button>
-                                                        </ActionTooltip>
-                                                        <ActionTooltip text="Cancel">
-                                                            <button onClick={cancelEdit} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all"><X size={16} /></button>
-                                                        </ActionTooltip>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex items-center gap-1">
-                                                        <ActionTooltip text="Edit Qty">
-                                                            <button onClick={() => startEditing(s)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"><Pencil size={16} /></button>
-                                                        </ActionTooltip>
-                                                        <ActionTooltip text="View Details">
-                                                            <button onClick={() => setSelectedStockItem(s)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"><Eye size={16} /></button>
-                                                        </ActionTooltip>
-                                                    </div>
-                                                )}
+                                                <div className="flex items-center gap-1">
+                                                    <ActionTooltip text="Edit Invoice">
+                                                        <button onClick={() => startEditing(s)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"><Edit3 size={16} /></button>
+                                                    </ActionTooltip>
+                                                    <ActionTooltip text="View Details">
+                                                        <button onClick={() => setSelectedStockItem(s)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"><Eye size={16} /></button>
+                                                    </ActionTooltip>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -1188,31 +1191,11 @@ const Pharmacy = () => {
                                     <div className="mt-6 flex justify-end">
                                         <button
                                             onClick={() => {
-                                                if (selectedImport.status === 'COMPLETED' && !window.confirm("WARNING: This is a verified invoice. Editing it will automatically adjust live stock. If items have already been sold, reduction may fail. Continue?")) {
-                                                    return;
+                                                if (selectedImport.status === 'COMPLETED') {
+                                                    setConfirmModal({ show: true });
+                                                } else {
+                                                    proceedWithEditInvoice();
                                                 }
-                                                // Resume Draft / Edit Completed
-                                                setManualInvoice({
-                                                    id: selectedImport.id,
-                                                    supplier: selectedImport.supplier,
-                                                    supplier_invoice_no: selectedImport.supplier_invoice_no,
-                                                    invoice_date: selectedImport.invoice_date,
-                                                    purchase_type: selectedImport.purchase_type,
-                                                    cash_discount: parseFloat(selectedImport.cash_discount) || 0,
-                                                    courier_charge: parseFloat(selectedImport.courier_charge) || 0,
-                                                    category: selectedImport.category || 'PHARMACY',
-                                                    // Flatten items back to manual entry format
-                                                    items: selectedImport.items_detail.map(d => ({
-                                                        ...d,
-                                                        // Ensure numeric types match manual entry expectations
-                                                        qty: d.qty,
-                                                        gst_percent: parseFloat(d.gst_percent).toString(),
-                                                        discount_percent: parseFloat(d.discount_percent || 0).toString(),
-                                                        selling_price_per_tab: (parseFloat(d.selling_price) / (d.tablets_per_strip || 1)).toFixed(2)
-                                                    }))
-                                                });
-                                                setSelectedImport(null);
-                                                setShowManualPurchaseModal(true);
                                             }}
                                             className={`px-6 py-3 rounded-xl font-bold shadow-lg uppercase tracking-widest text-xs flex items-center gap-2 ${selectedImport.status === 'COMPLETED' ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-500/20' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-500/20'} text-white transition-all`}
                                         >
@@ -1691,6 +1674,25 @@ const Pharmacy = () => {
 
                         </motion.div>
                     </motion.div>
+                )}
+            </AnimatePresence>
+
+            <AnimatePresence>
+                {confirmModal.show && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setConfirmModal({ show: false })} />
+                        <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white rounded-3xl p-6 max-w-md w-full relative z-10 shadow-2xl flex flex-col items-center text-center">
+                            <div className="w-16 h-16 rounded-full bg-amber-100 text-amber-500 flex items-center justify-center mb-4">
+                                <AlertTriangle size={32} />
+                            </div>
+                            <h3 className="text-xl font-black text-slate-800 mb-2">Warning: Verified Invoice</h3>
+                            <p className="text-sm font-bold text-slate-500 mb-6">Editing this verified invoice will automatically adjust live stock. If items have already been sold, reduction may fail. Do you want to continue?</p>
+                            <div className="flex gap-3 w-full">
+                                <button onClick={() => setConfirmModal({ show: false })} className="flex-1 py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-all">Cancel</button>
+                                <button onClick={proceedWithEditInvoice} className="flex-1 py-3 px-4 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-xl shadow-lg shadow-amber-500/20 transition-all">Yes, Edit Invoice</button>
+                            </div>
+                        </motion.div>
+                    </div>
                 )}
             </AnimatePresence>
 

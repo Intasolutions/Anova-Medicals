@@ -92,12 +92,27 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
 
         if items_data is not None:
-             # Logic for updating items
-             # IF status was already COMPLETED, we must reverse the old stock contribution before replacing items
+             # Calculate the NET change in stock needed, to avoid full reversal errors
+             # Group old and new items by (product_name, batch_no)
+             old_qty_map = {}
              if old_status == 'COMPLETED':
-                 self._reverse_stock_for_invoice(instance)
+                 for old_item in instance.items.all():
+                     key = (old_item.product_name, old_item.batch_no)
+                     tps = old_item.tablets_per_strip
+                     total_tabs = (old_item.qty + old_item.free_qty) * tps
+                     old_qty_map[key] = old_qty_map.get(key, 0) + total_tabs
+             
+             new_qty_map = {}
+             # We assume NEW status will be whatever it's being set to, or COMPLETED if staying COMPLETED
+             new_status = validated_data.get('status', instance.status)
+             if new_status == 'COMPLETED':
+                 for new_item in items_data:
+                     key = (new_item['product_name'], new_item['batch_no'])
+                     tps = new_item.get('tablets_per_strip', 1)
+                     total_tabs = (new_item['qty'] + new_item.get('free_qty', 0)) * tps
+                     new_qty_map[key] = new_qty_map.get(key, 0) + total_tabs
 
-             # Now delete and recreate items (Works for both DRAFT and COMPLETED now)
+             # Now delete and recreate items
              instance.items.all().delete()
              for item in items_data:
                 PurchaseItem.objects.create(purchase=instance, **item)
@@ -106,12 +121,58 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
              instance.calculate_distribution()
              instance.refresh_from_db()
 
-        instance.save()
+             # Apply the net stock differences
+             for key in set(old_qty_map.keys()).union(new_qty_map.keys()):
+                 old_qty = old_qty_map.get(key, 0)
+                 new_qty = new_qty_map.get(key, 0)
+                 delta = new_qty - old_qty
+                 
+                 if delta != 0:
+                     try:
+                         stock = PharmacyStock.objects.select_for_update().get(
+                             name=key[0],
+                             batch_no=key[1]
+                         )
+                         if delta < 0 and stock.qty_available < abs(delta):
+                             raise serializers.ValidationError(
+                                 f"CRITICAL: Cannot reduce {key[0]} (Batch: {key[1]}). "
+                                 f"Current stock: {stock.qty_available}, but trying to reduce by {abs(delta)}."
+                             )
+                         stock.qty_available += delta
+                         stock.save()
+                     except PharmacyStock.DoesNotExist:
+                         # Stock doesn't exist. If delta > 0, we must create it (e.g., user changed batch_no or added new item).
+                         if delta > 0:
+                             # Find the item data from items_data
+                             new_item_data = next((item for item in items_data if item['product_name'] == key[0] and item['batch_no'] == key[1]), None)
+                             if new_item_data:
+                                 tps = new_item_data.get('tablets_per_strip', 1)
+                                 # We create it with qty_available = delta.
+                                 # pricing and details will be updated right after this loop by _update_stock_prices_for_invoice
+                                 PharmacyStock.objects.create(
+                                     name=key[0],
+                                     batch_no=key[1],
+                                     supplier=instance.supplier,
+                                     category=instance.category,
+                                     expiry_date=new_item_data['expiry_date'],
+                                     barcode=new_item_data.get('barcode', ''),
+                                     mrp=new_item_data.get('mrp', 0),
+                                     selling_price=new_item_data.get('mrp', 0),
+                                     purchase_rate=new_item_data.get('purchase_rate', 0),
+                                     ptr=new_item_data.get('ptr', 0),
+                                     qty_available=delta,
+                                     tablets_per_strip=tps,
+                                     hsn=new_item_data.get('hsn', ''),
+                                     gst_percent=new_item_data.get('gst_percent', 0),
+                                     manufacturer=new_item_data.get('manufacturer', ''),
+                                     medicine_type=new_item_data.get('medicine_type', 'TABLET')
+                                 )
 
-        # IF transitioning to COMPLETED (from Draft) OR staying COMPLETED (after edit)
-        # Apply the new stock contribution
-        if instance.status == 'COMPLETED':
-             self._process_stock_for_invoice(instance)
+             # Update pricing/details for items if status is COMPLETED
+             if new_status == 'COMPLETED':
+                 self._update_stock_prices_for_invoice(instance)
+
+        instance.save()
 
         # Emit Socket
         try:
@@ -132,27 +193,21 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
             if isinstance(val, float): val = str(val)
             return Decimal(val).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-        # Iterate over ACTUAL database items which have calculated values
         for item in invoice.items.all():
             tps = item.tablets_per_strip
   
             qty_strips = Decimal(item.qty)
             free_strips = Decimal(item.free_qty)
             
-            # TOTAL QTY in Units (Tablets)
             qty_in = (qty_strips + free_strips) * tps
 
-            # Effective Purchase Rate Calculation
-            # Logic: (Total Net Cost of Line) / (Total Strips including Free)
-            
-            total_net_cost = Decimal(item.taxable_amount) # Already Decimal from DB ideally
+            total_net_cost = Decimal(item.taxable_amount)
             
             if (qty_strips + free_strips) > 0:
                 effective_purch_rate = total_net_cost / (qty_strips + free_strips)
             else:
                 effective_purch_rate = Decimal(item.purchase_rate)
             
-            # Round the rate to 2 decimals as requested "all values rounded"
             effective_purch_rate = d_round(effective_purch_rate)
 
             stock, created = PharmacyStock.objects.get_or_create(
@@ -182,10 +237,6 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
                 stock.tablets_per_strip = tps 
                 if item.barcode: stock.barcode = item.barcode
                 stock.mrp = item.mrp
-                # stock.selling_price = item.mrp # Don't overwrite SP if exists? User pref? 
-                # Let's keep existing SP if not created, unless MRP changed drastically? 
-                # Safer to update SP to MRP for new batches or keep logic consistent.
-                # Current logic was overwriting. Let's stick to overwriting to ensure consistency.
                 stock.selling_price = item.mrp 
                 
                 stock.purchase_rate = round(effective_purch_rate, 2)
@@ -197,12 +248,9 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
                 stock.medicine_type = item.medicine_type
                 stock.save()
 
-            # --- Notification Cleanup ---
             try:
-                # If stock is now healthy (above reorder level + buffer), clear low stock alerts
                 if stock.qty_available > stock.reorder_level:
                     from core.models import Notification
-                    # Use Q for cleaner syntax
                     Notification.objects.filter(
                         Q(message__icontains=f"Low stock alert: {stock.name}") &
                         Q(message__icontains=stock.batch_no)
@@ -210,35 +258,40 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
             except Exception as e:
                 print(f"Failed to clear notifications: {e}")
 
-    def _reverse_stock_for_invoice(self, invoice):
-        """
-        Subtracts the quantities of all items in the invoice from PharmacyStock.
-        Used before replacing items in a COMPLETED invoice edit.
-        """
+    def _update_stock_prices_for_invoice(self, invoice):
+        from decimal import Decimal, ROUND_HALF_UP
+        def d_round(val):
+            if isinstance(val, float): val = str(val)
+            return Decimal(val).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
         for item in invoice.items.all():
-            tps = item.tablets_per_strip
-            qty_to_subtract = (item.qty + item.free_qty) * tps
+            qty_strips = Decimal(item.qty)
+            free_strips = Decimal(item.free_qty)
+            total_net_cost = Decimal(item.taxable_amount)
             
+            if (qty_strips + free_strips) > 0:
+                effective_purch_rate = total_net_cost / (qty_strips + free_strips)
+            else:
+                effective_purch_rate = Decimal(item.purchase_rate)
+            
+            effective_purch_rate = d_round(effective_purch_rate)
+
             try:
-                # Use select_for_update to handle concurrency in production
-                stock = PharmacyStock.objects.select_for_update().get(
-                    name=item.product_name,
-                    batch_no=item.batch_no
-                )
-                
-                # Safety check: Prevent negative stock (indicates items already sold)
-                if stock.qty_available < qty_to_subtract:
-                    raise serializers.ValidationError(
-                        f"CRITICAL: Cannot edit invoice. {item.product_name} (Batch: {item.batch_no}) "
-                        f"has already been partially sold. Current stock: {stock.qty_available}, "
-                        f"needed to reverse: {qty_to_subtract}. Edit would cause negative inventory."
-                    )
-                
-                stock.qty_available -= qty_to_subtract
+                stock = PharmacyStock.objects.get(name=item.product_name, batch_no=item.batch_no)
+                stock.tablets_per_strip = item.tablets_per_strip 
+                if item.barcode: stock.barcode = item.barcode
+                stock.mrp = item.mrp
+                stock.selling_price = item.mrp 
+                stock.purchase_rate = round(effective_purch_rate, 2)
+                stock.ptr = item.ptr
+                stock.hsn = item.hsn or stock.hsn
+                stock.gst_percent = item.gst_percent
+                stock.manufacturer = item.manufacturer or stock.manufacturer
+                stock.is_deleted = False
+                stock.medicine_type = item.medicine_type
                 stock.save()
             except PharmacyStock.DoesNotExist:
-                # If stock record was manually deleted or renamed, we skip reversal to avoid crash
-                # but might need to log this in a real prod env.
+                # If it doesn't exist, create it (shouldn't happen on delta logic unless it's a completely new item)
                 pass
 
 

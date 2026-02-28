@@ -387,6 +387,29 @@ class PharmacyStockViewSet(viewsets.ModelViewSet):
         
         return Response(results)
 
+    @action(detail=True, methods=['get'], url_path='purchase-invoice')
+    def purchase_invoice(self, request, pk=None):
+        """
+        Finds the related PurchaseInvoice for a given PharmacyStock item based on name and batch_no.
+        """
+        stock = self.get_object()
+        
+        # Invoices are linked via PurchaseItem. Find a matching item.
+        # We use product_name and batch_no since stock doesn't have a direct FK to PurchaseItem
+        purchase_item = PurchaseItem.objects.filter(
+            product_name=stock.name,
+            batch_no=stock.batch_no
+        ).select_related('purchase').order_by('-created_at').first()
+
+        if not purchase_item:
+           return Response(
+                {"detail": "No associated purchase invoice found for this stock item."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        invoice_serializer = PurchaseInvoiceSerializer(purchase_item.purchase)
+        return Response(invoice_serializer.data, status=status.HTTP_200_OK)
+
 
 class PurchaseInvoiceViewSet(viewsets.ModelViewSet):
     queryset = PurchaseInvoice.objects.all().order_by('-invoice_date', '-created_at')
