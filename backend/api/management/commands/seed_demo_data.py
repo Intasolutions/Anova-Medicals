@@ -129,7 +129,7 @@ class Command(BaseCommand):
                     date_of_birth=date(1993, 2, 28),
                     date_of_joining=date(2026, 1, 20)
                 )
-                emp_quality = Employee.objects.create(
+                Employee.objects.create(
                     employee_code="EMP-005",
                     name="Sunita Rao",
                     designation=designations['Quality Inspector'],

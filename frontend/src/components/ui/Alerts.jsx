@@ -71,25 +71,3 @@ export const Alert = ({ isOpen, type = 'success', message, title, onClose, autoC
   );
 };
 
-export const InlineValidation = ({ message, type = 'error', className = '' }) => {
-  if (!message) return null;
-
-  const styles = {
-    error: 'text-red-500 bg-red-50/50 border border-red-100',
-    warning: 'text-amber-600 bg-amber-50/50 border border-amber-100',
-    success: 'text-green-600 bg-green-50/50 border border-green-100'
-  };
-  
-  const icons = {
-    error: <AlertOctagon size={14} strokeWidth={2.5} />,
-    warning: <AlertTriangle size={14} strokeWidth={2.5} />,
-    success: <CheckCircle size={14} strokeWidth={2.5} />
-  };
-
-  return (
-    <div className={`flex items-center gap-2 mt-2 px-3 py-2 rounded-xl text-[11px] font-black uppercase tracking-wider ${styles[type]} ${className} animate-in fade-in slide-in-from-top-1`}>
-      {icons[type]}
-      <span>{message}</span>
-    </div>
-  );
-};

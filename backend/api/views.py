@@ -4,7 +4,7 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import viewsets, views, status
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+
 from rest_framework.decorators import action
 from .models import Product, Operation, ProductOperation, Employee, InventoryBalance, ProductionLog, ProductSize, Designation, StockOut, MasterStock
 from .serializers import (

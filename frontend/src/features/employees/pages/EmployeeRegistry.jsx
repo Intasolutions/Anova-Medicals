@@ -212,7 +212,7 @@ const EmployeeRegistry = () => {
               {designations.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
             </Select>
 
-            <Input label="Contact Number" value={formData.contact_number} onChange={e => setFormData({ ...formData, contact_number: e.target.value })} className="focus:ring-[#DC2626]/10 focus:border-[#DC2626]" />
+            <Input label="Contact Number" value={formData.contact_number} onChange={e => setFormData({ ...formData, contact_number: e.target.value })} required className="focus:ring-[#DC2626]/10 focus:border-[#DC2626]" />
             <Input label="Date of Birth" type="date" value={formData.date_of_birth} onChange={e => setFormData({ ...formData, date_of_birth: e.target.value })} className="focus:ring-[#DC2626]/10 focus:border-[#DC2626]" />
             <Input label="Date of Joining" type="date" value={formData.date_of_joining} onChange={e => setFormData({ ...formData, date_of_joining: e.target.value })} className="focus:ring-[#DC2626]/10 focus:border-[#DC2626]" />
 
@@ -230,7 +230,7 @@ const EmployeeRegistry = () => {
             </div>
 
             <div className="md:col-span-2 lg:col-span-1">
-              <Input label="Residential Address" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} className="focus:ring-[#DC2626]/10 focus:border-[#DC2626]" />
+              <Input label="Residential Address" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} required className="focus:ring-[#DC2626]/10 focus:border-[#DC2626]" />
             </div>
 
             <div className="flex flex-col gap-2">

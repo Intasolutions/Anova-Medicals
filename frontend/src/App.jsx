@@ -1,7 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
-import { Dashboard, Employees, Operations } from './pages/Pages';
+import { Dashboard, Operations } from './pages/Pages';
 
 import { AuthProvider } from './features/auth/context/AuthContext';
 import { NotificationProvider } from './context/NotificationContext';

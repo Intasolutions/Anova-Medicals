@@ -47,6 +47,11 @@ class EmployeeSerializer(serializers.ModelSerializer):
             'id', 'employee_code', 'name', 'designation', 'designation_name',
             'address', 'contact_number', 'date_of_birth', 'date_of_joining', 'photo', 'id_proof', 'is_working'
         ]
+        extra_kwargs = {
+            'contact_number': {'required': True, 'allow_blank': False},
+            'address': {'required': True, 'allow_blank': False},
+            'designation': {'required': True, 'allow_null': False},
+        }
 
 class InventoryBalanceSerializer(serializers.ModelSerializer):
     product_name = serializers.ReadOnlyField(source='product.name')

@@ -42,30 +42,6 @@ export const Input = ({ label, error, className = '', ...props }) => (
   </div>
 );
 
-export const Checkbox = ({ label, description, className = '', ...props }) => (
-  <div className={`flex items-start gap-3 p-4 bg-[#F8FAFC] border border-slate-200/60 rounded-xl hover:bg-slate-50 transition-all cursor-pointer group ${className}`}>
-    <div className="relative flex items-center h-5">
-      <input
-        type="checkbox"
-        className="w-5 h-5 rounded-md border-2 border-slate-300 text-brand-primary focus:ring-brand-primary/20 transition-all cursor-pointer appearance-none checked:bg-brand-primary checked:border-brand-primary relative after:content-[''] after:hidden checked:after:block after:absolute after:left-[6px] after:top-[2px] after:w-[6px] after:h-[10px] after:border-white after:border-b-2 after:border-r-2 after:rotate-45"
-        {...props}
-      />
-    </div>
-    <div className="flex flex-col">
-      {label && (
-        <span className="text-[11px] font-black text-slate-800 uppercase tracking-widest leading-tight">
-          {label}
-        </span>
-      )}
-      {description && (
-        <span className="text-[10px] font-medium text-slate-500 mt-1 leading-tight">
-          {description}
-        </span>
-      )}
-    </div>
-  </div>
-);
-
 export const Select = ({ label, error, children, className = '', ...props }) => (
   <div className={`flex flex-col gap-2 ${className}`}>
     {label && (
