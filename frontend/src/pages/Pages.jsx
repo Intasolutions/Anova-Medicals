@@ -27,7 +27,14 @@ export const Dashboard = () => (
 // ==========================================
 // 3. FLOOR OPERATIONS (EXECUTION)
 // ==========================================
-export const Operations = () => (
+export const Operations = () => {
+  const [refreshTrigger, setRefreshTrigger] = React.useState(0);
+
+  const handleEntrySuccess = () => {
+    setRefreshTrigger(prev => prev + 1);
+  };
+
+  return (
   <div className="space-y-8 animate-in fade-in duration-500 w-full max-w-7xl mx-auto">
 
     <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-6 border-b border-slate-200/60">
@@ -75,7 +82,7 @@ export const Operations = () => (
 
           {/* Component Wrapper */}
           <div className="bg-[#F8FAFC] rounded-2xl p-1 md:p-3 border border-slate-200/60 shadow-inner">
-            <DailyOperationEntry />
+            <DailyOperationEntry onSuccess={handleEntrySuccess} />
           </div>
         </div>
       </section>
@@ -99,7 +106,7 @@ export const Operations = () => (
 
           {/* Component Wrapper */}
           <div className="w-full bg-[#F8FAFC] rounded-2xl border border-slate-200/60 overflow-hidden p-1 shadow-inner">
-            <ProductionLogsTable />
+            <ProductionLogsTable refreshTrigger={refreshTrigger} />
           </div>
 
         </div>
@@ -107,4 +114,5 @@ export const Operations = () => (
 
     </div>
   </div>
-);
+  );
+};

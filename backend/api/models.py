@@ -193,10 +193,6 @@ class ProductionLog(models.Model):
             CheckConstraint(
                 condition=Q(quantity__gt=0),
                 name="quantity_positive"
-            ),
-            UniqueConstraint(
-                fields=['work_date', 'employee', 'product', 'operation', 'size'],
-                name='unique_production_log_entry'
             )
         ]
 

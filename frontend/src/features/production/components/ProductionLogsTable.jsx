@@ -4,14 +4,16 @@ import {
    getCoreRowModel,
    flexRender,
  } from '@tanstack/react-table';
- import { Loader2, Activity, Filter, X } from 'lucide-react';
+ import { Loader2, Activity, Filter, X, Edit, Trash2 } from 'lucide-react';
  import apiClient from '../../../api/apiClient';
  import { Pagination } from '../../../components/ui/Base';
+ import EditProductionLogModal from './EditProductionLogModal';
 
-const ProductionLogsTable = () => {
+const ProductionLogsTable = ({ refreshTrigger }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [rowCount, setRowCount] = useState(0);
+  const [editingLog, setEditingLog] = useState(null);
 
   // Filter State
   const [products, setProducts] = useState([]);
@@ -88,7 +90,20 @@ const ProductionLogsTable = () => {
     };
 
     fetchData();
-  }, [pageIndex, pageSize, selectedProduct, selectedOperation, startDate, endDate, modelNumber]);
+  }, [pageIndex, pageSize, selectedProduct, selectedOperation, startDate, endDate, modelNumber, refreshTrigger]);
+
+  const handleDelete = async (id) => {
+    if (window.confirm('Are you sure you want to delete this log?')) {
+      try {
+        await apiClient.delete(`/production-logs/${id}/`);
+        setData((prev) => prev.filter((item) => item.id !== id));
+        setRowCount((prev) => prev - 1);
+      } catch (error) {
+        console.error('Error deleting log:', error);
+        alert('Failed to delete the log. Please try again.');
+      }
+    }
+  };
 
   const columns = useMemo(
     () => [
@@ -131,6 +146,28 @@ const ProductionLogsTable = () => {
             x{info.getValue()}
           </span>
         ),
+      },
+      {
+        header: 'Actions',
+        id: 'actions',
+        cell: (info) => (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setEditingLog(info.row.original)}
+              className="p-1.5 bg-slate-100 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-slate-200 hover:border-blue-200"
+              title="Edit"
+            >
+              <Edit size={14} strokeWidth={2.5} />
+            </button>
+            <button
+              onClick={() => handleDelete(info.row.original.id)}
+              className="p-1.5 bg-slate-100 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-slate-200 hover:border-red-200"
+              title="Delete"
+            >
+              <Trash2 size={14} strokeWidth={2.5} />
+            </button>
+          </div>
+        )
       },
     ],
     []
@@ -305,6 +342,17 @@ const ProductionLogsTable = () => {
           totalItems={rowCount}
         />
       </div>
+
+      {editingLog && (
+        <EditProductionLogModal
+          logData={editingLog}
+          onClose={() => setEditingLog(null)}
+          onSuccess={(updatedLog) => {
+            setData((prev) => prev.map((item) => (item.id === updatedLog.id ? updatedLog : item)));
+            setEditingLog(null);
+          }}
+        />
+      )}
     </div>
   );
 };

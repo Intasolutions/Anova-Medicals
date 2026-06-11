@@ -15,13 +15,15 @@ const schema = z.object({
   quantity: z.number().min(1, "Quantity must be at least 1").int("Quantity must be a whole number"),
 });
 
-const DailyOperationEntry = () => {
+const DailyOperationEntry = ({ onSuccess }) => {
   const [employees, setEmployees] = useState([]);
   const [products, setProducts] = useState([]);
   const [operations, setOperations] = useState([]);
   const [sizes, setSizes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
+  const [masterStocks, setMasterStocks] = useState([]);
+  const [inventory, setInventory] = useState([]);
 
   const {
     register,
@@ -58,6 +60,15 @@ const DailyOperationEntry = () => {
 
         const allSizes = sizeRes.data.results || sizeRes.data;
         setSizes(allSizes.filter(s => s.is_active && s.size_name !== "DAY-WAGE"));
+
+        // Fetch master stocks and inventory balances for validation
+        const [masterRes, invRes] = await Promise.all([
+          apiClient.get('/master-stocks/'),
+          apiClient.get('/inventory-balances/')
+        ]);
+        setMasterStocks(masterRes.data.results || masterRes.data);
+        setInventory(invRes.data.results || invRes.data);
+
       } catch (err) {
         console.error("Error fetching master data", err);
       }
@@ -80,6 +91,23 @@ const DailyOperationEntry = () => {
       setValue("operation_id", "");
     }
   }, [selectedProductId, setValue]);
+
+  const selectedSizeId = watch("size");
+  const [availableQuantity, setAvailableQuantity] = useState(null);
+
+  useEffect(() => {
+    if (selectedProductId && selectedOperationId && selectedSizeId && masterStocks.length > 0) {
+      const master = masterStocks.find(m => String(m.product) === String(selectedProductId) && String(m.size) === String(selectedSizeId));
+      const totalQty = master ? master.total_quantity : 0;
+      
+      const inv = inventory.find(i => String(i.product) === String(selectedProductId) && String(i.size) === String(selectedSizeId) && (String(i.operation) === String(selectedOperationId) || (!i.operation && !selectedOperationId)));
+      const wipQty = inv ? inv.balance_qty : 0;
+      
+      setAvailableQuantity(Math.max(0, totalQty - wipQty));
+    } else {
+      setAvailableQuantity(null);
+    }
+  }, [selectedProductId, selectedOperationId, selectedSizeId, masterStocks, inventory]);
 
   const rawQuantity = watch("quantity");
   const currentQuantity = (typeof rawQuantity === 'number' && !isNaN(rawQuantity)) ? rawQuantity : 0;
@@ -127,6 +155,17 @@ const DailyOperationEntry = () => {
     setStatus({ type: '', message: '' });
 
     const opToSubmit = currentOperation ? currentOperation.operation : data.operation_id;
+    
+    if (availableQuantity !== null && data.quantity > availableQuantity) {
+      addNotification({
+        type: 'error',
+        title: 'Validation Error',
+        message: `You cannot enter a quantity higher than what is available. (Available: ${availableQuantity})`
+      });
+      setLoading(false);
+      return;
+    }
+
     const payload = { ...data, operation_id: opToSubmit };
 
     try {
@@ -158,6 +197,7 @@ const DailyOperationEntry = () => {
         quantity: ''
       });
       setOperations([]);
+      if (onSuccess) onSuccess();
       setTimeout(() => setStatus({ type: '', message: '' }), 5000);
     } catch (err) {
       addNotification({
@@ -205,6 +245,7 @@ const DailyOperationEntry = () => {
       });
       setStatus({ type: 'success', message: res.data.message || 'Custom salary successfully recorded.' });
       setShowSalaryModal(false);
+      if (onSuccess) onSuccess();
       setSalaryForm({
         employee_id: '',
         work_date: new Date().toISOString().split('T')[0],
@@ -395,7 +436,18 @@ const DailyOperationEntry = () => {
                   {sizes.map(s => <option key={s.id} value={s.id}>{s.size_name}</option>)}
                 </Select>
 
-                <Input label="Quantity" type="number" placeholder="Pieces..." {...register("quantity", { valueAsNumber: true })} error={errors.quantity?.message} />
+                <div className="space-y-2">
+                  <Input 
+                    label={`Quantity ${availableQuantity !== null ? `(Max: ${availableQuantity})` : ''}`} 
+                    type="number" 
+                    placeholder="Pieces..." 
+                    {...register("quantity", { 
+                      valueAsNumber: true,
+                      max: availableQuantity !== null ? { value: availableQuantity, message: `Maximum available is ${availableQuantity}` } : undefined
+                    })} 
+                    error={errors.quantity?.message} 
+                  />
+                </div>
               </div>
             </Card>
           </div>

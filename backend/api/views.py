@@ -166,7 +166,44 @@ class ProductionLogViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(product__model_number__icontains=model_number)
         return queryset
 
-from .services.production_service import create_production_log
+    def update(self, request, *args, **kwargs):
+        log = self.get_object()
+        employee_id = request.data.get('employee_id', log.employee_id)
+        product_id = request.data.get('product_id', log.product_id)
+        operation_id = request.data.get('operation_id', log.operation_id)
+        size_id = request.data.get('size_id', log.size_id) or request.data.get('size', log.size_id)
+        quantity = request.data.get('quantity', log.quantity)
+        work_date = request.data.get('work_date', log.work_date)
+        amount = request.data.get('amount_earned', None)
+
+        try:
+            updated_log = update_production_log(
+                log_id=log.id,
+                employee_id=employee_id,
+                product_id=product_id,
+                operation_id=operation_id,
+                size_id=size_id,
+                quantity=quantity,
+                work_date=work_date,
+                amount=amount
+            )
+            serializer = self.get_serializer(updated_log)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        except DjangoValidationError as e:
+            msg = e.message if hasattr(e, 'message') else str(e)
+            return Response({"error": msg}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    def destroy(self, request, *args, **kwargs):
+        log = self.get_object()
+        try:
+            delete_production_log(log.id)
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+from .services.production_service import create_production_log, update_production_log, delete_production_log
 
 class SubmitProductionLogView(views.APIView):
     def post(self, request):
@@ -310,33 +347,29 @@ class CustomSalaryView(views.APIView):
                     defaults={"display_order": 999}
                 )
 
-                log = ProductionLog.objects.filter(
+                existing_log = ProductionLog.objects.filter(
                     work_date=work_date,
                     employee_id=employee_id,
                     product=product,
                     operation=operation,
                     size=size
-                ).first()
+                ).exists()
+
+                if existing_log:
+                    return Response({"error": "This employee already has a custom salary assigned for this date. Please edit the existing entry instead."}, status=status.HTTP_400_BAD_REQUEST)
 
                 now = timezone.now()
-                if log:
-                    log.amount_earned += Decimal(str(amount))
-                    log.quantity += 1
-                    log.created_at = now
-                    log.updated_at = now
-                    log.save()
-                else:
-                    log = ProductionLog.objects.create(
-                        work_date=work_date,
-                        employee_id=employee_id,
-                        product=product,
-                        operation=operation,
-                        size=size,
-                        quantity=1,
-                        amount_earned=Decimal(str(amount)),
-                        created_at=now,
-                        updated_at=now
-                    )
+                log = ProductionLog.objects.create(
+                    work_date=work_date,
+                    employee_id=employee_id,
+                    product=product,
+                    operation=operation,
+                    size=size,
+                    quantity=1,
+                    amount_earned=Decimal(str(amount)),
+                    created_at=now,
+                    updated_at=now
+                )
 
             return Response({
                 "message": f"Custom salary of ₹{amount} recorded successfully for {log.employee.name}.",
