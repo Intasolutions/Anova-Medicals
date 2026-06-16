@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import apiClient from '../../../api/apiClient';
 import { Card, Button, Input, TableContainer, Thead, Th, Tbody, Tr, Td, Pagination } from '../../../components/ui/Base';
 import { Alert } from '../../../components/ui/Alerts';
+import PrintLayout from '../../../components/print/PrintLayout';
 import { ConfirmDialog } from '../../../components/ui/Dialogs';
-import { Plus, Package, Hash, IndianRupee, Layers, CheckCircle, AlertCircle, Search, DatabaseZap, Box, ShieldCheck, Trash2, Activity, Edit2, Eye, X } from 'lucide-react';
+import { Plus, Package, Hash, IndianRupee, Layers, CheckCircle, AlertCircle, Search, DatabaseZap, Box, ShieldCheck, Trash2, Activity, Edit2, Eye, X, Download } from 'lucide-react';
 
 const ProductCatalog = () => {
   const [products, setProducts] = useState([]);
@@ -16,6 +17,7 @@ const ProductCatalog = () => {
   const [alertInfo, setAlertInfo] = useState({ isOpen: false, type: 'info', message: '' });
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, id: null });
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('All');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   
@@ -29,6 +31,7 @@ const ProductCatalog = () => {
     product_code: '',
     model_number: '',
     price_per_unit: '',
+    photo: null,
     operations: [], // Array of {operation_id, piece_rate}
     sizes: [], // Array of {size_id, total_quantity}
   });
@@ -94,7 +97,7 @@ const ProductCatalog = () => {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', product_code: '', model_number: '', price_per_unit: '', operations: [], sizes: [] });
+    setFormData({ name: '', product_code: '', model_number: '', price_per_unit: '', photo: null, operations: [], sizes: [] });
     setEditingProduct(null);
     setShowAddForm(false);
     setAlertInfo({ ...alertInfo, isOpen: false });
@@ -124,6 +127,7 @@ const ProductCatalog = () => {
         product_code: prod.product_code,
         model_number: prod.model_number || '',
         price_per_unit: prod.price_per_unit,
+        photo: null,
         operations: existingOps,
         sizes: existingSizes
       });
@@ -151,6 +155,10 @@ const ProductCatalog = () => {
     }
   };
 
+  const handlePrintDetails = () => {
+    window.print();
+  };
+
   const requestDelete = (id) => {
     setConfirmDialog({ isOpen: true, id });
   };
@@ -175,11 +183,24 @@ const ProductCatalog = () => {
     }
 
     try {
+      const submitData = new FormData();
+      submitData.append('name', formData.name);
+      submitData.append('product_code', formData.product_code);
+      submitData.append('model_number', formData.model_number || '');
+      submitData.append('price_per_unit', formData.price_per_unit);
+      if (formData.photo instanceof File) {
+        submitData.append('photo', formData.photo);
+      }
+      submitData.append('operations', JSON.stringify(formData.operations));
+      submitData.append('sizes', JSON.stringify(formData.sizes));
+
+      const config = { headers: { 'Content-Type': 'multipart/form-data' } };
+
       if (editingProduct) {
-        await apiClient.put(`/products/${editingProduct.id}/`, formData);
+        await apiClient.put(`/products/${editingProduct.id}/`, submitData, config);
         setAlertInfo({ isOpen: true, type: 'success', message: 'Product updated successfully!' });
       } else {
-        await apiClient.post('/products/', formData);
+        await apiClient.post('/products/', submitData, config);
         setAlertInfo({ isOpen: true, type: 'success', message: 'Product initialized successfully!' });
       }
       resetForm();
@@ -192,12 +213,17 @@ const ProductCatalog = () => {
   };
 
   // Filter Logic
-  const filteredProducts = products.filter(p => 
-    p.is_active !== false &&
-    (p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.product_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (p.model_number && p.model_number.toLowerCase().includes(searchTerm.toLowerCase())))
-  );
+  const filteredProducts = products.filter(p => {
+    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                          p.product_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          (p.model_number && p.model_number.toLowerCase().includes(searchTerm.toLowerCase()));
+                          
+    const matchesStatus = filterStatus === 'All' ? true : 
+                          filterStatus === 'Active' ? p.is_active === true : 
+                          p.is_active === false;
+
+    return matchesSearch && matchesStatus;
+  });
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredProducts.length / rowsPerPage);
@@ -212,7 +238,8 @@ const ProductCatalog = () => {
   }, [searchTerm, rowsPerPage]);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 w-full max-w-7xl mx-auto">
+    <>
+    <div className="no-print space-y-8 animate-in fade-in duration-500 w-full max-w-7xl mx-auto">
       
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 pb-6 border-b border-slate-200/60">
@@ -257,6 +284,31 @@ const ProductCatalog = () => {
               <Input label="Product Code" value={formData.product_code} onChange={e => setFormData({...formData, product_code: e.target.value})} required disabled={!!editingProduct} className={`focus:ring-[#DC2626]/10 focus:border-[#DC2626] ${editingProduct ? 'opacity-50' : ''}`} />
               <Input label="Model Number" value={formData.model_number} onChange={e => setFormData({...formData, model_number: e.target.value})} className="focus:ring-[#DC2626]/10 focus:border-[#DC2626]" />
               <Input label="Price Per Unit" type="number" value={formData.price_per_unit} onChange={e => setFormData({...formData, price_per_unit: e.target.value})} required className="focus:ring-[#DC2626]/10 focus:border-[#DC2626]" />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">Product Photo</label>
+              <div className="flex items-center gap-4">
+                {formData.photo instanceof File ? (
+                  <img src={URL.createObjectURL(formData.photo)} alt="Preview" className="w-16 h-16 rounded-xl object-cover border border-slate-200" />
+                ) : editingProduct?.photo ? (
+                  <img src={editingProduct.photo} alt="Preview" className="w-16 h-16 rounded-xl object-cover border border-slate-200" />
+                ) : (
+                  <div className="w-16 h-16 rounded-xl bg-slate-100 flex items-center justify-center border border-slate-200 border-dashed text-slate-400">
+                    <Package size={20} />
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={e => {
+                    if (e.target.files[0]) {
+                      setFormData({ ...formData, photo: e.target.files[0] });
+                    }
+                  }}
+                  className="text-sm font-semibold text-slate-700 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:uppercase file:tracking-wider file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 transition-all cursor-pointer outline-none"
+                />
+              </div>
             </div>
 
             <div className="space-y-6 pt-6 border-t border-slate-100">
@@ -422,24 +474,43 @@ const ProductCatalog = () => {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-end">
-          <div className="md:col-span-6 space-y-2">
-            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
-              Search Keyword
-            </label>
-            <div className="relative group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#DC2626] transition-colors" size={18} />
-              <input 
-                type="text" 
-                placeholder="Filter catalog by product name, code or model..." 
-                className="w-full pl-12 pr-4 py-4 bg-[#F8FAFC] border border-slate-200/60 rounded-xl focus:ring-4 focus:ring-[#DC2626]/5 focus:border-[#DC2626] outline-none transition-all font-semibold text-xs text-slate-900 placeholder:text-slate-400"
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+          <div className="flex flex-col md:flex-row gap-4 w-full sm:w-auto flex-1">
+            <div className="relative group flex-1">
+              <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#DC2626] transition-colors" size={20} />
+              <input
+                type="text"
+                placeholder="Query by product name or ID code..."
+                className="w-full pl-14 pr-4 py-4 bg-white border border-slate-200/60 rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.03)] focus:ring-4 focus:ring-[#DC2626]/10 focus:border-[#DC2626] outline-none transition-all font-semibold text-slate-900 placeholder:text-slate-400"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
               />
             </div>
+            <div className="w-full md:w-64">
+              <select 
+                value={filterStatus}
+                onChange={(e) => setFilterStatus(e.target.value)}
+                className="w-full h-full bg-white border border-slate-200/60 rounded-2xl px-4 py-4 shadow-[0_4px_20px_rgb(0,0,0,0.03)] focus:ring-4 focus:ring-[#DC2626]/10 focus:border-[#DC2626] text-slate-700 font-bold outline-none"
+              >
+                <option value="All">All Statuses</option>
+                <option value="Active">Active Models</option>
+                <option value="Inactive">Archived</option>
+              </select>
+            </div>
           </div>
 
-          <div className="md:col-span-3 space-y-2">
+          <div className="w-full sm:w-auto">
+            <button
+              onClick={() => window.print()}
+              className="flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-4 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-sm border border-emerald-200"
+            >
+              Print List
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-end">
+          <div className="md:col-span-6 space-y-2">
             <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
               Reg. Date (From)
             </label>
@@ -473,6 +544,7 @@ const ProductCatalog = () => {
               <Th className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] py-5">Product Identity</Th>
               <Th className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] py-5 text-center">Batch Attributes</Th>
               <Th className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] py-5 text-right">Market Valuation</Th>
+              <Th className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] py-5 text-right">Total Op. Cost</Th>
               <Th className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] py-5 text-right">Actions</Th>
             </Thead>
             <Tbody className="divide-y divide-slate-100">
@@ -480,8 +552,12 @@ const ProductCatalog = () => {
                 <Tr key={prod.id} className="hover:bg-slate-50/80 transition-colors">
                   <Td className="py-4">
                     <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-xl bg-[#0F172A] flex items-center justify-center flex-shrink-0 border border-slate-700 shadow-sm text-white">
-                        <Package size={20} strokeWidth={2.5} />
+                      <div className="w-12 h-12 rounded-xl bg-[#0F172A] flex items-center justify-center flex-shrink-0 border border-slate-700 shadow-sm text-white overflow-hidden">
+                        {prod.photo ? (
+                          <img src={prod.photo} alt={prod.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <Package size={20} strokeWidth={2.5} />
+                        )}
                       </div>
                       <div>
                         <h3 className="text-sm font-black text-slate-900 leading-tight">{prod.name}</h3>
@@ -503,6 +579,15 @@ const ProductCatalog = () => {
                         <span className="text-lg font-black tracking-tighter">{parseFloat(prod.price_per_unit).toLocaleString('en-IN')}</span>
                       </div>
                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">PER UNIT RATE</span>
+                    </div>
+                  </Td>
+                  <Td className="text-right">
+                    <div className="inline-flex flex-col items-end">
+                      <div className="flex items-center gap-1 text-red-600">
+                        <IndianRupee size={14} strokeWidth={3} />
+                        <span className="text-lg font-black tracking-tighter">{parseFloat(prod.total_operational_cost || 0).toLocaleString('en-IN')}</span>
+                      </div>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-0.5">OP. COST / UNIT</span>
                     </div>
                   </Td>
                   <Td className="text-right">
@@ -530,8 +615,12 @@ const ProductCatalog = () => {
             <div key={`mobile-${prod.id}`} className="bg-white border border-slate-200/60 rounded-[2rem] shadow-sm overflow-hidden">
               <div className="p-5 flex items-start justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="w-14 h-14 rounded-xl bg-[#0F172A] flex items-center justify-center flex-shrink-0 border border-slate-700 shadow-sm text-white">
-                    <Package size={24} strokeWidth={2} />
+                  <div className="w-14 h-14 rounded-xl bg-[#0F172A] flex items-center justify-center flex-shrink-0 border border-slate-700 shadow-sm text-white overflow-hidden">
+                    {prod.photo ? (
+                      <img src={prod.photo} alt={prod.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <Package size={24} strokeWidth={2} />
+                    )}
                   </div>
                   <div>
                     <h3 className="text-lg font-black text-slate-900 leading-tight">{prod.name}</h3>
@@ -547,8 +636,14 @@ const ProductCatalog = () => {
                 </div>
                 <div className="text-right">
                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">MSRP Payout</p>
-                  <div className="flex items-center gap-1 text-emerald-600 font-black text-lg leading-none">
+                  <div className="flex items-center gap-1 text-emerald-600 font-black text-lg leading-none justify-end">
                     <IndianRupee size={14} strokeWidth={3} /> {prod.price_per_unit}
+                  </div>
+                  <div className="mt-2 text-right">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">OP. COST</p>
+                    <div className="flex items-center gap-1 text-red-600 font-black text-sm leading-none justify-end">
+                      <IndianRupee size={12} strokeWidth={3} /> {parseFloat(prod.total_operational_cost || 0).toLocaleString('en-IN')}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -589,8 +684,12 @@ const ProductCatalog = () => {
             <div className="p-8 border-b border-slate-100 flex items-center justify-between bg-[#F8FAFC] relative">
               <div className="absolute top-0 left-0 w-full h-1.5 bg-[#DC2626]" />
               <div className="flex items-center gap-5">
-                <div className="w-16 h-16 rounded-2xl bg-[#0F172A] flex items-center justify-center border border-slate-700 shadow-xl text-white">
-                  <Package size={32} strokeWidth={2} />
+                <div className="w-16 h-16 rounded-2xl bg-[#0F172A] flex items-center justify-center border border-slate-700 shadow-xl text-white overflow-hidden">
+                  {selectedProductForDetails.photo ? (
+                    <img src={selectedProductForDetails.photo} alt={selectedProductForDetails.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <Package size={32} strokeWidth={2} />
+                  )}
                 </div>
                 <div>
                   <h3 className="text-2xl font-black text-slate-900 tracking-tight">{selectedProductForDetails.name}</h3>
@@ -600,21 +699,43 @@ const ProductCatalog = () => {
                   </div>
                 </div>
               </div>
-              <button
-                onClick={() => setSelectedProductForDetails(null)}
-                className="p-3 bg-white border border-slate-200 text-slate-400 hover:text-[#DC2626] hover:border-[#DC2626] hover:bg-red-50 rounded-2xl transition-all shadow-sm"
-              >
-                <X size={20} strokeWidth={3} />
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handlePrintDetails}
+                  className="p-3 bg-white border border-slate-200 text-slate-600 hover:text-emerald-600 hover:border-emerald-600 hover:bg-emerald-50 rounded-2xl transition-all shadow-sm flex items-center justify-center no-print"
+                  title="Print to PDF"
+                >
+                  <Download size={20} strokeWidth={2.5} />
+                </button>
+                <button
+                  onClick={() => setSelectedProductForDetails(null)}
+                  className="p-3 bg-white border border-slate-200 text-slate-400 hover:text-[#DC2626] hover:border-[#DC2626] hover:bg-red-50 rounded-2xl transition-all shadow-sm flex items-center justify-center no-print"
+                >
+                  <X size={20} strokeWidth={3} />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-8 space-y-8">
+              {/* Product Photo Full View */}
+              {selectedProductForDetails.photo && (
+                <div className="w-full h-64 md:h-96 rounded-3xl overflow-hidden border border-slate-200/60 shadow-inner bg-slate-50 flex items-center justify-center">
+                  <img src={selectedProductForDetails.photo} alt={selectedProductForDetails.name} className="w-full h-full object-contain p-2" />
+                </div>
+              )}
+
               {/* Product Info Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200/60">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Market Valuation (MSRP)</p>
                   <div className="text-3xl font-black text-emerald-600 flex items-center gap-2">
                     <IndianRupee size={24} strokeWidth={3} /> {parseFloat(selectedProductForDetails.price_per_unit).toLocaleString('en-IN')}
+                  </div>
+                </div>
+                <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200/60">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Total Op. Cost</p>
+                  <div className="text-3xl font-black text-red-600 flex items-center gap-2">
+                    <IndianRupee size={24} strokeWidth={3} /> {parseFloat(selectedProductForDetails.total_operational_cost || 0).toLocaleString('en-IN')}
                   </div>
                 </div>
                 <div className="p-6 bg-slate-50 rounded-2xl border border-slate-200/60 flex flex-col justify-center">
@@ -733,6 +854,102 @@ const ProductCatalog = () => {
         onConfirm={confirmDelete}
       />
     </div>
+
+    {/* PRINT TEMPLATES */}
+    {selectedProductForDetails ? (
+      <PrintLayout documentType="Product Profile" title="Product Master Record">
+        <div className="flex gap-8 mb-8">
+          <div className="w-32 h-32 border-4 border-slate-200 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center bg-slate-50">
+            {selectedProductForDetails.photo ? (
+              <img src={selectedProductForDetails.photo} alt={selectedProductForDetails.name} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-4xl font-bold text-slate-300">N/A</span>
+            )}
+          </div>
+          <div className="flex-1 grid grid-cols-2 gap-y-4">
+            <div><strong className="text-slate-500">Product Name:</strong> <br/><span className="text-lg font-bold">{selectedProductForDetails.name}</span></div>
+            <div><strong className="text-slate-500">Product Code:</strong> <br/><span className="text-lg font-bold">{selectedProductForDetails.product_code}</span></div>
+            <div><strong className="text-slate-500">Model Number:</strong> <br/><span>{selectedProductForDetails.model_number || 'N/A'}</span></div>
+            <div><strong className="text-slate-500">Price (MSRP):</strong> <br/><span>Rs. {parseFloat(selectedProductForDetails.price_per_unit).toLocaleString('en-IN')}</span></div>
+            <div><strong className="text-slate-500">Status:</strong> <br/><span>{selectedProductForDetails.is_active ? 'Active Model' : 'Inactive'}</span></div>
+          </div>
+        </div>
+
+        {selectedProductForDetails.linked_operations && selectedProductForDetails.linked_operations.length > 0 && (
+          <div className="mb-8">
+            <h4 className="font-bold mb-2">Assigned Manufacturing Tasks</h4>
+            <table>
+              <thead>
+                <tr>
+                  <th>Operation Name</th>
+                  <th>Operation Code</th>
+                  <th>Piece Rate (Rs.)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedProductForDetails.linked_operations.map(op => (
+                  <tr key={op.id}>
+                    <td>{op.operation_name}</td>
+                    <td>{op.operation_code}</td>
+                    <td>{parseFloat(op.piece_rate).toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {selectedProductForDetails.master_stocks && selectedProductForDetails.master_stocks.length > 0 && (
+          <div className="mb-8">
+            <h4 className="font-bold mb-2">Initial Master Stock</h4>
+            <table>
+              <thead>
+                <tr>
+                  <th>Size / Variant</th>
+                  <th>Allocated Quantity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {selectedProductForDetails.master_stocks.map(st => (
+                  <tr key={st.id}>
+                    <td>{st.size_name}</td>
+                    <td>{st.total_quantity}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </PrintLayout>
+    ) : (
+      <PrintLayout documentType="Product Catalog List" title={`Master List`}>
+        <table>
+          <thead>
+            <tr>
+              <th>Product Name</th>
+              <th>Code</th>
+              <th>Model</th>
+              <th>Price (Rs.)</th>
+              <th>Total Op. Cost (Rs.)</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredProducts.map(prod => (
+              <tr key={prod.id}>
+                <td>{prod.name}</td>
+                <td>{prod.product_code}</td>
+                <td>{prod.model_number || 'N/A'}</td>
+                <td>{parseFloat(prod.price_per_unit).toFixed(2)}</td>
+                <td>{parseFloat(prod.total_operational_cost || 0).toFixed(2)}</td>
+                <td>{prod.is_active ? 'Active' : 'Inactive'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </PrintLayout>
+    )}
+    </>
   );
 };
 

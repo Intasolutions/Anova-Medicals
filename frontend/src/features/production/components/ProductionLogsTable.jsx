@@ -8,6 +8,7 @@ import {
  import apiClient from '../../../api/apiClient';
  import { Pagination } from '../../../components/ui/Base';
  import EditProductionLogModal from './EditProductionLogModal';
+ import PrintLayout from '../../../components/print/PrintLayout';
 
 const ProductionLogsTable = ({ refreshTrigger }) => {
   const [data, setData] = useState([]);
@@ -18,8 +19,10 @@ const ProductionLogsTable = ({ refreshTrigger }) => {
   // Filter State
   const [products, setProducts] = useState([]);
   const [operations, setOperations] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState('');
   const [selectedOperation, setSelectedOperation] = useState('');
+  const [selectedEmployee, setSelectedEmployee] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [modelNumber, setModelNumber] = useState('');
@@ -42,15 +45,19 @@ const ProductionLogsTable = ({ refreshTrigger }) => {
   useEffect(() => {
     const fetchMasterData = async () => {
       try {
-        const [prodRes, opRes] = await Promise.all([
+        const [prodRes, opRes, empRes] = await Promise.all([
           apiClient.get('/products/'),
-          apiClient.get('/operations/')
+          apiClient.get('/operations/'),
+          apiClient.get('/employees/')
         ]);
         const allProd = prodRes.data.results || prodRes.data;
         setProducts(allProd.filter(p => p.is_active));
 
         const allOp = opRes.data.results || opRes.data;
         setOperations(allOp);
+
+        const allEmp = empRes.data.results || empRes.data;
+        setEmployees(allEmp.filter(e => e.is_working));
       } catch (err) {
         console.error("Error fetching filter master data", err);
       }
@@ -61,7 +68,7 @@ const ProductionLogsTable = ({ refreshTrigger }) => {
   // Reset pageIndex to 0 when filters change
   useEffect(() => {
     setPagination(prev => ({ ...prev, pageIndex: 0 }));
-  }, [selectedProduct, selectedOperation, startDate, endDate, modelNumber]);
+  }, [selectedProduct, selectedOperation, selectedEmployee, startDate, endDate, modelNumber]);
 
   // Fetch data from backend
   useEffect(() => {
@@ -74,6 +81,7 @@ const ProductionLogsTable = ({ refreshTrigger }) => {
             limit: pageSize,
             product: selectedProduct || undefined,
             operation: selectedOperation || undefined,
+            employee: selectedEmployee || undefined,
             start_date: startDate || undefined,
             end_date: endDate || undefined,
             model_number: modelNumber || undefined,
@@ -90,7 +98,7 @@ const ProductionLogsTable = ({ refreshTrigger }) => {
     };
 
     fetchData();
-  }, [pageIndex, pageSize, selectedProduct, selectedOperation, startDate, endDate, modelNumber, refreshTrigger]);
+  }, [pageIndex, pageSize, selectedProduct, selectedOperation, selectedEmployee, startDate, endDate, modelNumber, refreshTrigger]);
 
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this log?')) {
@@ -186,7 +194,8 @@ const ProductionLogsTable = ({ refreshTrigger }) => {
   });
 
   return (
-    <div className="space-y-6">
+    <>
+    <div className="no-print space-y-6">
       {/* FILTER CONTROL PANEL */}
       <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] p-6 md:p-8 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-1.5 bg-[#0F172A]" />
@@ -196,11 +205,12 @@ const ProductionLogsTable = ({ refreshTrigger }) => {
             <Filter size={18} className="text-[#DC2626]" strokeWidth={2.5} />
             Filter Production Logs
           </div>
-          {(selectedProduct || selectedOperation || startDate || endDate || modelNumber) && (
+          {(selectedProduct || selectedOperation || selectedEmployee || startDate || endDate || modelNumber) && (
             <button
               onClick={() => {
                 setSelectedProduct('');
                 setSelectedOperation('');
+                setSelectedEmployee('');
                 setStartDate('');
                 setEndDate('');
                 setModelNumber('');
@@ -212,7 +222,7 @@ const ProductionLogsTable = ({ refreshTrigger }) => {
           )}
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 items-end">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 items-end">
           <div className="space-y-2">
             <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
               Model Number
@@ -224,6 +234,22 @@ const ProductionLogsTable = ({ refreshTrigger }) => {
               onChange={(e) => setModelNumber(e.target.value)}
               className="w-full p-4 bg-[#F8FAFC] border border-slate-200/60 rounded-xl focus:ring-4 focus:ring-[#DC2626]/5 focus:border-[#DC2626] outline-none transition-all font-semibold text-xs text-slate-900 placeholder:text-slate-400"
             />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
+              Employee
+            </label>
+            <select
+              value={selectedEmployee}
+              onChange={(e) => setSelectedEmployee(e.target.value)}
+              className="w-full p-4 bg-[#F8FAFC] border border-slate-200/60 rounded-xl focus:ring-4 focus:ring-[#DC2626]/5 focus:border-[#DC2626] outline-none transition-all font-semibold text-xs text-slate-900 appearance-none cursor-pointer"
+            >
+              <option value="">All Personnel</option>
+              {employees.map(emp => (
+                <option key={emp.id} value={emp.employee_code}>{emp.name}</option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-2">
@@ -282,6 +308,15 @@ const ProductionLogsTable = ({ refreshTrigger }) => {
             />
           </div>
         </div>
+      </div>
+
+      <div className="flex justify-end mb-2">
+            <button
+              onClick={() => window.print()}
+              className="flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-4 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-sm border border-emerald-200"
+            >
+              Print List
+            </button>
       </div>
 
       <div className="overflow-x-auto bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_4px_20px_rgb(0,0,0,0.03)] p-1">
@@ -354,6 +389,37 @@ const ProductionLogsTable = ({ refreshTrigger }) => {
         />
       )}
     </div>
+
+    {/* PRINT TEMPLATE */}
+    <PrintLayout documentType="Production Operational Logs" title={`Logs from ${startDate || 'Start'} to ${endDate || 'Today'}`}>
+      <table>
+        <thead>
+          <tr>
+            <th>Work Date</th>
+            <th>Personnel</th>
+            <th>Product Name</th>
+            <th>Model</th>
+            <th>Operation</th>
+            <th>Size</th>
+            <th>Quantity</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.map(log => (
+            <tr key={log.id}>
+              <td>{log.work_date}</td>
+              <td>{log.employee_name}</td>
+              <td>{log.product_name}</td>
+              <td>{log.model_number}</td>
+              <td>{log.operation_name}</td>
+              <td>{log.size_name}</td>
+              <td>{log.quantity}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </PrintLayout>
+    </>
   );
 };
 

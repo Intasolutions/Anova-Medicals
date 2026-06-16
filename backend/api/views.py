@@ -39,7 +39,11 @@ class ProductViewSet(viewsets.ModelViewSet):
     serializer_class = ProductSerializer
 
     def get_queryset(self):
-        queryset = Product.objects.all().order_by('name')
+        from django.db.models import Sum, DecimalField
+        from django.db.models.functions import Coalesce
+        queryset = Product.objects.annotate(
+            total_operational_cost=Coalesce(Sum('product_operations__piece_rate'), 0.0, output_field=DecimalField())
+        ).order_by('name')
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
         if start_date:
@@ -49,8 +53,16 @@ class ProductViewSet(viewsets.ModelViewSet):
         return queryset
 
     def create(self, request, *args, **kwargs):
+        import json
         operations_data = request.data.get('operations')
+        if isinstance(operations_data, str):
+            try: operations_data = json.loads(operations_data)
+            except Exception: operations_data = []
+            
         sizes_data = request.data.get('sizes')
+        if isinstance(sizes_data, str):
+            try: sizes_data = json.loads(sizes_data)
+            except Exception: sizes_data = []
         
         try:
             product_data = {
@@ -59,6 +71,8 @@ class ProductViewSet(viewsets.ModelViewSet):
                 'name': request.data.get('name'),
                 'price_per_unit': request.data.get('price_per_unit'),
             }
+            if 'photo' in request.FILES:
+                product_data['photo'] = request.FILES['photo']
             product, balance = create_product_with_operations_and_stock(product_data, operations_data, sizes_data)
             return Response(self.get_serializer(product).data, status=status.HTTP_201_CREATED)
         except DjangoValidationError as e:
@@ -68,8 +82,16 @@ class ProductViewSet(viewsets.ModelViewSet):
 
     def update(self, request, *args, **kwargs):
         product = self.get_object()
+        import json
         operations_data = request.data.get('operations')
+        if isinstance(operations_data, str):
+            try: operations_data = json.loads(operations_data)
+            except Exception: operations_data = None
+            
         sizes_data = request.data.get('sizes')
+        if isinstance(sizes_data, str):
+            try: sizes_data = json.loads(sizes_data)
+            except Exception: sizes_data = None
 
         with transaction.atomic():
             serializer = self.get_serializer(product, data=request.data, partial=True)

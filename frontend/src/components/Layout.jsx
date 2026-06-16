@@ -79,7 +79,7 @@ const Layout = () => {
       <motion.aside
         initial={false}
         animate={{ width: isSidebarOpen ? 280 : 88 }}
-        className="bg-brand-dark text-white flex flex-col fixed h-full z-50 border-r border-slate-800 shadow-[20px_0_40px_rgba(0,0,0,0.03)]"
+        className="bg-brand-dark text-white flex flex-col fixed h-full z-50 border-r border-slate-800 shadow-[20px_0_40px_rgba(0,0,0,0.03)] print:hidden"
       >
         {/* Branding & Toggle */}
         <div className={`flex items-center justify-between p-6 ${!isSidebarOpen ? 'flex-col gap-4' : ''}`}>
@@ -179,10 +179,10 @@ const Layout = () => {
       <motion.main
         initial={false}
         animate={{ marginLeft: isSidebarOpen ? 280 : 88 }}
-        className="flex-1 p-8 max-w-[1600px] mx-auto w-full transition-all duration-300"
+        className="flex-1 p-8 max-w-[1600px] mx-auto w-full transition-all duration-300 print:m-0 print:p-0 print:max-w-full"
       >
         {/* Floating Page Header */}
-        <header className="sticky top-4 z-40 flex justify-between items-center mb-8 bg-white/90 backdrop-blur-xl border border-slate-200/60 p-4 px-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+        <header className="sticky top-4 z-40 flex justify-between items-center mb-8 bg-white/90 backdrop-blur-xl border border-slate-200/60 p-4 px-6 rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] print:hidden">
           <div className="flex items-center gap-3">
             <div className="w-1.5 h-6 bg-brand-primary rounded-full shadow-[0_0_10px_rgba(225,0,122,0.4)]" />
             <h2 className="text-xl font-black text-slate-900 tracking-[0.1em] uppercase">
@@ -197,7 +197,7 @@ const Layout = () => {
         </header>
 
         {/* Animated Page Renderer */}
-        <div className="min-h-[calc(100vh-160px)] bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200/60 p-8 overflow-hidden">
+        <div className="min-h-[calc(100vh-160px)] bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-200/60 p-8 overflow-hidden print:min-h-0 print:border-none print:shadow-none print:p-0 print:overflow-visible">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}

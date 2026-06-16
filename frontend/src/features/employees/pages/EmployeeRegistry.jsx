@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import apiClient from '../../../api/apiClient';
 import { Card, Button, Input, Select, TableContainer, Thead, Th, Tbody, Tr, Td, Pagination } from '../../../components/ui/Base';
 import { Alert } from '../../../components/ui/Alerts';
-import { Plus, Search, Phone, Calendar, FileText, DatabaseZap, ShieldCheck, Edit2, Eye, X, User, MapPin, Briefcase, Camera } from 'lucide-react';
+import PrintLayout from '../../../components/print/PrintLayout';
+import { Plus, Search, Phone, Calendar, FileText, DatabaseZap, ShieldCheck, Edit2, Eye, X, User, MapPin, Briefcase, Camera, Download, Loader2 } from 'lucide-react';
 
 const EmployeeRegistry = () => {
   const [employees, setEmployees] = useState([]);
@@ -136,6 +137,10 @@ const EmployeeRegistry = () => {
     }
   };
 
+  const handlePrintDetails = () => {
+    window.print();
+  };
+
   const filteredEmployees = employees.filter(emp => {
     const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                           emp.employee_code.toLowerCase().includes(searchTerm.toLowerCase());
@@ -158,7 +163,8 @@ const EmployeeRegistry = () => {
   const getInitials = (name) => name ? name.substring(0, 2).toUpperCase() : 'EMP';
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 w-full max-w-7xl mx-auto">
+    <>
+    <div className="no-print space-y-8 animate-in fade-in duration-500 w-full max-w-7xl mx-auto">
 
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 pb-6 border-b border-slate-200/60">
@@ -258,27 +264,38 @@ const EmployeeRegistry = () => {
       )}
 
       {/* SEARCH BAR & FILTER */}
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="relative group flex-1">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#DC2626] transition-colors" size={20} />
-          <input
-            type="text"
-            placeholder="Query by personnel name or ID code..."
-            className="w-full pl-14 pr-4 py-4 bg-white border border-slate-200/60 rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.03)] focus:ring-4 focus:ring-[#DC2626]/10 focus:border-[#DC2626] outline-none transition-all font-semibold text-slate-900 placeholder:text-slate-400"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-          />
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="flex flex-col md:flex-row gap-4 flex-1 w-full">
+          <div className="relative group flex-1">
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#DC2626] transition-colors" size={20} />
+            <input
+              type="text"
+              placeholder="Query by personnel name or ID code..."
+              className="w-full pl-14 pr-4 py-4 bg-white border border-slate-200/60 rounded-2xl shadow-[0_4px_20px_rgb(0,0,0,0.03)] focus:ring-4 focus:ring-[#DC2626]/10 focus:border-[#DC2626] outline-none transition-all font-semibold text-slate-900 placeholder:text-slate-400"
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div className="w-full md:w-64">
+            <select 
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="w-full h-full bg-white border border-slate-200/60 rounded-2xl px-4 py-4 shadow-[0_4px_20px_rgb(0,0,0,0.03)] focus:ring-4 focus:ring-[#DC2626]/10 focus:border-[#DC2626] text-slate-700 font-bold outline-none"
+            >
+              <option value="All">All Personnel</option>
+              <option value="Active">Active Only</option>
+              <option value="Resigned">Resigned Only</option>
+            </select>
+          </div>
         </div>
-        <div className="w-full md:w-64">
-          <select 
-            value={filterStatus}
-            onChange={(e) => setFilterStatus(e.target.value)}
-            className="w-full h-full bg-white border border-slate-200/60 rounded-2xl px-4 py-4 shadow-[0_4px_20px_rgb(0,0,0,0.03)] focus:ring-4 focus:ring-[#DC2626]/10 focus:border-[#DC2626] text-slate-700 font-bold outline-none"
-          >
-            <option value="All">All Personnel</option>
-            <option value="Active">Active Only</option>
-            <option value="Resigned">Resigned Only</option>
-          </select>
+
+        <div className="w-full sm:w-auto">
+            <button
+              onClick={() => window.print()}
+              className="flex items-center justify-center gap-2 w-full sm:w-auto px-6 py-4 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 font-black text-xs uppercase tracking-widest rounded-2xl transition-all shadow-sm border border-emerald-200"
+            >
+              Print List
+            </button>
         </div>
       </div>
 
@@ -413,12 +430,21 @@ const EmployeeRegistry = () => {
                   </div>
                 </div>
               </div>
-              <button
-                onClick={() => setSelectedEmpForDetails(null)}
-                className="p-3 bg-white border border-slate-200 text-slate-400 hover:text-[#DC2626] hover:border-[#DC2626] hover:bg-red-50 rounded-2xl transition-all shadow-sm"
-              >
-                <X size={20} strokeWidth={3} />
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handlePrintDetails}
+                  className="p-3 bg-white border border-slate-200 text-slate-600 hover:text-emerald-600 hover:border-emerald-600 hover:bg-emerald-50 rounded-2xl transition-all shadow-sm flex items-center justify-center no-print"
+                  title="Print to PDF"
+                >
+                  <Download size={20} strokeWidth={2.5} />
+                </button>
+                <button
+                  onClick={() => setSelectedEmpForDetails(null)}
+                  className="p-3 bg-white border border-slate-200 text-slate-400 hover:text-[#DC2626] hover:border-[#DC2626] hover:bg-red-50 rounded-2xl transition-all shadow-sm flex items-center justify-center no-print"
+                >
+                  <X size={20} strokeWidth={3} />
+                </button>
+              </div>
             </div>
 
             <div className="p-8 bg-white grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -514,6 +540,71 @@ const EmployeeRegistry = () => {
         onClose={() => setAlertInfo({ ...alertInfo, isOpen: false })} 
       />
     </div>
+
+    {/* PRINT TEMPLATES */}
+    {selectedEmpForDetails ? (
+      <PrintLayout documentType="Personnel Profile" title="Employee Master Record">
+        <div className="flex gap-8 mb-8">
+          <div className="w-32 h-32 border-4 border-slate-200 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center bg-slate-50">
+            {selectedEmpForDetails.photo ? (
+              <img src={selectedEmpForDetails.photo} alt={selectedEmpForDetails.name} className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-4xl font-bold text-slate-300">{getInitials(selectedEmpForDetails.name)}</span>
+            )}
+          </div>
+          <div className="flex-1 grid grid-cols-2 gap-y-4">
+            <div><strong className="text-slate-500">Full Name:</strong> <br/><span className="text-lg font-bold">{selectedEmpForDetails.name}</span></div>
+            <div><strong className="text-slate-500">Employee Code:</strong> <br/><span className="text-lg font-bold">{selectedEmpForDetails.employee_code}</span></div>
+            <div><strong className="text-slate-500">Designation:</strong> <br/><span>{selectedEmpForDetails.designation_name || 'N/A'}</span></div>
+            <div><strong className="text-slate-500">Employment Status:</strong> <br/><span>{selectedEmpForDetails.is_working ? 'Active Member' : 'Resigned'}</span></div>
+          </div>
+        </div>
+        
+        <table className="mb-8">
+          <tbody>
+            <tr><th className="w-1/3">Contact Number</th><td>{selectedEmpForDetails.contact_number || 'N/A'}</td></tr>
+            <tr><th>Date of Birth</th><td>{selectedEmpForDetails.date_of_birth || 'N/A'}</td></tr>
+            <tr><th>Date of Joining</th><td>{selectedEmpForDetails.date_of_joining || 'N/A'}</td></tr>
+            <tr><th>Residential Address</th><td>{selectedEmpForDetails.address || 'N/A'}</td></tr>
+          </tbody>
+        </table>
+
+        {selectedEmpForDetails.id_proof && (
+          <div className="mt-8">
+            <h4 className="font-bold mb-2">ID Proof Document Attached:</h4>
+            <p className="text-sm border p-4 bg-slate-50">Yes (Document on file: {selectedEmpForDetails.id_proof.split('/').pop()})</p>
+          </div>
+        )}
+      </PrintLayout>
+    ) : (
+      <PrintLayout documentType="Personnel Registry List" title={`Master List (Status: ${filterStatus})`}>
+        <table>
+          <thead>
+            <tr>
+              <th>Employee Name</th>
+              <th>Code</th>
+              <th>Designation</th>
+              <th>Contact</th>
+              <th>Joined</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredEmployees.map(emp => (
+              <tr key={emp.id}>
+                <td>{emp.name}</td>
+                <td>{emp.employee_code}</td>
+                <td>{emp.designation_name || 'N/A'}</td>
+                <td>{emp.contact_number || 'N/A'}</td>
+                <td>{emp.date_of_joining || 'N/A'}</td>
+                <td>{emp.is_working ? 'Active' : 'Resigned'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </PrintLayout>
+    )}
+    </>
   );
 };
 

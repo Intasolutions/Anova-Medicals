@@ -63,6 +63,7 @@ class Product(models.Model):
     model_number = models.CharField(max_length=100, unique=True, null=True, blank=True)
     name = models.CharField(max_length=255)
     price_per_unit = models.DecimalField(max_digits=10, decimal_places=2)
+    photo = models.ImageField(upload_to='products/photos/', null=True, blank=True)
     is_active = models.BooleanField(default=True)
     date = models.DateField(auto_now_add=True, null=True, blank=True)
 

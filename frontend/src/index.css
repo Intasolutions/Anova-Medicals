@@ -30,3 +30,56 @@ body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
+/* Print Utilities */
+.print-only {
+  display: none !important;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 15mm 15mm 20mm 15mm;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  /* Reset layout to maximize space */
+  body, main, #root {
+    background-color: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    box-shadow: none !important;
+  }
+
+  /* Ensure text is black for clarity */
+  .print-only * {
+    color: #000 !important;
+  }
+
+  /* Table styling for print */
+  .print-only table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    margin-top: 1rem !important;
+  }
+  .print-only th, .print-only td {
+    border: 1px solid #000 !important;
+    padding: 8px !important;
+    text-align: left !important;
+    font-size: 11px !important;
+  }
+  .print-only th {
+    background-color: #f1f5f9 !important;
+    -webkit-print-color-adjust: exact;
+    color-adjust: exact;
+    font-weight: bold !important;
+  }
+}

@@ -20,9 +20,11 @@ class DesignationSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 class ProductSerializer(serializers.ModelSerializer):
+    total_operational_cost = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+
     class Meta:
         model = Product
-        fields = ['id', 'product_code', 'model_number', 'name', 'price_per_unit', 'is_active', 'date']
+        fields = ['id', 'product_code', 'model_number', 'name', 'price_per_unit', 'photo', 'is_active', 'date', 'total_operational_cost']
 
 class OperationSerializer(serializers.ModelSerializer):
     class Meta:

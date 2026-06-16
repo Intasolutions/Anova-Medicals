@@ -35,9 +35,9 @@ export const Operations = () => {
   };
 
   return (
-  <div className="space-y-8 animate-in fade-in duration-500 w-full max-w-7xl mx-auto">
+  <div className="space-y-8 animate-in fade-in duration-500 w-full max-w-7xl mx-auto print:space-y-0">
 
-    <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-6 border-b border-slate-200/60">
+    <header className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-6 border-b border-slate-200/60 no-print">
       <div>
         <div className="flex items-center gap-3 mb-2">
           <div className="p-3 bg-[#0F172A] rounded-2xl shadow-lg shadow-slate-900/20 border border-slate-700">
@@ -62,10 +62,10 @@ export const Operations = () => {
     </header>
 
     {/* Vertical Stacked Layout for Maximum Readability */}
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-8 print:gap-0">
 
       {/* TOP SECTION: Entry Form Panel */}
-      <section className="w-full">
+      <section className="w-full no-print">
         <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] p-6 md:p-8 relative overflow-hidden">
           {/* Brand Red accent line */}
           <div className="absolute top-0 left-0 w-full h-1.5 bg-[#DC2626]" />
@@ -88,13 +88,13 @@ export const Operations = () => {
       </section>
 
       {/* BOTTOM SECTION: Data Table Panel */}
-      <section className="w-full">
-        <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] p-6 md:p-8 relative overflow-hidden">
+      <section className="w-full print:m-0 print:p-0">
+        <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] p-6 md:p-8 relative overflow-hidden print:p-0 print:border-none print:shadow-none print:bg-transparent print:overflow-visible">
 
           {/* Subtle slate top accent */}
-          <div className="absolute top-0 left-0 w-full h-1.5 bg-[#0F172A]" />
+          <div className="absolute top-0 left-0 w-full h-1.5 bg-[#0F172A] no-print" />
 
-          <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center justify-between mb-8 no-print">
             <div>
               <h3 className="text-xl font-black text-slate-900 tracking-tight">Production Logs</h3>
               <p className="text-slate-500 text-sm font-medium mt-1">Historical operations view with server-side sync.</p>
@@ -105,7 +105,7 @@ export const Operations = () => {
           </div>
 
           {/* Component Wrapper */}
-          <div className="w-full bg-[#F8FAFC] rounded-2xl border border-slate-200/60 overflow-hidden p-1 shadow-inner">
+          <div className="w-full bg-[#F8FAFC] rounded-2xl border border-slate-200/60 overflow-hidden p-1 shadow-inner print:p-0 print:border-none print:shadow-none print:bg-transparent print:overflow-visible">
             <ProductionLogsTable refreshTrigger={refreshTrigger} />
           </div>
 

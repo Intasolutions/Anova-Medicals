@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Calendar, Users, IndianRupee, Package, Search, Loader2, ArrowRight, X, FileText, Download, Activity, ShieldCheck, DatabaseZap } from 'lucide-react';
 import apiClient from '../../../api/apiClient';
 import { TableContainer, Thead, Th, Tbody, Tr, Td, Pagination, Button, Card } from '../../../components/ui/Base';
+import PrintLayout from '../../../components/print/PrintLayout';
 
 const SalaryHistoryDashboard = () => {
   const [employees, setEmployees] = useState([]);
@@ -22,6 +23,7 @@ const SalaryHistoryDashboard = () => {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState('');
+  const [tableSearchTerm, setTableSearchTerm] = useState('');
 
   // Fetch employees for dropdown
   useEffect(() => {
@@ -96,19 +98,25 @@ const SalaryHistoryDashboard = () => {
   };
 
   // Pagination Logic
-  const totalPages = Math.ceil(results.length / rowsPerPage);
-  const paginatedResults = results.slice(
+  const filteredResults = results.filter(r => 
+    r.employee__name.toLowerCase().includes(tableSearchTerm.toLowerCase()) || 
+    r.employee__employee_code.toLowerCase().includes(tableSearchTerm.toLowerCase())
+  );
+  
+  const totalPages = Math.ceil(filteredResults.length / rowsPerPage);
+  const paginatedResults = filteredResults.slice(
     (currentPage - 1) * rowsPerPage,
     currentPage * rowsPerPage
   );
 
-  // Reset to page 1 when rowsPerPage changes
+  // Reset to page 1 when rowsPerPage or search changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [rowsPerPage]);
+  }, [rowsPerPage, tableSearchTerm]);
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 w-full max-w-7xl mx-auto">
+    <>
+    <div className="no-print space-y-8 animate-in fade-in duration-500 w-full max-w-7xl mx-auto">
 
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 pb-6 border-b border-slate-200/60">
@@ -173,7 +181,7 @@ const SalaryHistoryDashboard = () => {
 
           <div className="space-y-2">
             <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
-              <Users size={14} className="text-[#DC2626]" /> Filter Worker
+              <Users size={14} className="text-[#DC2626]" /> Employee Filter
             </label>
             <select
               value={selectedEmployee}
@@ -201,24 +209,26 @@ const SalaryHistoryDashboard = () => {
       {/* RESULTS SECTION */}
       {results.length > 0 ? (
         <div className="space-y-6 animate-in slide-in-from-bottom-4">
-          <div className="flex justify-between items-center px-2">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-2 gap-4">
             <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em]">Generated Records</h3>
-            <button
-              onClick={() => {
-                const csvContent = "data:text/csv;charset=utf-8,"
-                  + "Employee,Code,Present Days,Total Pieces,Net Payout\n"
-                  + results.map(r => `${r.employee__name},${r.employee__employee_code},${r.present_days},${r.total_pieces},${r.total_payout}`).join("\n");
-                const encodedUri = encodeURI(csvContent);
-                const link = document.createElement("a");
-                link.setAttribute("href", encodedUri);
-                link.setAttribute("download", `payout_report_${startDate}_to_${endDate}.csv`);
-                document.body.appendChild(link);
-                link.click();
-              }}
-              className="flex items-center gap-2 text-[10px] font-black text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-4 py-2 rounded-lg border border-emerald-200 transition-all uppercase tracking-widest"
-            >
-              <Download size={14} strokeWidth={3} /> Export Ledger
-            </button>
+            <div className="flex items-center gap-4 w-full sm:w-auto">
+              <div className="relative group flex-1 sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#DC2626] transition-colors" size={16} />
+                <input
+                  type="text"
+                  placeholder="Search employee..."
+                  value={tableSearchTerm}
+                  onChange={(e) => setTableSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200/60 rounded-xl focus:ring-4 focus:ring-[#DC2626]/10 focus:border-[#DC2626] outline-none transition-all font-semibold text-xs text-slate-900 placeholder:text-slate-400 shadow-sm"
+                />
+              </div>
+              <button
+                onClick={() => window.print()}
+                className="flex items-center gap-2 text-[10px] font-black text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-4 py-2.5 rounded-xl border border-emerald-200 transition-all uppercase tracking-widest flex-shrink-0"
+              >
+                <Download size={14} strokeWidth={3} /> Print Ledger
+              </button>
+            </div>
           </div>
 
           <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] overflow-hidden p-1">
@@ -272,7 +282,7 @@ const SalaryHistoryDashboard = () => {
               onPageChange={setCurrentPage}
               rowsPerPage={rowsPerPage}
               onRowsPerPageChange={setRowsPerPage}
-              totalItems={results.length}
+              totalItems={filteredResults.length}
             />
           </div>
         </div>
@@ -368,6 +378,41 @@ const SalaryHistoryDashboard = () => {
         </div>
       )}
     </div>
+
+    {/* PRINT TEMPLATE */}
+    <PrintLayout documentType="Salary Management Ledger" title={`Payout Report (${startDate || 'Start'} to ${endDate || 'Today'})`}>
+      <table>
+        <thead>
+          <tr>
+            <th>Employee Name</th>
+            <th>Employee Code</th>
+            <th>Present Days</th>
+            <th>Total Output Units</th>
+            <th>Net Payout (Rs.)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {filteredResults.map((r, i) => (
+            <tr key={i}>
+              <td>{r.employee__name}</td>
+              <td>{r.employee__employee_code}</td>
+              <td>{r.present_days}</td>
+              <td>{r.total_pieces}</td>
+              <td>{parseFloat(r.total_payout).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+            </tr>
+          ))}
+        </tbody>
+        {filteredResults.length > 0 && (
+          <tfoot>
+            <tr>
+              <th colSpan="4" className="text-right">Grand Total</th>
+              <th>Rs. {filteredResults.reduce((sum, r) => sum + parseFloat(r.total_payout || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</th>
+            </tr>
+          </tfoot>
+        )}
+      </table>
+    </PrintLayout>
+    </>
   );
 };
 

@@ -265,7 +265,7 @@ const DailyOperationEntry = ({ onSuccess }) => {
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <div className="no-print w-full max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
 
       {/* HEADER BAR WITH CUSTOM SALARY ACTION */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 md:p-8 rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] relative overflow-hidden">
