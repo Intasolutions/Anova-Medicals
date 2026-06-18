@@ -4,7 +4,7 @@ import { Card, Button, Input, TableContainer, Thead, Th, Tbody, Tr, Td, Paginati
 import { Alert } from '../../../components/ui/Alerts';
 import PrintLayout from '../../../components/print/PrintLayout';
 import { ConfirmDialog } from '../../../components/ui/Dialogs';
-import { Plus, Package, Hash, IndianRupee, Layers, CheckCircle, AlertCircle, Search, DatabaseZap, Box, ShieldCheck, Trash2, Activity, Edit2, Eye, X, Download } from 'lucide-react';
+import { Plus, Package, Hash, IndianRupee, Layers, CheckCircle, AlertCircle, Search, DatabaseZap, Box, ShieldCheck, Trash2, Activity, Edit2, Eye, X, Download, Printer } from 'lucide-react';
 
 const ProductCatalog = () => {
   const [products, setProducts] = useState([]);
@@ -150,6 +150,27 @@ const ProductCatalog = () => {
       setSelectedProductForDetails({ ...prod, linked_operations: opsRes.data, master_stocks: stockRes.data });
     } catch (err) {
       setAlertInfo({ isOpen: true, type: 'error', message: "Failed to load details." });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDirectPrint = async (prod) => {
+    setLoading(true);
+    try {
+      const [opsRes, stockRes] = await Promise.all([
+        apiClient.get(`/products/${prod.id}/operations/`),
+        apiClient.get(`/products/${prod.id}/master_stocks/`)
+      ]);
+      setSelectedProductForDetails({ ...prod, linked_operations: opsRes.data, master_stocks: stockRes.data });
+      
+      // Let the DOM render the PrintLayout, then trigger print dialog
+      setTimeout(() => {
+        window.print();
+        setSelectedProductForDetails(null); // Return directly to list
+      }, 100);
+    } catch (err) {
+      setAlertInfo({ isOpen: true, type: 'error', message: "Failed to load product for printing." });
     } finally {
       setLoading(false);
     }
@@ -315,6 +336,9 @@ const ProductCatalog = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-[11px] font-black text-slate-500 uppercase tracking-widest">
                   <Layers size={14} className="text-[#DC2626]" /> Assign Piece-Rate Operations
+                  <span className="ml-4 px-3 py-1 bg-red-50 text-[#DC2626] rounded text-[10px] shadow-sm border border-red-100">
+                    Total Op. Cost: ₹ {formData.operations.reduce((total, op) => total + (parseFloat(op.piece_rate) || 0), 0).toFixed(2)}
+                  </span>
                 </div>
                 <Button type="button" variant="ghost" onClick={handleAddOperation} className="text-[10px] py-2 px-4 rounded-lg">
                   <Plus size={14} strokeWidth={3} className="inline mr-1" /> Add Task
@@ -592,6 +616,9 @@ const ProductCatalog = () => {
                   </Td>
                   <Td className="text-right">
                     <div className="flex justify-end items-center gap-2">
+                      <button onClick={() => handleDirectPrint(prod)} className="p-2.5 bg-slate-100 text-slate-600 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors group" title="Print Product">
+                        <Printer size={16} strokeWidth={2.5} className="group-hover:scale-110 transition-transform" />
+                      </button>
                       <button onClick={() => handleViewDetails(prod)} className="p-2.5 bg-slate-100 text-slate-600 hover:text-[#DC2626] hover:bg-red-50 rounded-lg transition-colors group" title="View Operations">
                         <Eye size={16} strokeWidth={2.5} className="group-hover:scale-110 transition-transform" />
                       </button>
@@ -649,6 +676,9 @@ const ProductCatalog = () => {
               </div>
 
               <div className="p-3 flex gap-2 border-t border-slate-100">
+                <button onClick={() => handleDirectPrint(prod)} className="flex-1 py-2.5 bg-slate-100 text-slate-700 font-bold text-[11px] uppercase tracking-widest rounded-lg transition-colors flex items-center justify-center gap-2 hover:bg-emerald-50 hover:text-emerald-600">
+                  <Printer size={14} /> Print
+                </button>
                 <button onClick={() => handleViewDetails(prod)} className="flex-1 py-2.5 bg-slate-100 text-slate-700 font-bold text-[11px] uppercase tracking-widest rounded-lg transition-colors flex items-center justify-center gap-2">
                   <Eye size={14} /> Details
                 </button>
@@ -896,6 +926,10 @@ const ProductCatalog = () => {
                 ))}
               </tbody>
             </table>
+            <div className="mt-4 text-right">
+              <strong className="text-slate-700 uppercase tracking-widest text-sm">Total Operational Cost: </strong>
+              <span className="text-lg font-black text-red-600">Rs. {parseFloat(selectedProductForDetails.total_operational_cost || 0).toLocaleString('en-IN')}</span>
+            </div>
           </div>
         )}
 

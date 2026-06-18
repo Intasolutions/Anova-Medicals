@@ -7,8 +7,6 @@ const PrintLayout = ({ title, documentType, children }) => {
       <div className="flex justify-between items-start border-b-2 border-black pb-4 mb-6">
         <div>
           <h1 className="text-2xl font-black uppercase tracking-widest">Favourite Readymade Garments</h1>
-          <p className="text-sm font-semibold mt-1">123 Industrial Estate, Tirupur, Tamil Nadu 641602</p>
-          <p className="text-xs mt-1">Phone: +91 98765 43210 | Email: contact@favouritegarments.com</p>
         </div>
         <div className="text-right">
           <h2 className="text-xl font-bold uppercase border border-black px-4 py-2 bg-slate-100">{documentType}</h2>
