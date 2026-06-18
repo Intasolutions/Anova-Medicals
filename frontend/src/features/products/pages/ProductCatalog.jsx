@@ -7,7 +7,7 @@ import { ConfirmDialog } from '../../../components/ui/Dialogs';
 import { Plus, Package, Hash, IndianRupee, Layers, CheckCircle, AlertCircle, Search, DatabaseZap, Box, ShieldCheck, Trash2, Activity, Edit2, Eye, X, Download, Printer } from 'lucide-react';
 
 const ProductCatalog = () => {
-  const [products, setProducts] = useState([]);
+  const [products, setProducts] = useState([]);  
   const [operations, setOperations] = useState([]);
   const [sizes, setSizes] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
