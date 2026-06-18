@@ -215,13 +215,11 @@ const ProductCatalog = () => {
       submitData.append('operations', JSON.stringify(formData.operations));
       submitData.append('sizes', JSON.stringify(formData.sizes));
 
-      const config = { headers: { 'Content-Type': 'multipart/form-data' } };
-
       if (editingProduct) {
-        await apiClient.put(`/products/${editingProduct.id}/`, submitData, config);
+        await apiClient.put(`/products/${editingProduct.id}/`, submitData);
         setAlertInfo({ isOpen: true, type: 'success', message: 'Product updated successfully!' });
       } else {
-        await apiClient.post('/products/', submitData, config);
+        await apiClient.post('/products/', submitData);
         setAlertInfo({ isOpen: true, type: 'success', message: 'Product initialized successfully!' });
       }
       resetForm();

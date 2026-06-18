@@ -56,12 +56,18 @@ class ProductViewSet(viewsets.ModelViewSet):
         import json
         operations_data = request.data.get('operations')
         if isinstance(operations_data, str):
-            try: operations_data = json.loads(operations_data)
+            try: 
+                operations_data = json.loads(operations_data)
+                if isinstance(operations_data, list):
+                    operations_data = [json.loads(op) if isinstance(op, str) else op for op in operations_data]
             except Exception: operations_data = []
             
         sizes_data = request.data.get('sizes')
         if isinstance(sizes_data, str):
-            try: sizes_data = json.loads(sizes_data)
+            try: 
+                sizes_data = json.loads(sizes_data)
+                if isinstance(sizes_data, list):
+                    sizes_data = [json.loads(sz) if isinstance(sz, str) else sz for sz in sizes_data]
             except Exception: sizes_data = []
         
         try:
@@ -85,12 +91,18 @@ class ProductViewSet(viewsets.ModelViewSet):
         import json
         operations_data = request.data.get('operations')
         if isinstance(operations_data, str):
-            try: operations_data = json.loads(operations_data)
+            try: 
+                operations_data = json.loads(operations_data)
+                if isinstance(operations_data, list):
+                    operations_data = [json.loads(op) if isinstance(op, str) else op for op in operations_data]
             except Exception: operations_data = None
             
         sizes_data = request.data.get('sizes')
         if isinstance(sizes_data, str):
-            try: sizes_data = json.loads(sizes_data)
+            try: 
+                sizes_data = json.loads(sizes_data)
+                if isinstance(sizes_data, list):
+                    sizes_data = [json.loads(sz) if isinstance(sz, str) else sz for sz in sizes_data]
             except Exception: sizes_data = None
 
         with transaction.atomic():
