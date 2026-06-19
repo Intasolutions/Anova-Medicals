@@ -19,6 +19,10 @@ const SalaryHistoryDashboard = () => {
   const [reportLogs, setReportLogs] = useState([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
 
+  // New States
+  const [printMode, setPrintMode] = useState('main'); // 'main' or 'individual'
+  const [modelFilter, setModelFilter] = useState('');
+
   // Form State
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -63,6 +67,7 @@ const SalaryHistoryDashboard = () => {
 
   const handleRowClick = async (report) => {
     setSelectedReport(report);
+    setModelFilter(''); // Reset filter when opening new report
     setLoadingLogs(true);
     try {
       const response = await apiClient.get('/production-logs/', {
@@ -113,6 +118,12 @@ const SalaryHistoryDashboard = () => {
   useEffect(() => {
     setCurrentPage(1);
   }, [rowsPerPage, tableSearchTerm]);
+
+  // Derived state for Modal
+  const uniqueModels = [...new Set(reportLogs.map(log => log.product_name))].filter(Boolean);
+  const filteredReportLogs = modelFilter 
+    ? reportLogs.filter(log => log.product_name === modelFilter)
+    : reportLogs;
 
   return (
     <>
@@ -223,7 +234,10 @@ const SalaryHistoryDashboard = () => {
                 />
               </div>
               <button
-                onClick={() => window.print()}
+                onClick={() => {
+                  setPrintMode('main');
+                  setTimeout(() => window.print(), 100);
+                }}
                 className="flex items-center gap-2 text-[10px] font-black text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-4 py-2.5 rounded-xl border border-emerald-200 transition-all uppercase tracking-widest flex-shrink-0"
               >
                 <Download size={14} strokeWidth={3} /> Print Ledger
@@ -313,12 +327,24 @@ const SalaryHistoryDashboard = () => {
                   Code: {selectedReport.employee__employee_code}
                 </p>
               </div>
-              <button
-                onClick={() => setSelectedReport(null)}
-                className="p-2.5 bg-white border border-slate-200 text-slate-400 hover:text-[#DC2626] hover:border-[#DC2626] hover:bg-red-50 rounded-xl transition-all"
-              >
-                <X size={20} strokeWidth={2.5} />
-              </button>
+              <div className="flex items-center gap-4">
+                <select
+                  value={modelFilter}
+                  onChange={(e) => setModelFilter(e.target.value)}
+                  className="bg-white border border-slate-200/60 text-xs font-semibold text-slate-700 py-2 px-3 rounded-xl focus:ring-2 focus:ring-[#DC2626]/20 focus:border-[#DC2626] outline-none transition-all shadow-sm max-w-[200px]"
+                >
+                  <option value="">All Models</option>
+                  {uniqueModels.map(model => (
+                    <option key={model} value={model}>{model}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => setSelectedReport(null)}
+                  className="p-2.5 bg-white border border-slate-200 text-slate-400 hover:text-[#DC2626] hover:border-[#DC2626] hover:bg-red-50 rounded-xl transition-all"
+                >
+                  <X size={20} strokeWidth={2.5} />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 bg-white">
@@ -339,7 +365,7 @@ const SalaryHistoryDashboard = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {reportLogs.map(log => (
+                      {filteredReportLogs.map(log => (
                         <tr key={log.id} className="hover:bg-slate-50/80 transition-colors">
                           <td className="px-6 py-4 font-black text-slate-500 text-xs uppercase">{log.work_date}</td>
                           <td className="px-6 py-4">
@@ -365,53 +391,110 @@ const SalaryHistoryDashboard = () => {
             </div>
 
             <div className="p-5 border-t border-slate-100 bg-[#F8FAFC] flex justify-between items-center">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Audited {reportLogs.length} Transactions</span>
-              <Button
-                variant="outline"
-                onClick={() => setSelectedReport(null)}
-                className="px-8 py-2.5 text-xs font-black"
-              >
-                Close Trace
-              </Button>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">Audited {filteredReportLogs.length} Transactions</span>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setPrintMode('individual');
+                    setTimeout(() => window.print(), 100);
+                  }}
+                  className="flex items-center gap-2 text-[10px] font-black text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-6 py-2.5 rounded-xl border border-emerald-200 transition-all uppercase tracking-widest"
+                >
+                  <Download size={14} strokeWidth={3} /> Print Trace
+                </button>
+                <Button
+                  variant="outline"
+                  onClick={() => setSelectedReport(null)}
+                  className="px-8 py-2.5 text-xs font-black"
+                >
+                  Close Trace
+                </Button>
+              </div>
             </div>
           </div>
         </div>
       )}
     </div>
 
-    {/* PRINT TEMPLATE */}
-    <PrintLayout documentType="Salary Management Ledger" title={`Payout Report (${startDate || 'Start'} to ${endDate || 'Today'})`}>
-      <table>
-        <thead>
-          <tr>
-            <th>Employee Name</th>
-            <th>Employee Code</th>
-            <th>Present Days</th>
-            <th>Total Output Units</th>
-            <th>Net Payout (Rs.)</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredResults.map((r, i) => (
-            <tr key={i}>
-              <td>{r.employee__name}</td>
-              <td>{r.employee__employee_code}</td>
-              <td>{r.present_days}</td>
-              <td>{r.total_pieces}</td>
-              <td>{parseFloat(r.total_payout).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
-            </tr>
-          ))}
-        </tbody>
-        {filteredResults.length > 0 && (
-          <tfoot>
+    {/* PRINT TEMPLATE - MAIN */}
+    {printMode === 'main' && (
+      <PrintLayout documentType="Salary Management Ledger" title={`Payout Report (${startDate || 'Start'} to ${endDate || 'Today'})`}>
+        <table>
+          <thead>
             <tr>
-              <th colSpan="4" className="text-right">Grand Total</th>
-              <th>Rs. {filteredResults.reduce((sum, r) => sum + parseFloat(r.total_payout || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</th>
+              <th>Employee Name</th>
+              <th>Employee Code</th>
+              <th>Present Days</th>
+              <th>Total Output Units</th>
+              <th>Net Payout (Rs.)</th>
             </tr>
-          </tfoot>
-        )}
-      </table>
-    </PrintLayout>
+          </thead>
+          <tbody>
+            {filteredResults.map((r, i) => (
+              <tr key={i}>
+                <td>{r.employee__name}</td>
+                <td>{r.employee__employee_code}</td>
+                <td>{r.present_days}</td>
+                <td>{r.total_pieces}</td>
+                <td>{parseFloat(r.total_payout).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              </tr>
+            ))}
+          </tbody>
+          {filteredResults.length > 0 && (
+            <tfoot>
+              <tr>
+                <th colSpan="4" className="text-right">Grand Total</th>
+                <th>Rs. {filteredResults.reduce((sum, r) => sum + parseFloat(r.total_payout || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</th>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </PrintLayout>
+    )}
+
+    {/* PRINT TEMPLATE - INDIVIDUAL */}
+    {printMode === 'individual' && selectedReport && (
+      <PrintLayout documentType="Individual Work History" title={`Audit Trail: ${selectedReport.employee__name} (${startDate || 'Start'} to ${endDate || 'Today'})`}>
+        <div className="mb-4">
+          <p className="font-bold">Employee Code: <span className="font-normal">{selectedReport.employee__employee_code}</span></p>
+          {modelFilter && <p className="font-bold">Model Filter: <span className="font-normal">{modelFilter}</span></p>}
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th className="text-left">Work Date</th>
+              <th className="text-left">Product Matrix</th>
+              <th className="text-left">Operational Task</th>
+              <th className="text-center">Output</th>
+              <th className="text-right">Value (Rs.)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredReportLogs.map(log => (
+              <tr key={log.id}>
+                <td>{log.work_date}</td>
+                <td>
+                  <div>{log.product_name}</div>
+                  <div className="text-xs text-gray-500">Size: {log.size_name || 'N/A'}</div>
+                </td>
+                <td>{log.operation_name}</td>
+                <td className="text-center">{log.quantity}</td>
+                <td className="text-right">{parseFloat(log.amount_earned).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+              </tr>
+            ))}
+          </tbody>
+          {filteredReportLogs.length > 0 && (
+            <tfoot>
+              <tr>
+                <th colSpan="3" className="text-right">Total</th>
+                <th className="text-center">{filteredReportLogs.reduce((sum, log) => sum + (log.quantity || 0), 0)}</th>
+                <th className="text-right">Rs. {filteredReportLogs.reduce((sum, log) => sum + parseFloat(log.amount_earned || 0), 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</th>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </PrintLayout>
+    )}
     </>
   );
 };

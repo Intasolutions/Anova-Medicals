@@ -885,71 +885,38 @@ const ProductCatalog = () => {
 
     {/* PRINT TEMPLATES */}
     {selectedProductForDetails ? (
-      <PrintLayout documentType="Product Profile" title="Product Master Record">
-        <div className="flex gap-8 mb-8">
-          <div className="w-32 h-32 border-4 border-slate-200 rounded-xl overflow-hidden flex-shrink-0 flex items-center justify-center bg-slate-50">
-            {selectedProductForDetails.photo ? (
-              <img src={selectedProductForDetails.photo} alt={selectedProductForDetails.name} className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-4xl font-bold text-slate-300">N/A</span>
-            )}
-          </div>
-          <div className="flex-1 grid grid-cols-2 gap-y-4">
-            <div><strong className="text-slate-500">Product Name:</strong> <br/><span className="text-lg font-bold">{selectedProductForDetails.name}</span></div>
-            <div><strong className="text-slate-500">Product Code:</strong> <br/><span className="text-lg font-bold">{selectedProductForDetails.product_code}</span></div>
-            <div><strong className="text-slate-500">Model Number:</strong> <br/><span>{selectedProductForDetails.model_number || 'N/A'}</span></div>
-            <div><strong className="text-slate-500">Price (MSRP):</strong> <br/><span>Rs. {parseFloat(selectedProductForDetails.price_per_unit).toLocaleString('en-IN')}</span></div>
-            <div><strong className="text-slate-500">Status:</strong> <br/><span>{selectedProductForDetails.is_active ? 'Active Model' : 'Inactive'}</span></div>
+      <PrintLayout documentType="Product Profile" hideHeader={true} hideFooter={true}>
+        <div className="mb-6">
+          <div className="grid grid-cols-2 gap-y-4 border-b border-slate-200 pb-4">
+            <div><strong className="text-slate-500 uppercase tracking-widest text-xs">Product Name:</strong> <br/><span className="text-xl font-black text-slate-900">{selectedProductForDetails.name}</span></div>
+            <div><strong className="text-slate-500 uppercase tracking-widest text-xs">Serial No:</strong> <br/><span className="text-lg font-bold text-emerald-700">SN-{Math.floor(100000 + Math.random() * 900000)}</span></div>
           </div>
         </div>
 
         {selectedProductForDetails.linked_operations && selectedProductForDetails.linked_operations.length > 0 && (
-          <div className="mb-8">
-            <h4 className="font-bold mb-2">Assigned Manufacturing Tasks</h4>
-            <table>
+          <div className="mb-6">
+            <h4 className="font-bold mb-3 text-slate-800 border-b border-slate-200 pb-2">Assigned Manufacturing Tasks</h4>
+            <table className="w-full text-left border-collapse text-sm mb-4">
               <thead>
-                <tr>
-                  <th>Operation Name</th>
-                  <th>Operation Code</th>
-                  <th>Piece Rate (Rs.)</th>
+                <tr className="bg-slate-50">
+                  <th className="px-4 py-2 border border-slate-200">Operation Name</th>
+                  <th className="px-4 py-2 border border-slate-200 text-right">Piece Rate (Rs.)</th>
                 </tr>
               </thead>
               <tbody>
                 {selectedProductForDetails.linked_operations.map(op => (
                   <tr key={op.id}>
-                    <td>{op.operation_name}</td>
-                    <td>{op.operation_code}</td>
-                    <td>{parseFloat(op.piece_rate).toFixed(2)}</td>
+                    <td className="px-4 py-2 border border-slate-200">{op.operation_name}</td>
+                    <td className="px-4 py-2 border border-slate-200 text-right">{parseFloat(op.piece_rate).toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <div className="mt-4 text-right">
-              <strong className="text-slate-700 uppercase tracking-widest text-sm">Total Operational Cost: </strong>
-              <span className="text-lg font-black text-red-600">Rs. {parseFloat(selectedProductForDetails.total_operational_cost || 0).toLocaleString('en-IN')}</span>
+            <div className="mt-4 text-right bg-slate-50 p-3 rounded-lg border border-slate-200 inline-block float-right">
+              <strong className="text-slate-700 uppercase tracking-widest text-xs mr-3">Total Operational Cost: </strong>
+              <span className="text-xl font-black text-red-600">Rs. {parseFloat(selectedProductForDetails.total_operational_cost || 0).toLocaleString('en-IN')}</span>
             </div>
-          </div>
-        )}
-
-        {selectedProductForDetails.master_stocks && selectedProductForDetails.master_stocks.length > 0 && (
-          <div className="mb-8">
-            <h4 className="font-bold mb-2">Initial Master Stock</h4>
-            <table>
-              <thead>
-                <tr>
-                  <th>Size / Variant</th>
-                  <th>Allocated Quantity</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedProductForDetails.master_stocks.map(st => (
-                  <tr key={st.id}>
-                    <td>{st.size_name}</td>
-                    <td>{st.total_quantity}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="clear-both"></div>
           </div>
         )}
       </PrintLayout>
