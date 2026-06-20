@@ -1,8 +1,24 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 
 const PrintLayout = ({ title, documentType, children, hideHeader = false, hideFooter = false }) => {
+  const [printDate, setPrintDate] = useState('');
+
+  useEffect(() => {
+    setPrintDate(new Date().toLocaleString('en-IN', {
+      year: 'numeric', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    }));
+  }, []);
+
   return (
     <div className="print-only hidden w-full bg-white text-black p-8 font-sans">
+      <style type="text/css" media="print">
+        {`
+          @page { size: auto; margin: 0mm; }
+          html { background-color: #FFFFFF; margin: 0px; }
+          body { padding: 10mm; }
+        `}
+      </style>
       {/* HEADER */}
       {!hideHeader && (
         <div className="flex justify-between items-start border-b-2 border-black pb-4 mb-6">
@@ -40,9 +56,10 @@ const PrintLayout = ({ title, documentType, children, hideHeader = false, hideFo
               <p className="text-xs font-bold uppercase">Authorized Signatory</p>
             </div>
           </div>
-          
-          <div className="mt-8 text-center text-[10px] text-gray-500">
-            This is a system generated document. Powered by Antigravity MES.
+
+          <div className="mt-8 flex justify-between items-center text-[10px] text-gray-500 font-bold border-t border-gray-200 pt-2">
+            <span>Printed on: {printDate}</span>
+            <span>Faviourite Readymade Garments - System Generated Document | Powered by <a href="https://www.intaindia.com">IN-TA Solutions</a> </span>
           </div>
         </>
       )}

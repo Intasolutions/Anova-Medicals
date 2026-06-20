@@ -885,16 +885,18 @@ const ProductCatalog = () => {
 
     {/* PRINT TEMPLATES */}
     {selectedProductForDetails ? (
-      <PrintLayout documentType="Product Profile" hideHeader={true} hideFooter={true}>
+      <PrintLayout documentType="Product Profile" hideHeader={true} hideFooter={false}>
         <div className="mb-6">
           <div className="flex justify-between items-start border-b border-slate-200 pb-4">
             <div className="grid grid-cols-2 gap-y-4 flex-1">
-              <div><strong className="text-slate-500 uppercase tracking-widest text-xs">Product Name:</strong> <br/><span className="text-xl font-black text-slate-900">{selectedProductForDetails.name}</span></div>
-              <div><strong className="text-slate-500 uppercase tracking-widest text-xs">Serial No:</strong> <br/><span className="text-lg font-bold text-emerald-700">SN-{Math.floor(100000 + Math.random() * 900000)}</span></div>
+              <div><strong className="text-slate-500 uppercase tracking-widest text-xs">Product Name:</strong> <br/><span className="text-2xl font-black text-slate-900">{selectedProductForDetails.name}</span></div>
+              <div><strong className="text-slate-500 uppercase tracking-widest text-xs">Serial No:</strong> <br/><span className="text-xl font-bold text-emerald-700">SN-{Math.floor(100000 + Math.random() * 900000)}</span></div>
+              <div><strong className="text-slate-500 uppercase tracking-widest text-xs">Registration Date:</strong> <br/><span className="text-sm font-bold text-slate-700">{selectedProductForDetails.date ? new Date(selectedProductForDetails.date).toLocaleDateString('en-IN') : 'N/A'}</span></div>
+              <div><strong className="text-slate-500 uppercase tracking-widest text-xs">Model Number:</strong> <br/><span className="text-sm font-bold text-slate-700">{selectedProductForDetails.model_number || 'N/A'}</span></div>
             </div>
             {selectedProductForDetails.photo && (
-              <div className="w-24 h-24 rounded-lg overflow-hidden border border-slate-200 flex-shrink-0 ml-4">
-                <img src={selectedProductForDetails.photo} alt={selectedProductForDetails.name} className="w-full h-full object-contain" />
+              <div className="w-56 h-56 rounded-xl overflow-hidden border-2 border-slate-200 flex-shrink-0 ml-6 shadow-sm">
+                <img src={selectedProductForDetails.photo} alt={selectedProductForDetails.name} className="w-full h-full object-contain p-1" />
               </div>
             )}
           </div>
