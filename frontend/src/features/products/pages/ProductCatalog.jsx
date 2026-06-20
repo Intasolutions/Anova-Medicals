@@ -902,34 +902,48 @@ const ProductCatalog = () => {
           </div>
         </div>
 
-        {selectedProductForDetails.linked_operations && selectedProductForDetails.linked_operations.length > 0 && (
-          <div className="mb-6">
-            <h4 className="font-bold mb-3 text-slate-800 border-b border-slate-200 pb-2">Assigned Manufacturing Tasks</h4>
-            <table className="w-full text-left border-collapse text-sm mb-4">
-              <thead>
-                <tr className="bg-slate-50">
-                  <th className="px-4 py-2 border border-slate-200 w-16 text-center">Sl No.</th>
-                  <th className="px-4 py-2 border border-slate-200">Operation Name</th>
-                  <th className="px-4 py-2 border border-slate-200 text-right">Piece Rate (Rs.)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {selectedProductForDetails.linked_operations.map((op, index) => (
-                  <tr key={op.id}>
-                    <td className="px-4 py-2 border border-slate-200 text-center">{index + 1}</td>
-                    <td className="px-4 py-2 border border-slate-200">{op.operation_name}</td>
-                    <td className="px-4 py-2 border border-slate-200 text-right">{parseFloat(op.piece_rate).toFixed(2)}</td>
+        {selectedProductForDetails.linked_operations && selectedProductForDetails.linked_operations.length > 0 && (() => {
+          const coreOperations = selectedProductForDetails.linked_operations.filter(op => !op.operation_name.toUpperCase().includes('IRONING'));
+          const ironingOperations = selectedProductForDetails.linked_operations.filter(op => op.operation_name.toUpperCase().includes('IRONING'));
+          const coreTotalCost = coreOperations.reduce((sum, op) => sum + parseFloat(op.piece_rate || 0), 0);
+
+          return (
+            <div className="mb-6">
+              <h4 className="font-bold mb-3 text-slate-800 border-b border-slate-200 pb-2">Assigned Manufacturing Tasks</h4>
+              <table className="w-full text-left border-collapse text-sm mb-4">
+                <thead>
+                  <tr className="bg-slate-50">
+                    <th className="px-4 py-2 border border-slate-200 w-16 text-center">Sl No.</th>
+                    <th className="px-4 py-2 border border-slate-200">Operation Name</th>
+                    <th className="px-4 py-2 border border-slate-200 text-right">Piece Rate (Rs.)</th>
                   </tr>
+                </thead>
+                <tbody>
+                  {coreOperations.map((op, index) => (
+                    <tr key={op.id}>
+                      <td className="px-4 py-2 border border-slate-200 text-center">{index + 1}</td>
+                      <td className="px-4 py-2 border border-slate-200">{op.operation_name}</td>
+                      <td className="px-4 py-2 border border-slate-200 text-right">{parseFloat(op.piece_rate).toFixed(2)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="flex flex-col items-end gap-2 mt-4 float-right">
+                <div className="text-right bg-slate-50 p-3 rounded-lg border border-slate-200 inline-block">
+                  <strong className="text-slate-700 uppercase tracking-widest text-xs mr-3">Total Operational Cost: </strong>
+                  <span className="text-xl font-black text-slate-900">Rs. {coreTotalCost.toLocaleString('en-IN')}</span>
+                </div>
+                {ironingOperations.map(ironingOp => (
+                  <div key={ironingOp.id} className="text-right bg-red-50 p-3 rounded-lg border border-red-100 inline-block shadow-sm">
+                    <strong className="text-red-700 uppercase tracking-widest text-xs mr-3">{ironingOp.operation_name} Charges: </strong>
+                    <span className="text-xl font-black text-red-600">Rs. {parseFloat(ironingOp.piece_rate || 0).toLocaleString('en-IN')}</span>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-            <div className="mt-4 text-right bg-slate-50 p-3 rounded-lg border border-slate-200 inline-block float-right">
-              <strong className="text-slate-700 uppercase tracking-widest text-xs mr-3">Total Operational Cost: </strong>
-              <span className="text-xl font-black text-red-600">Rs. {parseFloat(selectedProductForDetails.total_operational_cost || 0).toLocaleString('en-IN')}</span>
+              </div>
+              <div className="clear-both"></div>
             </div>
-            <div className="clear-both"></div>
-          </div>
-        )}
+          );
+        })()}
       </PrintLayout>
     ) : (
       <PrintLayout documentType="Product Catalog List" title={`Master List`}>

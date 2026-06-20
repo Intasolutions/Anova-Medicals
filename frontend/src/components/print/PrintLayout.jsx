@@ -56,10 +56,10 @@ const PrintLayout = ({ title, documentType, children, hideHeader = false, hideFo
               <p className="text-xs font-bold uppercase">Authorized Signatory</p>
             </div>
           </div>
-
+          
           <div className="mt-8 flex justify-between items-center text-[10px] text-gray-500 font-bold border-t border-gray-200 pt-2">
             <span>Printed on: {printDate}</span>
-            <span>Faviourite Readymade Garments - System Generated Document | Powered by <a href="https://www.intaindia.com">IN-TA Solutions</a> </span>
+            <span>Faviourite Readymade Garments - Document | Powered by <a href="https://www.intaindia.com">IN-TA Solutions</a> </span>
           </div>
         </>
       )}
