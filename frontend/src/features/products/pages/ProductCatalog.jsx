@@ -887,9 +887,16 @@ const ProductCatalog = () => {
     {selectedProductForDetails ? (
       <PrintLayout documentType="Product Profile" hideHeader={true} hideFooter={true}>
         <div className="mb-6">
-          <div className="grid grid-cols-2 gap-y-4 border-b border-slate-200 pb-4">
-            <div><strong className="text-slate-500 uppercase tracking-widest text-xs">Product Name:</strong> <br/><span className="text-xl font-black text-slate-900">{selectedProductForDetails.name}</span></div>
-            <div><strong className="text-slate-500 uppercase tracking-widest text-xs">Serial No:</strong> <br/><span className="text-lg font-bold text-emerald-700">SN-{Math.floor(100000 + Math.random() * 900000)}</span></div>
+          <div className="flex justify-between items-start border-b border-slate-200 pb-4">
+            <div className="grid grid-cols-2 gap-y-4 flex-1">
+              <div><strong className="text-slate-500 uppercase tracking-widest text-xs">Product Name:</strong> <br/><span className="text-xl font-black text-slate-900">{selectedProductForDetails.name}</span></div>
+              <div><strong className="text-slate-500 uppercase tracking-widest text-xs">Serial No:</strong> <br/><span className="text-lg font-bold text-emerald-700">SN-{Math.floor(100000 + Math.random() * 900000)}</span></div>
+            </div>
+            {selectedProductForDetails.photo && (
+              <div className="w-24 h-24 rounded-lg overflow-hidden border border-slate-200 flex-shrink-0 ml-4">
+                <img src={selectedProductForDetails.photo} alt={selectedProductForDetails.name} className="w-full h-full object-contain" />
+              </div>
+            )}
           </div>
         </div>
 
@@ -899,13 +906,15 @@ const ProductCatalog = () => {
             <table className="w-full text-left border-collapse text-sm mb-4">
               <thead>
                 <tr className="bg-slate-50">
+                  <th className="px-4 py-2 border border-slate-200 w-16 text-center">Sl No.</th>
                   <th className="px-4 py-2 border border-slate-200">Operation Name</th>
                   <th className="px-4 py-2 border border-slate-200 text-right">Piece Rate (Rs.)</th>
                 </tr>
               </thead>
               <tbody>
-                {selectedProductForDetails.linked_operations.map(op => (
+                {selectedProductForDetails.linked_operations.map((op, index) => (
                   <tr key={op.id}>
+                    <td className="px-4 py-2 border border-slate-200 text-center">{index + 1}</td>
                     <td className="px-4 py-2 border border-slate-200">{op.operation_name}</td>
                     <td className="px-4 py-2 border border-slate-200 text-right">{parseFloat(op.piece_rate).toFixed(2)}</td>
                   </tr>
