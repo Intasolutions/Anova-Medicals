@@ -392,8 +392,10 @@ const DailyOperationEntry = ({ onSuccess }) => {
 
           {/* Main Input Form */}
           <div className="lg:col-span-8 space-y-6">
-            <Card className="p-8 border-slate-100 overflow-hidden relative group">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-bl-full -mr-16 -mt-16 transition-transform group-hover:scale-110 duration-500" />
+            <Card className="p-8 border-slate-100 overflow-visible relative group">
+              <div className="absolute inset-0 overflow-hidden rounded-[2rem] pointer-events-none">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-bl-full -mr-16 -mt-16 transition-transform group-hover:scale-110 duration-500" />
+              </div>
 
               <div className="flex items-center gap-3 mb-8 relative z-10">
                 <div className="p-2 bg-indigo-100 text-indigo-600 rounded-xl">
@@ -415,8 +417,10 @@ const DailyOperationEntry = ({ onSuccess }) => {
               </div>
             </Card>
 
-            <Card className="p-8 border-slate-100 overflow-hidden relative group">
-              <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-full -mr-16 -mt-16 transition-transform group-hover:scale-110 duration-500" />
+            <Card className="p-8 border-slate-100 overflow-visible relative group">
+              <div className="absolute inset-0 overflow-hidden rounded-[2rem] pointer-events-none">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-full -mr-16 -mt-16 transition-transform group-hover:scale-110 duration-500" />
+              </div>
 
               <div className="flex items-center gap-3 mb-8 relative z-10">
                 <div className="p-2 bg-emerald-100 text-emerald-600 rounded-xl">

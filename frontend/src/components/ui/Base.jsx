@@ -1,8 +1,9 @@
 import React from 'react';
+import ReactDOM from 'react-dom';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 export const Card = ({ children, className = '', noPadding = false }) => (
-  <div className={`bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] overflow-hidden relative ${className}`}>
+  <div className={`bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] relative ${className}`}>
     <div className={`h-full ${noPadding ? '' : 'p-8'}`}>
       {children}
     </div>
@@ -42,27 +43,162 @@ export const Input = ({ label, error, className = '', ...props }) => (
   </div>
 );
 
-export const Select = ({ label, error, children, className = '', ...props }) => (
-  <div className={`flex flex-col gap-2 ${className}`}>
-    {label && (
-      <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
-        {label}
-      </label>
-    )}
-    <div className="relative">
-      <select
-        className={`w-full p-4 bg-[#F8FAFC] border border-slate-200/60 rounded-xl focus:ring-4 focus:ring-brand-primary/10 focus:border-brand-primary outline-none transition-all font-semibold text-slate-900 appearance-none cursor-pointer ${error ? 'border-red-500 bg-red-50' : ''}`}
-        {...props}
-      >
-        {children}
-      </select>
-      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+export const Select = ({ label, error, children, className = '', ref, ...props }) => {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const [displayValue, setDisplayValue] = React.useState(props.value || props.defaultValue || '');
+  const [dropdownStyle, setDropdownStyle] = React.useState({});
+  const containerRef = React.useRef(null);
+  const triggerRef = React.useRef(null);
+  const selectRef = React.useRef(null);
+
+  // Extract options from children
+  const options = React.Children.toArray(children).reduce((acc, child) => {
+    if (React.isValidElement(child) && child.type === 'option') {
+      acc.push({
+        value: child.props.value !== undefined ? child.props.value : child.props.children,
+        label: child.props.children,
+        disabled: child.props.disabled,
+      });
+    }
+    return acc;
+  }, []);
+
+  // Handle click outside to close
+  React.useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        containerRef.current && !containerRef.current.contains(event.target) &&
+        !document.getElementById('select-portal-root')?.contains(event.target)
+      ) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Sync with controlled value if provided
+  React.useEffect(() => {
+    if (props.value !== undefined) {
+      setDisplayValue(props.value);
+    }
+  }, [props.value]);
+
+  // Handle form reset to update custom UI
+  React.useEffect(() => {
+    const form = selectRef.current?.closest('form');
+    if (!form) return;
+    const handleReset = () => {
+      setTimeout(() => {
+        if (selectRef.current) setDisplayValue(selectRef.current.value);
+      }, 0);
+    };
+    form.addEventListener('reset', handleReset);
+    return () => form.removeEventListener('reset', handleReset);
+  }, []);
+
+  // Reposition dropdown when it opens
+  React.useEffect(() => {
+    if (isOpen && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      setDropdownStyle({
+        position: 'fixed',
+        top: rect.bottom + 6,
+        left: rect.left,
+        width: rect.width,
+        zIndex: 9999,
+      });
+    }
+  }, [isOpen]);
+
+  // Close on scroll/resize (but NOT when scrolling inside the dropdown itself)
+  React.useEffect(() => {
+    if (!isOpen) return;
+    const handleScroll = (e) => {
+      const portal = document.getElementById('select-portal-root');
+      if (portal && portal.contains(e.target)) return; // ignore scroll inside dropdown
+      setIsOpen(false);
+    };
+    const handleResize = () => setIsOpen(false);
+    window.addEventListener('scroll', handleScroll, true);
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('scroll', handleScroll, true);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [isOpen]);
+
+  const handleRef = (node) => {
+    selectRef.current = node;
+    if (typeof ref === 'function') ref(node);
+    else if (ref) ref.current = node;
+  };
+
+  const handleSelect = (val) => {
+    setDisplayValue(val);
+    setIsOpen(false);
+    if (selectRef.current) {
+      selectRef.current.value = val;
+      selectRef.current.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    if (props.onChange) {
+      props.onChange({ target: { name: props.name, value: val }, currentTarget: { name: props.name, value: val } });
+    }
+  };
+
+  const selectedOption = options.find(opt => String(opt.value) === String(displayValue));
+  const displayText = selectedOption ? selectedOption.label : (options[0]?.label || 'Select...');
+
+  const dropdown = isOpen ? ReactDOM.createPortal(
+    <div
+      id="select-portal-root"
+      style={dropdownStyle}
+      className="bg-white border border-slate-200/80 rounded-xl shadow-[0_12px_40px_rgb(0,0,0,0.18)] max-h-60 overflow-y-auto py-2"
+    >
+      {options.map((opt, idx) => (
+        <div
+          key={idx}
+          onMouseDown={(e) => { e.preventDefault(); !opt.disabled && handleSelect(opt.value); }}
+          className={`px-4 py-3 text-sm font-semibold transition-colors ${
+            opt.disabled ? 'text-slate-300 cursor-not-allowed' : 'text-slate-700 hover:bg-slate-50 cursor-pointer'
+          } ${String(opt.value) === String(displayValue) ? 'bg-brand-primary/5 text-brand-primary' : ''}`}
+        >
+          {opt.label}
+        </div>
+      ))}
+    </div>,
+    document.body
+  ) : null;
+
+  return (
+    <div className={`flex flex-col gap-2 ${className}`} ref={containerRef}>
+      {label && (
+        <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
+          {label}
+        </label>
+      )}
+      <div className="relative" ref={triggerRef}>
+        <select className="hidden" ref={handleRef} {...props} value={displayValue} onChange={() => {}}>
+          {children}
+        </select>
+
+        <div
+          onClick={() => !props.disabled && setIsOpen(!isOpen)}
+          className={`w-full p-4 bg-[#F8FAFC] border border-slate-200/60 rounded-xl focus:ring-4 focus:ring-brand-primary/10 focus:border-brand-primary outline-none transition-all font-semibold cursor-pointer flex justify-between items-center ${
+            displayValue === '' && selectedOption?.value === '' ? 'text-slate-500' : 'text-slate-900'
+          } ${error ? 'border-red-500 bg-red-50' : ''} ${props.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          <span className="truncate text-sm">{displayText}</span>
+          <div className={`text-slate-400 transition-transform duration-200 flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6" /></svg>
+          </div>
+        </div>
+        {dropdown}
       </div>
+      {error && <span className="text-[10px] font-black text-red-500 ml-1">{error}</span>}
     </div>
-    {error && <span className="text-[10px] font-black text-red-500 ml-1">{error}</span>}
-  </div>
-);
+  );
+};
 
 export const TableContainer = ({ children, className = '' }) => (
   <div className={`overflow-x-auto bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] p-1 ${className}`}>
@@ -121,7 +257,7 @@ export const Pagination = ({
           onChange={(e) => onRowsPerPageChange(e.target.value)}
           className="bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-black text-slate-700 outline-none focus:border-brand-primary transition-all cursor-pointer shadow-sm"
         >
-          <option value="20">20 Entries</option>
+          <option value="15">15 Entries</option>
           <option value="50">50 Entries</option>
           <option value="100">100 Entries</option>
           <option value="9999">View All</option>

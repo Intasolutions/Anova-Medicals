@@ -153,7 +153,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ),
     'DEFAULT_PAGINATION_CLASS': 'api.pagination.CustomPagination',
-    'PAGE_SIZE': 10,
+    'PAGE_SIZE': 15,
 }
 
 # Simple JWT Configuration

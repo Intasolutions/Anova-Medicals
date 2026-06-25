@@ -6,7 +6,7 @@ import {
  } from '@tanstack/react-table';
  import { Loader2, Activity, Filter, X, Edit, Trash2 } from 'lucide-react';
  import apiClient from '../../../api/apiClient';
- import { Pagination } from '../../../components/ui/Base';
+ import { Pagination, Select } from '../../../components/ui/Base';
  import EditProductionLogModal from './EditProductionLogModal';
  import PrintLayout from '../../../components/print/PrintLayout';
 
@@ -30,7 +30,7 @@ const ProductionLogsTable = ({ refreshTrigger }) => {
   // Table state
   const [{ pageIndex, pageSize }, setPagination] = useState({
     pageIndex: 0,
-    pageSize: 20, // Default to 20
+    pageSize: 15, // Default to 15
   });
 
   const pagination = useMemo(
@@ -197,7 +197,7 @@ const ProductionLogsTable = ({ refreshTrigger }) => {
     <>
     <div className="no-print space-y-6">
       {/* FILTER CONTROL PANEL */}
-      <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] p-6 md:p-8 relative overflow-hidden">
+      <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] p-6 md:p-8 relative">
         <div className="absolute top-0 left-0 w-full h-1.5 bg-[#0F172A]" />
 
         <div className="flex items-center justify-between mb-6">
@@ -236,53 +236,38 @@ const ProductionLogsTable = ({ refreshTrigger }) => {
             />
           </div>
 
-          <div className="space-y-2">
-            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
-              Employee
-            </label>
-            <select
-              value={selectedEmployee}
-              onChange={(e) => setSelectedEmployee(e.target.value)}
-              className="w-full p-4 bg-[#F8FAFC] border border-slate-200/60 rounded-xl focus:ring-4 focus:ring-[#DC2626]/5 focus:border-[#DC2626] outline-none transition-all font-semibold text-xs text-slate-900 appearance-none cursor-pointer"
-            >
-              <option value="">All Personnel</option>
-              {employees.map(emp => (
-                <option key={emp.id} value={emp.employee_code}>{emp.name}</option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="Employee"
+            value={selectedEmployee}
+            onChange={(e) => setSelectedEmployee(e.target.value)}
+          >
+            <option value="">All Personnel</option>
+            {employees.map(emp => (
+              <option key={emp.id} value={emp.employee_code}>{emp.name}</option>
+            ))}
+          </Select>
 
-          <div className="space-y-2">
-            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
-              Product
-            </label>
-            <select
-              value={selectedProduct}
-              onChange={(e) => setSelectedProduct(e.target.value)}
-              className="w-full p-4 bg-[#F8FAFC] border border-slate-200/60 rounded-xl focus:ring-4 focus:ring-[#DC2626]/5 focus:border-[#DC2626] outline-none transition-all font-semibold text-xs text-slate-900 appearance-none cursor-pointer"
-            >
-              <option value="">All Products</option>
-              {products.map(p => (
-                <option key={p.id} value={p.product_code}>{p.name} ({p.product_code})</option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="Product"
+            value={selectedProduct}
+            onChange={(e) => setSelectedProduct(e.target.value)}
+          >
+            <option value="">All Products</option>
+            {products.map(p => (
+              <option key={p.id} value={p.product_code}>{p.name} ({p.product_code})</option>
+            ))}
+          </Select>
 
-          <div className="space-y-2">
-            <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">
-              Operation
-            </label>
-            <select
-              value={selectedOperation}
-              onChange={(e) => setSelectedOperation(e.target.value)}
-              className="w-full p-4 bg-[#F8FAFC] border border-slate-200/60 rounded-xl focus:ring-4 focus:ring-[#DC2626]/5 focus:border-[#DC2626] outline-none transition-all font-semibold text-xs text-slate-900 appearance-none cursor-pointer"
-            >
-              <option value="">All Operations</option>
-              {operations.map(op => (
-                <option key={op.id} value={op.operation_code}>{op.operation_name}</option>
-              ))}
-            </select>
-          </div>
+          <Select
+            label="Operation"
+            value={selectedOperation}
+            onChange={(e) => setSelectedOperation(e.target.value)}
+          >
+            <option value="">All Operations</option>
+            {operations.map(op => (
+              <option key={op.id} value={op.operation_code}>{op.operation_name}</option>
+            ))}
+          </Select>
 
           <div className="space-y-2">
             <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1">

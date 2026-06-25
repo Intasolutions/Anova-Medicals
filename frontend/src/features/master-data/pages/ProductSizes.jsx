@@ -1,16 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../../api/apiClient';
-import { Card, Button, Input } from '../../../components/ui/Base';
+import { Card, Button, Input, Pagination } from '../../../components/ui/Base';
 import { Alert } from '../../../components/ui/Alerts';
 import { ConfirmDialog } from '../../../components/ui/Dialogs';
-import { Plus, Trash2, Edit2, AlertCircle, CheckCircle, ArrowUpDown } from 'lucide-react';
+import { Plus, Trash2, Edit2, ArrowUpDown } from 'lucide-react';
 
 const ProductSizes = () => {
   const [sizes, setSizes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [alertInfo, setAlertInfo] = useState({ isOpen: false, type: 'info', message: '' });
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, id: null });
-  
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
+
   // Form State
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({ size_name: '', display_order: 0 });
@@ -78,6 +82,15 @@ const ProductSizes = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Pagination logic
+  const totalPages = Math.ceil(sizes.length / rowsPerPage);
+  const paginatedData = sizes.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+  const handleRowsChange = (val) => {
+    setRowsPerPage(Number(val));
+    setCurrentPage(1);
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex justify-between items-end">
@@ -96,16 +109,16 @@ const ProductSizes = () => {
               {editingId ? 'Edit Size' : 'Add New Size'}
             </h3>
 
-            <Input 
-              label="Size Name (e.g. XL)" 
+            <Input
+              label="Size Name (e.g. XL)"
               value={formData.size_name}
               onChange={(e) => setFormData({...formData, size_name: e.target.value.toUpperCase()})}
               placeholder="Enter alphanumeric size..."
               required
             />
 
-            <Input 
-              label="Display Order" 
+            <Input
+              label="Display Order"
               type="number"
               value={formData.display_order}
               onChange={(e) => setFormData({...formData, display_order: parseInt(e.target.value)})}
@@ -140,14 +153,14 @@ const ProductSizes = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {sizes.length === 0 ? (
+                {paginatedData.length === 0 ? (
                   <tr>
                     <td colSpan="3" className="p-12 text-center text-slate-400 font-medium italic">
                       No sizes configured yet. Use the form to add one.
                     </td>
                   </tr>
                 ) : (
-                  sizes.map((size) => (
+                  paginatedData.map((size) => (
                     <tr key={size.id} className="hover:bg-slate-50/50 transition-colors group">
                       <td className="p-6">
                         <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-xs font-black">
@@ -159,13 +172,13 @@ const ProductSizes = () => {
                       </td>
                       <td className="p-6 text-right">
                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button 
+                          <button
                             onClick={() => startEdit(size)}
                             className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
                           >
                             <Edit2 size={18} />
                           </button>
-                          <button 
+                          <button
                             type="button"
                             onClick={() => requestDelete(size.id)}
                             className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
@@ -179,18 +192,26 @@ const ProductSizes = () => {
                 )}
               </tbody>
             </table>
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              rowsPerPage={rowsPerPage}
+              onRowsPerPageChange={handleRowsChange}
+              totalItems={sizes.length}
+            />
           </Card>
         </div>
       </div>
 
-      <Alert 
-        isOpen={alertInfo.isOpen} 
-        type={alertInfo.type} 
-        message={alertInfo.message} 
-        onClose={() => setAlertInfo({ ...alertInfo, isOpen: false })} 
+      <Alert
+        isOpen={alertInfo.isOpen}
+        type={alertInfo.type}
+        message={alertInfo.message}
+        onClose={() => setAlertInfo({ ...alertInfo, isOpen: false })}
       />
 
-      <ConfirmDialog 
+      <ConfirmDialog
         isOpen={confirmDialog.isOpen}
         title="Delete Size"
         message="Are you sure you want to delete this size? This action cannot be undone."

@@ -1,15 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../../api/apiClient';
-import { Card, Button, Input } from '../../../components/ui/Base';
+import { Card, Button, Input, Pagination } from '../../../components/ui/Base';
 import { Alert } from '../../../components/ui/Alerts';
 import { ConfirmDialog } from '../../../components/ui/Dialogs';
-import { Plus, Trash2, Edit2, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Trash2, Edit2 } from 'lucide-react';
 
 const Operations = () => {
   const [operations, setOperations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [alertInfo, setAlertInfo] = useState({ isOpen: false, type: 'info', message: '' });
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, id: null });
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
 
   // Form State
   const [editingId, setEditingId] = useState(null);
@@ -44,13 +48,13 @@ const Operations = () => {
       setEditingId(null);
       fetchOperations();
     } catch (err) {
-      setAlertInfo({ 
-        isOpen: true, 
-        type: 'error', 
+      setAlertInfo({
+        isOpen: true,
+        type: 'error',
         message: err.response?.data?.operation_code?.[0] ||
-                 err.response?.data?.operation_name?.[0] ||
-                 err.response?.data?.error ||
-                 'Action failed.'
+          err.response?.data?.operation_name?.[0] ||
+          err.response?.data?.error ||
+          'Action failed.'
       });
     } finally {
       setLoading(false);
@@ -77,6 +81,15 @@ const Operations = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // Pagination logic
+  const totalPages = Math.ceil(operations.length / rowsPerPage);
+  const paginatedData = operations.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+  const handleRowsChange = (val) => {
+    setRowsPerPage(Number(val));
+    setCurrentPage(1);
+  };
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex justify-between items-end">
@@ -94,7 +107,6 @@ const Operations = () => {
               {editingId ? <Edit2 size={18} /> : <Plus size={18} />}
               {editingId ? 'Edit Operation' : 'Add New Operation'}
             </h3>
-
 
             <Input
               label="Operation Name (e.g. Cutting)"
@@ -132,14 +144,14 @@ const Operations = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {operations.length === 0 ? (
+                {paginatedData.length === 0 ? (
                   <tr>
                     <td colSpan="3" className="p-12 text-center text-slate-400 font-medium italic">
                       No operations configured yet. Use the form to add one.
                     </td>
                   </tr>
                 ) : (
-                  operations.map((op) => (
+                  paginatedData.map((op) => (
                     <tr key={op.id} className="hover:bg-slate-50/50 transition-colors group">
                       <td className="p-6">
                         <span className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-xs font-black">
@@ -172,18 +184,26 @@ const Operations = () => {
                 )}
               </tbody>
             </table>
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              rowsPerPage={rowsPerPage}
+              onRowsPerPageChange={handleRowsChange}
+              totalItems={operations.length}
+            />
           </Card>
         </div>
       </div>
 
-      <Alert 
-        isOpen={alertInfo.isOpen} 
-        type={alertInfo.type} 
-        message={alertInfo.message} 
-        onClose={() => setAlertInfo({ ...alertInfo, isOpen: false })} 
+      <Alert
+        isOpen={alertInfo.isOpen}
+        type={alertInfo.type}
+        message={alertInfo.message}
+        onClose={() => setAlertInfo({ ...alertInfo, isOpen: false })}
       />
 
-      <ConfirmDialog 
+      <ConfirmDialog
         isOpen={confirmDialog.isOpen}
         title="Delete Operation"
         message="Are you sure you want to delete this operation? This action cannot be undone."

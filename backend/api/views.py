@@ -161,6 +161,7 @@ class ProductViewSet(viewsets.ModelViewSet):
 class OperationViewSet(viewsets.ModelViewSet):
     queryset = Operation.objects.all().order_by('operation_code')
     serializer_class = OperationSerializer
+    pagination_class = None  # Return all operations without pagination
 
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = Employee.objects.all().order_by('name')

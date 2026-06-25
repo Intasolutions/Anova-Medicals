@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../../api/apiClient';
-import { Card, Button, Input } from '../../../components/ui/Base';
+import { Card, Button, Input, Pagination } from '../../../components/ui/Base';
 import { Plus, Archive, Edit2, AlertCircle, CheckCircle, UserCheck, ShieldOff } from 'lucide-react';
 
 const Designations = () => {
@@ -8,7 +8,11 @@ const Designations = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  
+
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
+
   // Form State
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({ name: '', is_active: true });
@@ -52,8 +56,8 @@ const Designations = () => {
 
   const toggleStatus = async (designation) => {
     try {
-      await apiClient.patch(`/designations/${designation.id}/`, { 
-        is_active: !designation.is_active 
+      await apiClient.patch(`/designations/${designation.id}/`, {
+        is_active: !designation.is_active
       });
       setSuccess(`Designation ${designation.is_active ? 'deactivated' : 'activated'}!`);
       fetchDesignations();
@@ -66,6 +70,15 @@ const Designations = () => {
     setEditingId(designation.id);
     setFormData({ name: designation.name, is_active: designation.is_active });
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Pagination logic
+  const totalPages = Math.ceil(designations.length / rowsPerPage);
+  const paginatedData = designations.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+  const handleRowsChange = (val) => {
+    setRowsPerPage(Number(val));
+    setCurrentPage(1);
   };
 
   return (
@@ -89,15 +102,15 @@ const Designations = () => {
                 <AlertCircle size={18} /> {error}
               </div>
             )}
-            
+
             {success && (
               <div className="p-4 bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-2xl flex items-center gap-3 text-sm font-bold">
                 <CheckCircle size={18} /> {success}
               </div>
             )}
 
-            <Input 
-              label="Designation Name" 
+            <Input
+              label="Designation Name"
               value={formData.name}
               onChange={(e) => setFormData({...formData, name: e.target.value})}
               placeholder="e.g. Supervisor, Tailor..."
@@ -132,14 +145,14 @@ const Designations = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {designations.length === 0 ? (
+                {paginatedData.length === 0 ? (
                   <tr>
                     <td colSpan="3" className="p-12 text-center text-slate-400 font-medium italic">
                       No designations defined yet.
                     </td>
                   </tr>
                 ) : (
-                  designations.map((role) => (
+                  paginatedData.map((role) => (
                     <tr key={role.id} className={`hover:bg-slate-50/50 transition-colors group ${!role.is_active ? 'opacity-50' : ''}`}>
                       <td className="p-6">
                         {role.is_active ? (
@@ -159,13 +172,13 @@ const Designations = () => {
                       </td>
                       <td className="p-6 text-right">
                         <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button 
+                          <button
                             onClick={() => startEdit(role)}
                             className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
                           >
                             <Edit2 size={18} />
                           </button>
-                          <button 
+                          <button
                             onClick={() => toggleStatus(role)}
                             className={`p-2 text-slate-400 transition-all rounded-xl ${role.is_active ? 'hover:text-amber-600 hover:bg-amber-50' : 'hover:text-emerald-600 hover:bg-emerald-50'}`}
                             title={role.is_active ? 'Archive' : 'Restore'}
@@ -179,6 +192,14 @@ const Designations = () => {
                 )}
               </tbody>
             </table>
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              rowsPerPage={rowsPerPage}
+              onRowsPerPageChange={handleRowsChange}
+              totalItems={designations.length}
+            />
           </Card>
         </div>
       </div>

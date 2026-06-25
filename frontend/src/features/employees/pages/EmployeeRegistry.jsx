@@ -20,7 +20,7 @@ const EmployeeRegistry = () => {
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(20);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -209,7 +209,7 @@ const EmployeeRegistry = () => {
 
       {/* REGISTRATION / EDIT FORM */}
       {showAddForm && (
-        <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] p-8 relative overflow-hidden animate-in slide-in-from-top-4">
+        <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] p-8 relative animate-in slide-in-from-top-4">
           <div className="absolute top-0 left-0 w-full h-1.5 bg-[#0F172A]" />
 
           <div className="mb-8 flex items-center gap-2">
@@ -293,15 +293,15 @@ const EmployeeRegistry = () => {
             />
           </div>
           <div className="w-full md:w-64">
-            <select 
+            <Select 
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value)}
-              className="w-full h-full bg-white border border-slate-200/60 rounded-2xl px-4 py-4 shadow-[0_4px_20px_rgb(0,0,0,0.03)] focus:ring-4 focus:ring-[#DC2626]/10 focus:border-[#DC2626] text-slate-700 font-bold outline-none"
+              className="w-full"
             >
               <option value="All">All Personnel</option>
               <option value="Active">Active Only</option>
               <option value="Resigned">Resigned Only</option>
-            </select>
+            </Select>
           </div>
         </div>
 

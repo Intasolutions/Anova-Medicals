@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import apiClient from '../../../api/apiClient';
-import { Card, Button, Input, TableContainer, Thead, Th, Tbody, Tr, Td, Pagination } from '../../../components/ui/Base';
+import { Card, Button, Input, TableContainer, Thead, Th, Tbody, Tr, Td, Pagination, Select } from '../../../components/ui/Base';
 import { Alert } from '../../../components/ui/Alerts';
 import PrintLayout from '../../../components/print/PrintLayout';
 import { ConfirmDialog } from '../../../components/ui/Dialogs';
@@ -23,7 +23,7 @@ const ProductCatalog = () => {
   
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(20);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -287,7 +287,7 @@ const ProductCatalog = () => {
 
       {/* REGISTRATION / EDIT FORM */}
       {showAddForm && (
-        <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] p-8 relative overflow-hidden animate-in slide-in-from-top-4">
+        <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] p-8 relative animate-in slide-in-from-top-4">
           <div className="absolute top-0 left-0 w-full h-1.5 bg-[#0F172A]" />
           
           <div className="mb-8 flex items-center gap-2">
@@ -354,8 +354,8 @@ const ProductCatalog = () => {
                     <div key={index} className="flex items-center gap-4 p-5 bg-[#F8FAFC] rounded-2xl border border-slate-200/60 shadow-sm transition-all hover:shadow-md group relative">
                       <div className="flex-1">
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">Manufacturing Process</label>
-                        <select 
-                          className="w-full bg-white text-sm font-black text-slate-700 outline-none border border-slate-200 rounded-xl px-4 py-2.5 focus:border-[#DC2626] transition-all cursor-pointer"
+                        <Select 
+                          className="w-full"
                           value={op.operation_id}
                           onChange={e => handleOperationChange(index, 'operation_id', e.target.value)}
                           required
@@ -369,7 +369,7 @@ const ProductCatalog = () => {
                               </option>
                             );
                           })}
-                        </select>
+                        </Select>
                       </div>
                       <div className="w-32">
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">Piece Rate (₹)</label>
@@ -418,8 +418,8 @@ const ProductCatalog = () => {
                     <div key={index} className="flex items-center gap-3 p-4 bg-[#F8FAFC] rounded-2xl border border-slate-200/60 shadow-sm">
                       <div className="flex-1">
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">Size</label>
-                        <select 
-                          className="w-full bg-white text-sm font-black text-slate-700 outline-none border border-slate-200 rounded-xl px-4 py-2 focus:border-[#DC2626] transition-all cursor-pointer"
+                        <Select 
+                          className="w-full"
                           value={sz.size_id}
                           onChange={e => handleSizeChange(index, 'size_id', e.target.value)}
                           required
@@ -433,7 +433,7 @@ const ProductCatalog = () => {
                               </option>
                             );
                           })}
-                        </select>
+                        </Select>
                       </div>
                       <div className="w-24">
                         <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1.5 ml-1">Qty</label>
@@ -474,7 +474,7 @@ const ProductCatalog = () => {
       )}
 
       {/* FILTER & SEARCH CONTROL PANEL */}
-      <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] p-6 md:p-8 relative overflow-hidden">
+      <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] p-6 md:p-8 relative">
         <div className="absolute top-0 left-0 w-full h-1.5 bg-[#0F172A]" />
 
         <div className="flex items-center justify-between mb-6">
@@ -509,15 +509,15 @@ const ProductCatalog = () => {
               />
             </div>
             <div className="w-full md:w-64">
-              <select 
+              <Select 
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
-                className="w-full h-full bg-white border border-slate-200/60 rounded-2xl px-4 py-4 shadow-[0_4px_20px_rgb(0,0,0,0.03)] focus:ring-4 focus:ring-[#DC2626]/10 focus:border-[#DC2626] text-slate-700 font-bold outline-none"
+                className="w-full"
               >
                 <option value="All">All Statuses</option>
                 <option value="Active">Active Models</option>
                 <option value="Inactive">Archived</option>
-              </select>
+              </Select>
             </div>
           </div>
 

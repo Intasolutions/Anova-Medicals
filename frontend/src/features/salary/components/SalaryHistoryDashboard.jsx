@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Calendar, Users, IndianRupee, Package, Search, Loader2, ArrowRight, X, FileText, Download, Activity, ShieldCheck, DatabaseZap } from 'lucide-react';
 import apiClient from '../../../api/apiClient';
-import { TableContainer, Thead, Th, Tbody, Tr, Td, Pagination, Button, Card } from '../../../components/ui/Base';
+import { TableContainer, Thead, Th, Tbody, Tr, Td, Pagination, Button, Card, Select } from '../../../components/ui/Base';
 import PrintLayout from '../../../components/print/PrintLayout';
 
 const SalaryHistoryDashboard = () => {
@@ -12,7 +12,7 @@ const SalaryHistoryDashboard = () => {
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const [rowsPerPage, setRowsPerPage] = useState(20);
+  const [rowsPerPage, setRowsPerPage] = useState(15);
 
   // Modal State
   const [selectedReport, setSelectedReport] = useState(null);
@@ -162,7 +162,7 @@ const SalaryHistoryDashboard = () => {
       </div>
 
       {/* CONTROL PANEL */}
-      <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] p-8 relative overflow-hidden">
+      <div className="bg-white rounded-[2rem] border border-slate-200/60 shadow-[0_12px_40px_rgb(0,0,0,0.06)] p-8 relative">
         <div className="absolute top-0 left-0 w-full h-1.5 bg-[#DC2626]" />
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end">
@@ -194,16 +194,15 @@ const SalaryHistoryDashboard = () => {
             <label className="text-[11px] font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
               <Users size={14} className="text-[#DC2626]" /> Employee Filter
             </label>
-            <select
+            <Select
               value={selectedEmployee}
               onChange={(e) => setSelectedEmployee(e.target.value)}
-              className="w-full p-4 bg-[#F8FAFC] border border-slate-200/60 rounded-xl focus:ring-4 focus:ring-[#DC2626]/5 focus:border-[#DC2626] outline-none transition-all font-black text-xs text-slate-900 appearance-none cursor-pointer"
             >
               <option value="">Consolidated Report</option>
               {employees.map(emp => (
                 <option key={emp.id} value={emp.id}>{emp.name}</option>
               ))}
-            </select>
+            </Select>
           </div>
 
           <Button
@@ -328,16 +327,16 @@ const SalaryHistoryDashboard = () => {
                 </p>
               </div>
               <div className="flex items-center gap-4">
-                <select
+                <Select
                   value={modelFilter}
                   onChange={(e) => setModelFilter(e.target.value)}
-                  className="bg-white border border-slate-200/60 text-xs font-semibold text-slate-700 py-2 px-3 rounded-xl focus:ring-2 focus:ring-[#DC2626]/20 focus:border-[#DC2626] outline-none transition-all shadow-sm max-w-[200px]"
+                  className="max-w-[200px]"
                 >
                   <option value="">All Models</option>
                   {uniqueModels.map(model => (
                     <option key={model} value={model}>{model}</option>
                   ))}
-                </select>
+                </Select>
                 <button
                   onClick={() => setSelectedReport(null)}
                   className="p-2.5 bg-white border border-slate-200 text-slate-400 hover:text-[#DC2626] hover:border-[#DC2626] hover:bg-red-50 rounded-xl transition-all"
