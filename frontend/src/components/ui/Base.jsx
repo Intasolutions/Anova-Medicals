@@ -98,20 +98,7 @@ export const Select = ({ label, error, children, className = '', ref, ...props }
     return () => form.removeEventListener('reset', handleReset);
   }, []);
 
-  // Reposition dropdown when it opens
-  React.useEffect(() => {
-    if (isOpen && triggerRef.current) {
-      setSearchTerm(''); // Reset search when opening
-      const rect = triggerRef.current.getBoundingClientRect();
-      setDropdownStyle({
-        position: 'fixed',
-        top: rect.bottom + 6,
-        left: rect.left,
-        width: rect.width,
-        zIndex: 9999,
-      });
-    }
-  }, [isOpen]);
+
 
   // Close on scroll/resize (but NOT when scrolling inside the dropdown itself)
   React.useEffect(() => {
@@ -217,7 +204,22 @@ export const Select = ({ label, error, children, className = '', ref, ...props }
         </select>
 
         <div
-          onClick={() => !props.disabled && setIsOpen(!isOpen)}
+          onClick={() => {
+            if (!props.disabled) {
+              if (!isOpen && triggerRef.current) {
+                const rect = triggerRef.current.getBoundingClientRect();
+                setDropdownStyle({
+                  position: 'fixed',
+                  top: rect.bottom + 6,
+                  left: rect.left,
+                  width: rect.width,
+                  zIndex: 9999,
+                });
+                setSearchTerm('');
+              }
+              setIsOpen(!isOpen);
+            }
+          }}
           className={`w-full p-4 bg-[#F8FAFC] border border-slate-200/60 rounded-xl focus:ring-4 focus:ring-brand-primary/10 focus:border-brand-primary outline-none transition-all font-semibold cursor-pointer flex justify-between items-center ${
             displayValue === '' && selectedOption?.value === '' ? 'text-slate-500' : 'text-slate-900'
           } ${error ? 'border-red-500 bg-red-50' : ''} ${props.disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
