@@ -412,7 +412,7 @@ const DailyOperationEntry = ({ onSuccess }) => {
 
                 <Select label="Select the Item" {...register("product_id")} error={errors.product_id?.message}>
                   <option value="">Select Product...</option>
-                  {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  {products.map(p => <option key={p.id} value={p.id}>{p.model_number || p.name}</option>)}
                 </Select>
               </div>
             </Card>
