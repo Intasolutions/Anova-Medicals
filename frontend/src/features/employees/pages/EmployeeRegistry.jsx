@@ -18,9 +18,10 @@ const EmployeeRegistry = () => {
   const [alertInfo, setAlertInfo] = useState({ isOpen: false, type: 'info', message: '' });
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, id: null });
 
-  // Pagination State
+  // Pagination State & Total Count
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(15);
+  const [totalItems, setTotalItems] = useState(0);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -38,8 +39,18 @@ const EmployeeRegistry = () => {
 
   const fetchEmployees = async () => {
     try {
-      const res = await apiClient.get('/employees/');
+      const params = {
+        page: currentPage,
+        page_size: rowsPerPage,
+        search: searchTerm || undefined
+      };
+      
+      if (filterStatus === 'Active') params.is_working = true;
+      if (filterStatus === 'Resigned') params.is_working = false;
+
+      const res = await apiClient.get('/employees/', { params });
       setEmployees(res.data.results || res.data);
+      setTotalItems(res.data.count || (Array.isArray(res.data) ? res.data.length : 0));
     } catch (err) {
       console.error("Error fetching employees", err);
     }
@@ -55,9 +66,13 @@ const EmployeeRegistry = () => {
   };
 
   useEffect(() => {
-    fetchEmployees();
     fetchDesignations();
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => fetchEmployees(), 300);
+    return () => clearTimeout(timer);
+  }, [currentPage, rowsPerPage, searchTerm, filterStatus]);
 
   const handleFileChange = (e, field) => {
     setFormData({ ...formData, [field]: e.target.files[0] });
@@ -157,20 +172,10 @@ const EmployeeRegistry = () => {
     }
   };
 
-  const filteredEmployees = employees.filter(emp => {
-    const matchesSearch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          emp.employee_code.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    if (filterStatus === 'Active') return matchesSearch && emp.is_working;
-    if (filterStatus === 'Resigned') return matchesSearch && !emp.is_working;
-    return matchesSearch;
-  });
-
-  const totalPages = Math.ceil(filteredEmployees.length / rowsPerPage);
-  const paginatedEmployees = filteredEmployees.slice(
-    (currentPage - 1) * rowsPerPage,
-    currentPage * rowsPerPage
-  );
+  // Already paginated by server
+  const filteredEmployees = employees;
+  const totalPages = Math.ceil(totalItems / rowsPerPage);
+  const paginatedEmployees = employees;
 
   useEffect(() => {
     setCurrentPage(1);
@@ -421,7 +426,7 @@ const EmployeeRegistry = () => {
             onPageChange={setCurrentPage}
             rowsPerPage={rowsPerPage}
             onRowsPerPageChange={setRowsPerPage}
-            totalItems={filteredEmployees.length}
+            totalItems={totalItems}
           />
         </div>
       </div>

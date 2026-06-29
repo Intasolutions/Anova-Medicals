@@ -11,9 +11,11 @@ const Operations = () => {
   const [alertInfo, setAlertInfo] = useState({ isOpen: false, type: 'info', message: '' });
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, id: null });
 
-  // Pagination
+  // Pagination & Search
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(15);
+  const [totalItems, setTotalItems] = useState(0);
+  const [searchTerm, setSearchTerm] = useState('');
 
   // Form State
   const [editingId, setEditingId] = useState(null);
@@ -21,16 +23,26 @@ const Operations = () => {
 
   const fetchOperations = async () => {
     try {
-      const res = await apiClient.get('/operations/');
+      const res = await apiClient.get('/operations/', {
+        params: {
+          page: currentPage,
+          page_size: rowsPerPage,
+          search: searchTerm || undefined
+        }
+      });
       setOperations(res.data.results || res.data);
+      setTotalItems(res.data.count || (Array.isArray(res.data) ? res.data.length : 0));
     } catch (err) {
       console.error("Error fetching operations", err);
     }
   };
 
   useEffect(() => {
-    fetchOperations();
-  }, []);
+    const timer = setTimeout(() => {
+      fetchOperations();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [currentPage, rowsPerPage, searchTerm]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -82,8 +94,8 @@ const Operations = () => {
   };
 
   // Pagination logic
-  const totalPages = Math.ceil(operations.length / rowsPerPage);
-  const paginatedData = operations.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+  const totalPages = Math.ceil(totalItems / rowsPerPage);
+  const paginatedData = operations; // Data is already paginated by the server
 
   const handleRowsChange = (val) => {
     setRowsPerPage(Number(val));
@@ -133,7 +145,16 @@ const Operations = () => {
         </Card>
 
         {/* Operations List */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-4">
+          <div className="flex justify-end">
+             <input
+                type="text"
+                placeholder="Search operations..."
+                value={searchTerm}
+                onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                className="w-full sm:w-64 p-3 bg-white border border-slate-200/60 rounded-xl focus:ring-4 focus:ring-brand-primary/10 focus:border-brand-primary outline-none transition-all font-semibold text-sm text-slate-900 placeholder:text-slate-400 shadow-sm"
+              />
+          </div>
           <Card className="overflow-hidden">
             <table className="w-full text-left border-collapse">
               <thead>
@@ -190,7 +211,7 @@ const Operations = () => {
               onPageChange={setCurrentPage}
               rowsPerPage={rowsPerPage}
               onRowsPerPageChange={handleRowsChange}
-              totalItems={operations.length}
+              totalItems={totalItems}
             />
           </Card>
         </div>

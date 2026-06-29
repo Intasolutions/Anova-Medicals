@@ -46,6 +46,7 @@ export const Input = ({ label, error, className = '', ...props }) => (
 export const Select = ({ label, error, children, className = '', ref, ...props }) => {
   const [isOpen, setIsOpen] = React.useState(false);
   const [displayValue, setDisplayValue] = React.useState(props.value || props.defaultValue || '');
+  const [searchTerm, setSearchTerm] = React.useState('');
   const [dropdownStyle, setDropdownStyle] = React.useState({});
   const containerRef = React.useRef(null);
   const triggerRef = React.useRef(null);
@@ -100,6 +101,7 @@ export const Select = ({ label, error, children, className = '', ref, ...props }
   // Reposition dropdown when it opens
   React.useEffect(() => {
     if (isOpen && triggerRef.current) {
+      setSearchTerm(''); // Reset search when opening
       const rect = triggerRef.current.getBoundingClientRect();
       setDropdownStyle({
         position: 'fixed',
@@ -149,23 +151,55 @@ export const Select = ({ label, error, children, className = '', ref, ...props }
   const selectedOption = options.find(opt => String(opt.value) === String(displayValue));
   const displayText = selectedOption ? selectedOption.label : (options[0]?.label || 'Select...');
 
+  const filteredOptions = options.filter(opt => 
+    String(opt.label).toLowerCase().includes(searchTerm.toLowerCase())
+  );
+  
+  // Big data optimization: only render top 100 matches to prevent DOM freezing
+  const visibleOptions = filteredOptions.slice(0, 100);
+
   const dropdown = isOpen ? ReactDOM.createPortal(
     <div
       id="select-portal-root"
       style={dropdownStyle}
-      className="bg-white border border-slate-200/80 rounded-xl shadow-[0_12px_40px_rgb(0,0,0,0.18)] max-h-60 overflow-y-auto py-2"
+      className="bg-white border border-slate-200/80 rounded-xl shadow-[0_12px_40px_rgb(0,0,0,0.18)] max-h-72 overflow-hidden flex flex-col"
     >
-      {options.map((opt, idx) => (
-        <div
-          key={idx}
-          onMouseDown={(e) => { e.preventDefault(); !opt.disabled && handleSelect(opt.value); }}
-          className={`px-4 py-3 text-sm font-semibold transition-colors ${
-            opt.disabled ? 'text-slate-300 cursor-not-allowed' : 'text-slate-700 hover:bg-slate-50 cursor-pointer'
-          } ${String(opt.value) === String(displayValue) ? 'bg-brand-primary/5 text-brand-primary' : ''}`}
-        >
-          {opt.label}
+      <div className="p-2 border-b border-slate-100 bg-slate-50/50 sticky top-0 z-10">
+        <div className="relative">
+          <svg xmlns="http://www.w3.org/2000/svg" className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <input 
+            type="text" 
+            autoFocus
+            placeholder="Search options..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-xs font-semibold focus:outline-none focus:border-brand-primary focus:ring-2 focus:ring-brand-primary/20 transition-all"
+            onClick={(e) => e.stopPropagation()} // Prevent closing
+          />
         </div>
-      ))}
+      </div>
+      <div className="overflow-y-auto py-1">
+        {visibleOptions.length === 0 ? (
+          <div className="px-4 py-3 text-xs text-slate-400 text-center font-medium italic">No results found</div>
+        ) : (
+          visibleOptions.map((opt, idx) => (
+            <div
+              key={idx}
+              onMouseDown={(e) => { e.preventDefault(); !opt.disabled && handleSelect(opt.value); }}
+              className={`px-4 py-3 text-sm font-semibold transition-colors ${
+                opt.disabled ? 'text-slate-300 cursor-not-allowed' : 'text-slate-700 hover:bg-slate-50 cursor-pointer'
+              } ${String(opt.value) === String(displayValue) ? 'bg-brand-primary/5 text-brand-primary' : ''}`}
+            >
+              {opt.label}
+            </div>
+          ))
+        )}
+        {filteredOptions.length > 100 && (
+          <div className="px-4 py-2 text-[10px] text-center text-slate-400 font-bold uppercase tracking-widest bg-slate-50 border-t border-slate-100">
+            {filteredOptions.length - 100} more results. Keep typing to filter.
+          </div>
+        )}
+      </div>
     </div>,
     document.body
   ) : null;

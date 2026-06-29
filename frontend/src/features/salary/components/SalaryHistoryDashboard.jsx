@@ -10,9 +10,10 @@ const SalaryHistoryDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [fetchingEmployees, setFetchingEmployees] = useState(false);
 
-  // Pagination State
+  // Pagination State & Total Count
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(15);
+  const [totalItems, setTotalItems] = useState(0);
 
   // Modal State
   const [selectedReport, setSelectedReport] = useState(null);
@@ -38,24 +39,40 @@ const SalaryHistoryDashboard = () => {
       .finally(() => setFetchingEmployees(false));
   }, []);
 
-  const handleCalculate = async () => {
+  const fetchLedgerData = async () => {
+    if (!startDate || !endDate) return;
     setLoading(true);
     try {
       const response = await apiClient.get('/salary-history/', {
         params: {
           start_date: startDate,
           end_date: endDate,
-          employee_id: selectedEmployee || undefined
+          employee_id: selectedEmployee || undefined,
+          page: currentPage,
+          page_size: rowsPerPage,
+          search: tableSearchTerm || undefined
         }
       });
-      setResults(response.data);
-      setCurrentPage(1); // Reset to page 1 on new calculation
+      setResults(response.data.results || response.data);
+      setTotalItems(response.data.count || (Array.isArray(response.data) ? response.data.length : 0));
     } catch (err) {
       console.error("Error calculating payout", err);
     } finally {
       setLoading(false);
     }
   };
+
+  const handleCalculate = async () => {
+    setCurrentPage(1);
+    fetchLedgerData();
+  };
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchLedgerData();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [currentPage, rowsPerPage, tableSearchTerm]);
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('en-IN', {
@@ -102,17 +119,10 @@ const SalaryHistoryDashboard = () => {
     setSelectedEmployee('');
   };
 
-  // Pagination Logic
-  const filteredResults = results.filter(r => 
-    r.employee__name.toLowerCase().includes(tableSearchTerm.toLowerCase()) || 
-    r.employee__employee_code.toLowerCase().includes(tableSearchTerm.toLowerCase())
-  );
-  
-  const totalPages = Math.ceil(filteredResults.length / rowsPerPage);
-  const paginatedResults = filteredResults.slice(
-    (currentPage - 1) * rowsPerPage,
-    currentPage * rowsPerPage
-  );
+  // Already paginated by server
+  const filteredResults = results;
+  const totalPages = Math.ceil(totalItems / rowsPerPage);
+  const paginatedResults = results;
 
   // Reset to page 1 when rowsPerPage or search changes
   useEffect(() => {
@@ -295,7 +305,7 @@ const SalaryHistoryDashboard = () => {
               onPageChange={setCurrentPage}
               rowsPerPage={rowsPerPage}
               onRowsPerPageChange={setRowsPerPage}
-              totalItems={filteredResults.length}
+              totalItems={totalItems}
             />
           </div>
         </div>

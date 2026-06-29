@@ -1,9 +1,10 @@
-from django.db.models import Sum, Count
+from django.db.models import Sum, Count, Q
 from django.db import transaction
 from django.utils import timezone
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import viewsets, views, status
 from rest_framework.response import Response
+from rest_framework.filters import SearchFilter
 
 from rest_framework.decorators import action
 from .models import Product, Operation, ProductOperation, Employee, InventoryBalance, ProductionLog, ProductSize, Designation, StockOut, MasterStock
@@ -12,6 +13,7 @@ from .serializers import (
     InventoryBalanceSerializer, ProductionLogSerializer,
     ProductSizeSerializer, DesignationSerializer, StockOutSerializer, MasterStockSerializer
 )
+from api.pagination import CustomPagination
 
 class MasterStockViewSet(viewsets.ModelViewSet):
     queryset = MasterStock.objects.all().order_by('product__name', 'size__size_name')
@@ -37,6 +39,8 @@ from .services.inventory_service import create_product_with_operations_and_stock
 class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all().order_by('name')
     serializer_class = ProductSerializer
+    filter_backends = [SearchFilter]
+    search_fields = ['name', 'product_code', 'model_number']
 
     def get_queryset(self):
         from django.db.models import Sum, DecimalField
@@ -161,11 +165,21 @@ class ProductViewSet(viewsets.ModelViewSet):
 class OperationViewSet(viewsets.ModelViewSet):
     queryset = Operation.objects.all().order_by('operation_code')
     serializer_class = OperationSerializer
-    pagination_class = None  # Return all operations without pagination
+    filter_backends = [SearchFilter]
+    search_fields = ['operation_name', 'operation_code']
 
 class EmployeeViewSet(viewsets.ModelViewSet):
     queryset = Employee.objects.all().order_by('name')
     serializer_class = EmployeeSerializer
+    filter_backends = [SearchFilter]
+    search_fields = ['name', 'employee_code', 'contact_number']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        is_working = self.request.query_params.get('is_working')
+        if is_working is not None:
+            qs = qs.filter(is_working=is_working.lower() == 'true')
+        return qs
 
 class InventoryBalanceViewSet(viewsets.ModelViewSet):
     queryset = InventoryBalance.objects.all().order_by('product__name')
@@ -297,6 +311,8 @@ class SalaryHistoryView(views.APIView):
         end_date = request.query_params.get('end_date')
         employee_id = request.query_params.get('employee_id')
 
+        search = request.query_params.get('search')
+
         queryset = ProductionLog.objects.all()
         if start_date:
             queryset = queryset.filter(work_date__gte=start_date)
@@ -304,6 +320,8 @@ class SalaryHistoryView(views.APIView):
             queryset = queryset.filter(work_date__lte=end_date)
         if employee_id:
             queryset = queryset.filter(employee_id=employee_id)
+        if search:
+            queryset = queryset.filter(Q(employee__name__icontains=search) | Q(employee__employee_code__icontains=search))
 
         report = queryset.values(
             'employee_id',
@@ -315,7 +333,11 @@ class SalaryHistoryView(views.APIView):
             present_days=Count('work_date', distinct=True)
         ).order_by('employee__name')
 
-        return Response(report, status=status.HTTP_200_OK)
+        paginator = CustomPagination()
+        paginator.page_size = int(request.query_params.get('page_size', paginator.page_size))
+        paginated_report = paginator.paginate_queryset(report, request)
+
+        return paginator.get_paginated_response(paginated_report)
 
 from .services.inventory_out_service import record_stock_out
 

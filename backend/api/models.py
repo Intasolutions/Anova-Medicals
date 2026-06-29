@@ -61,7 +61,7 @@ class Product(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     product_code = models.CharField(max_length=100, unique=True)
     model_number = models.CharField(max_length=100, unique=True, null=True, blank=True)
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, db_index=True)
     price_per_unit = models.DecimalField(max_digits=10, decimal_places=2)
     photo = models.ImageField(upload_to='products/photos/', null=True, blank=True)
     is_active = models.BooleanField(default=True)
@@ -88,7 +88,7 @@ class Product(models.Model):
 class Operation(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     operation_code = models.CharField(max_length=100, unique=True, blank=True)
-    operation_name = models.CharField(max_length=255)
+    operation_name = models.CharField(max_length=255, db_index=True)
 
     def save(self, *args, **kwargs):
         if not self.operation_code:
@@ -135,7 +135,7 @@ class ProductOperation(models.Model):
 class Employee(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     employee_code = models.CharField(max_length=100, unique=True)
-    name = models.CharField(max_length=255)
+    name = models.CharField(max_length=255, db_index=True)
     designation = models.ForeignKey(
         Designation, 
         on_delete=models.SET_NULL, 
