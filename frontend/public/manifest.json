@@ -1,18 +1,6 @@
 {
-    "short_name": "Revive",
-    "name": "Revive Hospital",
-    "icons": [
-        {
-            "src": "/favicon.png",
-            "sizes": "512x512",
-            "type": "image/png"
-        },
-        {
-            "src": "/favicon.png",
-            "sizes": "192x192",
-            "type": "image/png"
-        }
-    ],
+    "short_name": "Demo",
+    "name": "Demo Hospital",
     "start_url": ".",
     "display": "standalone",
     "theme_color": "#800020",

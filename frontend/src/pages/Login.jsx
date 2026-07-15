@@ -60,8 +60,7 @@ const Login = () => {
                         transition={{ delay: 0.2 }}
                         className="flex items-center gap-3 mb-12"
                     >
-                        <img src="/logo/logo.png" alt="Revive Hospital" className="w-14 h-14 object-contain" />
-                        <span className="text-2xl font-bold tracking-tight text-white">Revive<span className="text-blue-500">CMS</span></span>
+                        <span className="text-2xl font-bold tracking-tight text-white">Demo<span className="text-blue-500">CMS</span></span>
                     </motion.div>
 
                     <motion.div
@@ -114,8 +113,7 @@ const Login = () => {
                 >
                     <div className="mb-10 text-center lg:text-left">
                         <div className="inline-flex lg:hidden items-center gap-2 mb-6">
-                            <img src="/logo/logo.png" alt="Revive Hospital" className="w-8 h-8 object-contain" />
-                            <span className="text-xl font-bold text-slate-900">Revive<span className="text-blue-600">CMS</span></span>
+                            <span className="text-xl font-bold text-slate-900">Demo<span className="text-blue-600">CMS</span></span>
                         </div>
                         <h2 className="text-3xl font-bold text-slate-900 mb-2">Welcome Back</h2>
                         <p className="text-slate-500">Sign in to access your dashboard.</p>
@@ -223,7 +221,7 @@ const Login = () => {
 
                 {/* Footer Copyright - Mobile Only or Bottom */}
                 <div className="absolute bottom-6 left-0 w-full text-center text-xs text-slate-400">
-                    &copy; {new Date().getFullYear()} Revive Medical Systems. v2.4.0
+                    &copy; {new Date().getFullYear()} Demo Medical Systems. v2.4.0
                 </div>
             </div>
         </div>
