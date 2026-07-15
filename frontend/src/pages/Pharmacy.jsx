@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     Pill, Plus, Search, ShoppingCart, AlertTriangle,
     Activity, User, Trash2, Printer, X, CheckCircle2,
-    Clock, UploadCloud, FileText, Send, Eye, ChevronRight, PackagePlus, FileSpreadsheet, Pencil, Check, Save, Edit3
+    Clock, UploadCloud, FileText, Send, Eye, ChevronRight, PackagePlus, FileSpreadsheet, Pencil, Check, Save, Edit3, Lock
 } from 'lucide-react';
 import { Button, Input } from '../components/UI';
 import Pagination from '../components/Pagination';
@@ -11,6 +11,7 @@ import api from '../api/axios';
 import { useSearch } from '../context/SearchContext';
 import { useToast } from '../context/ToastContext';
 import { socket } from '../socket';
+import { useAuth } from '../context/AuthContext';
 
 // --- Premium Tooltip ---
 const ActionTooltip = ({ text, children }) => (
@@ -81,11 +82,13 @@ const ReceiptTemplate = ({ sale }) => (
 
 const Pharmacy = () => {
     const { showToast } = useToast();
+    const { user } = useAuth();
+    // Pharmacists cannot see purchase/cost rates — only admins can
+    const isPharmacist = user?.role === 'PHARMACY';
 
     // --- STATE ---
     const [activeTab, setActiveTab] = useState('inventory');
     const [loading, setLoading] = useState(false);
-
     // Inventory
     const [stockData, setStockData] = useState({ results: [], count: 0 });
     const [page, setPage] = useState(1);
@@ -95,27 +98,37 @@ const Pharmacy = () => {
     const [filterSupplier, setFilterSupplier] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
     const [inventorySearch, setInventorySearch] = useState(''); // New State
-    const [editingStockId, setEditingStockId] = useState(null);
-    const [editQty, setEditQty] = useState('');
+    const [editingStockItem, setEditingStockItem] = useState(null);
 
-    const startEditing = (item) => {
-        setEditingStockId(item.med_id || item.id);
-        setEditQty(item.qty_available);
-    };
-
-    const cancelEdit = () => {
-        setEditingStockId(null);
-        setEditQty('');
-    };
-
-    const saveStockUpdate = async (id) => {
+    const handleSaveStockDetails = async (e) => {
+        e.preventDefault();
         try {
-            await api.patch(`pharmacy/stock/${id}/`, { qty_available: parseInt(editQty) });
-            showToast('success', 'Stock Updated');
-            setEditingStockId(null);
+            const id = editingStockItem.med_id || editingStockItem.id;
+            const payload = {
+                name: editingStockItem.name,
+                manufacturer: editingStockItem.manufacturer,
+                category: editingStockItem.category,
+                medicine_type: editingStockItem.medicine_type,
+                batch_no: editingStockItem.batch_no,
+                tablets_per_strip: parseInt(editingStockItem.tablets_per_strip) || 1,
+                expiry_date: editingStockItem.expiry_date,
+                qty_available: parseInt(editingStockItem.qty_available) || 0,
+                selling_price: parseFloat(editingStockItem.selling_price) || 0,
+                mrp: parseFloat(editingStockItem.mrp) || 0,
+                purchase_rate: parseFloat(editingStockItem.purchase_rate) || 0,
+                ptr: parseFloat(editingStockItem.ptr) || 0,
+                gst_percent: parseFloat(editingStockItem.gst_percent) || 0,
+                hsn: editingStockItem.hsn || '',
+                barcode: editingStockItem.barcode || '',
+                reorder_level: parseInt(editingStockItem.reorder_level) || 0
+            };
+            await api.patch(`pharmacy/stock/${id}/`, payload);
+            showToast('success', 'Stock Details Updated');
+            setEditingStockItem(null);
             fetchStock();
         } catch (err) {
-            showToast('error', 'Failed to update stock');
+            console.error(err);
+            showToast('error', 'Failed to update stock details');
         }
     };
 
@@ -713,58 +726,34 @@ const Pharmacy = () => {
                     <>
                         <div className="flex-1 overflow-auto">
                             <table className="w-full text-left border-collapse">
-                                <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm"><tr>{['Drug Name', 'Category', 'Type', 'Batch', 'Expiry', 'Total (Tab)', 'P.Rate', 'Sales Price/Tab', 'MRP', 'Action'].map(h => <th key={h} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{h}</th>)}</tr></thead>
+                                <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm"><tr>{['Drug Name', 'Category', 'Type', 'Batch', 'Expiry', 'Total (Tab)', ...(isPharmacist ? [] : ['P.Rate']), 'Sales Price/Tab', 'MRP', 'Action'].map(h => <th key={h} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{h}</th>)}</tr></thead>
                                 <tbody className="divide-y divide-slate-50">
                                     {(stockData?.results || []).map(s => (
                                         <tr key={s.med_id} className="hover:bg-slate-50 transition-colors group">
                                             <td className="px-6 py-3"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold"><Pill size={14} /></div><div><p className="font-bold text-slate-900 text-sm">{s.name}</p><p className="text-[10px] font-bold text-slate-400 uppercase">{s.manufacturer || 'Generic'}</p></div></div></td>
-                                            <td className="px-6 py-3" onClick={(e) => e.stopPropagation()}>
-                                                <div className="relative group/edit w-28">
-                                                    <select
-                                                        className={`w-full appearance-none font-bold text-[10px] uppercase rounded-lg px-2 py-1 pr-4 outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer border border-transparent hover:border-blue-200 ${s.category === 'CASUALTY' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'}`}
-                                                        value={s.category || 'PHARMACY'}
-                                                        onChange={(e) => updateStockCategory(s, e.target.value)}
-                                                    >
-                                                        <option value="PHARMACY">Pharmacy</option>
-                                                        <option value="CASUALTY">Casualty</option>
-                                                    </select>
-                                                    <div className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400"><Edit3 size={10} /></div>
-                                                </div>
+                                            <td className="px-6 py-3">
+                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${s.category === 'CASUALTY' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'}`}>
+                                                    {s.category || 'PHARMACY'}
+                                                </span>
                                             </td>
-                                            <td className="px-6 py-3" onClick={(e) => e.stopPropagation()}>
-                                                <div className="relative group/edit w-24">
-                                                    <select
-                                                        className="w-full appearance-none bg-blue-50 text-blue-700 font-bold text-[10px] uppercase rounded-lg px-2 py-1 pr-4 outline-none focus:ring-1 focus:ring-blue-400 cursor-pointer border border-transparent hover:border-blue-200"
-                                                        value={s.medicine_type || 'TABLET'}
-                                                        onChange={(e) => updateStockType(s, e.target.value)}
-                                                    >
-                                                        {medicineTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                                                    </select>
-                                                    <div className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none text-blue-400"><Edit3 size={10} /></div>
-                                                </div>
+                                            <td className="px-6 py-3">
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-slate-100 text-slate-600">
+                                                    {s.medicine_type || 'TABLET'}
+                                                </span>
                                             </td>
                                             <td className="px-6 py-3 font-mono text-xs font-bold text-slate-600">{s.batch_no}</td>
                                             <td className="px-6 py-3 font-mono text-xs font-bold text-slate-600">{new Date(s.expiry_date).toLocaleDateString(undefined, { month: 'short', year: '2-digit' })}</td>
                                             <td className="px-6 py-3">
-                                                {(editingStockId === (s.med_id || s.id)) ? (
-                                                    <Input
-                                                        type="number"
-                                                        value={editQty}
-                                                        onChange={(e) => setEditQty(e.target.value)}
-                                                        className="w-24 h-8 text-xs font-bold"
-                                                        autoFocus
-                                                    />
-                                                ) : (
-                                                    <div className="flex flex-col">
-                                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold ${s.qty_available < 10 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                                                            {s.qty_available} TAB
-                                                        </span>
-                                                        <span className="text-[10px] font-bold text-slate-400 mt-1 uppercase">
-                                                            ({Math.floor(s.qty_available / (s.tablets_per_strip || 1))} STR, {s.qty_available % (s.tablets_per_strip || 1)} TAB)
-                                                        </span>
-                                                    </div>
-                                                )}
+                                                <div className="flex flex-col">
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold ${s.qty_available < 10 ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                                                        {s.qty_available} TAB
+                                                    </span>
+                                                    <span className="text-[10px] font-bold text-slate-400 mt-1 uppercase">
+                                                        ({Math.floor(s.qty_available / (s.tablets_per_strip || 1))} STR, {s.qty_available % (s.tablets_per_strip || 1)} TAB)
+                                                    </span>
+                                                </div>
                                             </td>
+                                            {!isPharmacist && (
                                             <td className="px-6 py-3 font-bold text-sm text-slate-500">
                                                 <div className="flex flex-col">
                                                     {(() => {
@@ -780,6 +769,7 @@ const Pharmacy = () => {
                                                     })()}
                                                 </div>
                                             </td>
+                                            )}
                                             <td className="px-6 py-3 font-black text-sm text-blue-600">
                                                 ₹{(s.selling_price / (s.tablets_per_strip || 1)).toFixed(2)}
                                                 <span className="block text-[8px] text-slate-400 uppercase">Rate/Tab</span>
@@ -791,25 +781,14 @@ const Pharmacy = () => {
                                                 </div>
                                             </td>
                                             <td className="px-6 py-3">
-                                                {(editingStockId === (s.med_id || s.id)) ? (
-                                                    <div className="flex items-center gap-1">
-                                                        <ActionTooltip text="Save">
-                                                            <button onClick={() => saveStockUpdate(s.med_id || s.id)} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"><Check size={16} /></button>
-                                                        </ActionTooltip>
-                                                        <ActionTooltip text="Cancel">
-                                                            <button onClick={cancelEdit} className="p-1.5 text-rose-500 hover:bg-rose-50 rounded-lg transition-all"><X size={16} /></button>
-                                                        </ActionTooltip>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex items-center gap-1">
-                                                        <ActionTooltip text="Edit Qty">
-                                                            <button onClick={() => startEditing(s)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"><Pencil size={16} /></button>
-                                                        </ActionTooltip>
-                                                        <ActionTooltip text="View Details">
-                                                            <button onClick={() => setSelectedStockItem(s)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"><Eye size={16} /></button>
-                                                        </ActionTooltip>
-                                                    </div>
-                                                )}
+                                                <div className="flex items-center gap-1">
+                                                    <ActionTooltip text="Edit Stock Details">
+                                                        <button onClick={() => setEditingStockItem({ ...s })} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"><Pencil size={16} /></button>
+                                                    </ActionTooltip>
+                                                    <ActionTooltip text="View Details">
+                                                        <button onClick={() => setSelectedStockItem(s)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"><Eye size={16} /></button>
+                                                    </ActionTooltip>
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -1127,9 +1106,16 @@ const Pharmacy = () => {
                 {selectedStockItem && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-6 no-print">
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setSelectedStockItem(null)} />
-                        <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} className="bg-white w-full max-w-md rounded-[2rem] shadow-2xl relative z-10 p-8">
-                            <div className="flex justify-between items-start mb-6"><div><h2 className="text-xl font-black text-slate-900">{selectedStockItem.name}</h2><p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">{selectedStockItem.manufacturer}</p></div><button onClick={() => setSelectedStockItem(null)} className="p-2 bg-slate-50 rounded-full hover:bg-slate-100"><X size={18} /></button></div>
-                            <div className="space-y-4">
+                        <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl relative z-10 p-8 flex flex-col max-h-[85vh] overflow-hidden">
+                            <div className="flex justify-between items-start mb-6 shrink-0">
+                                <div>
+                                    <h2 className="text-xl font-black text-slate-900">{selectedStockItem.name}</h2>
+                                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">{selectedStockItem.manufacturer || 'Generic'}</p>
+                                </div>
+                                <button onClick={() => setSelectedStockItem(null)} className="p-2 bg-slate-50 rounded-full hover:bg-slate-100"><X size={18} /></button>
+                            </div>
+                            <div className="space-y-4 overflow-y-auto pr-1 flex-1">
+                                {/* Stock Available */}
                                 <div className="p-4 bg-slate-50 rounded-xl border border-slate-100 flex justify-between items-center">
                                     <span className="text-xs font-bold text-slate-500 uppercase">Stock Available</span>
                                     <div className="text-right">
@@ -1137,17 +1123,310 @@ const Pharmacy = () => {
                                         <p className="text-[10px] font-bold text-slate-400 uppercase">{Math.floor(selectedStockItem.qty_available / (selectedStockItem.tablets_per_strip || 1))} Strips + {selectedStockItem.qty_available % (selectedStockItem.tablets_per_strip || 1)} Tab</p>
                                     </div>
                                 </div>
+                                {/* Batch & Tablets */}
                                 <div className="grid grid-cols-2 gap-4">
-                                    <div className="p-4 bg-white border border-slate-100 rounded-xl"><p className="text-[10px] font-bold text-slate-400 uppercase">Batch No</p><p className="font-mono font-bold text-slate-900">{selectedStockItem.batch_no}</p></div>
-                                    <div className="p-4 bg-white border border-slate-100 rounded-xl"><p className="text-[10px] font-bold text-slate-400 uppercase">Tablets/Strip</p><p className="font-mono font-bold text-slate-900">{selectedStockItem.tablets_per_strip || 1}</p></div>
+                                    <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Batch No</p>
+                                        <p className="font-mono font-bold text-slate-900">{selectedStockItem.batch_no}</p>
+                                    </div>
+                                    <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Tablets/Strip</p>
+                                        <p className="font-mono font-bold text-slate-900">{selectedStockItem.tablets_per_strip || 1}</p>
+                                    </div>
                                 </div>
-                                <div className="p-4 bg-white border border-slate-100 rounded-xl"><p className="text-[10px] font-bold text-slate-400 uppercase">Expiry</p><p className="font-mono font-bold text-slate-900">{(() => { const d = new Date(selectedStockItem.expiry_date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()}</p></div>
+                                {/* Expiry & Reorder */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Expiry</p>
+                                        <p className="font-mono font-bold text-slate-900">{(() => { const d = new Date(selectedStockItem.expiry_date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()}</p>
+                                    </div>
+                                    <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Reorder Level</p>
+                                        <p className="font-mono font-bold text-slate-900">{selectedStockItem.reorder_level || 0} Tabs</p>
+                                    </div>
+                                </div>
+                                {/* Category & Type */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Category</p>
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase mt-1 ${selectedStockItem.category === 'CASUALTY' ? 'bg-amber-50 text-amber-700 border border-amber-100' : 'bg-blue-50 text-blue-700 border border-blue-100'}`}>
+                                            {selectedStockItem.category || 'PHARMACY'}
+                                        </span>
+                                    </div>
+                                    <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Medicine Type</p>
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase mt-1 bg-slate-100 text-slate-600">
+                                            {selectedStockItem.medicine_type || 'TABLET'}
+                                        </span>
+                                    </div>
+                                </div>
+                                {/* Barcode & HSN */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Barcode</p>
+                                        <p className="font-mono font-bold text-slate-900 truncate">{selectedStockItem.barcode || '-'}</p>
+                                    </div>
+                                    <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">HSN Code</p>
+                                        <p className="font-mono font-bold text-slate-900">{selectedStockItem.hsn || '-'}</p>
+                                    </div>
+                                </div>
+                                {/* Pricing & Tax */}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">MRP / Strip</p>
+                                        <p className="font-mono font-bold text-slate-900">₹{selectedStockItem.mrp || 0}</p>
+                                    </div>
+                                    <div className="p-4 bg-white border border-slate-100 rounded-xl">
+                                        <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Selling Price / Strip</p>
+                                        <p className="font-mono font-bold text-blue-600">₹{selectedStockItem.selling_price || 0}</p>
+                                    </div>
+                                </div>
+                                {/* Purchase rates (Hidden from pharmacists) */}
+                                {!isPharmacist && (
+                                    <div className="grid grid-cols-3 gap-4">
+                                        <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">P. Rate / Strip</p>
+                                            <p className="font-mono font-bold text-slate-700">₹{selectedStockItem.purchase_rate || 0}</p>
+                                        </div>
+                                        <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">PTR / Strip</p>
+                                            <p className="font-mono font-bold text-slate-700">₹{selectedStockItem.ptr || 0}</p>
+                                        </div>
+                                        <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">GST %</p>
+                                            <p className="font-mono font-bold text-slate-700">{selectedStockItem.gst_percent || 0}%</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="mt-6 flex flex-col gap-2 shrink-0">
+                                <button
+                                    onClick={() => {
+                                        setEditingStockItem({ ...selectedStockItem });
+                                        setSelectedStockItem(null);
+                                    }}
+                                    className="w-full h-12 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2 transition-all"
+                                >
+                                    <Pencil size={14} /> Edit Stock Details
+                                </button>
                                 {selectedStockItem.tablets_per_strip > 1 && (
-                                    <button onClick={() => handleSyncToTablets(selectedStockItem)} className="w-full mt-4 h-12 bg-blue-50 text-blue-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-100 transition-all border border-blue-200">
+                                    <button onClick={() => handleSyncToTablets(selectedStockItem)} className="w-full h-12 bg-blue-50 text-blue-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-blue-100 transition-all border border-blue-200">
                                         Convert Strips to Tablets (x{selectedStockItem.tablets_per_strip})
                                     </button>
                                 )}
                             </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Edit Stock Item Modal */}
+            <AnimatePresence>
+                {editingStockItem && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 no-print">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setEditingStockItem(null)} />
+                        <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} className="bg-[#F8FAFC] w-full max-w-4xl rounded-[2rem] shadow-2xl relative z-10 overflow-hidden flex flex-col max-h-[90vh] border border-slate-200">
+                            {/* Modal Header */}
+                            <div className="bg-white px-8 py-5 border-b border-slate-200 flex justify-between items-center shrink-0">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-600/20">
+                                        <Pencil size={24} strokeWidth={2.5} />
+                                    </div>
+                                    <div>
+                                        <h2 className="text-2xl font-black text-slate-900 tracking-tight">Edit Stock Item</h2>
+                                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Update batch, prices, and classification</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => setEditingStockItem(null)} className="p-2 bg-slate-50 rounded-full hover:bg-slate-100 transition-colors"><X size={18} /></button>
+                            </div>
+
+                            {/* Modal Form */}
+                            <form onSubmit={handleSaveStockDetails} className="flex-1 overflow-y-auto p-8 space-y-6">
+                                <div className="grid grid-cols-3 gap-6">
+                                    {/* Column 1: Classification & Info */}
+                                    <div className="space-y-4">
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2 mb-2">Classification</h3>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Drug Name</label>
+                                            <Input
+                                                value={editingStockItem.name || ''}
+                                                onChange={(e) => setEditingStockItem({ ...editingStockItem, name: e.target.value })}
+                                                required
+                                                className="bg-white"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Manufacturer</label>
+                                            <Input
+                                                value={editingStockItem.manufacturer || ''}
+                                                onChange={(e) => setEditingStockItem({ ...editingStockItem, manufacturer: e.target.value })}
+                                                className="bg-white"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Category</label>
+                                                <select
+                                                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+                                                    value={editingStockItem.category || 'PHARMACY'}
+                                                    onChange={(e) => setEditingStockItem({ ...editingStockItem, category: e.target.value })}
+                                                >
+                                                    <option value="PHARMACY">Pharmacy</option>
+                                                    <option value="CASUALTY">Casualty</option>
+                                                </select>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Medicine Type</label>
+                                                <select
+                                                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+                                                    value={editingStockItem.medicine_type || 'TABLET'}
+                                                    onChange={(e) => setEditingStockItem({ ...editingStockItem, medicine_type: e.target.value })}
+                                                >
+                                                    {medicineTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Barcode</label>
+                                            <Input
+                                                value={editingStockItem.barcode || ''}
+                                                onChange={(e) => setEditingStockItem({ ...editingStockItem, barcode: e.target.value })}
+                                                className="bg-white font-mono"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">HSN Code</label>
+                                            <Input
+                                                value={editingStockItem.hsn || ''}
+                                                onChange={(e) => setEditingStockItem({ ...editingStockItem, hsn: e.target.value })}
+                                                className="bg-white font-mono"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Column 2: Batch & Stock Info */}
+                                    <div className="space-y-4">
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2 mb-2">Batch & Inventory</h3>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Batch Number</label>
+                                            <Input
+                                                value={editingStockItem.batch_no || ''}
+                                                onChange={(e) => setEditingStockItem({ ...editingStockItem, batch_no: e.target.value })}
+                                                required
+                                                className="bg-white font-mono"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Expiry Date</label>
+                                            <Input
+                                                type="date"
+                                                value={editingStockItem.expiry_date || ''}
+                                                onChange={(e) => setEditingStockItem({ ...editingStockItem, expiry_date: e.target.value })}
+                                                required
+                                                className="bg-white"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Total Qty (Tabs)</label>
+                                                <Input
+                                                    type="number"
+                                                    value={editingStockItem.qty_available || ''}
+                                                    onChange={(e) => setEditingStockItem({ ...editingStockItem, qty_available: parseInt(e.target.value) || 0 })}
+                                                    required
+                                                    className="bg-white font-bold"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Tabs/Strip</label>
+                                                <Input
+                                                    type="number"
+                                                    value={editingStockItem.tablets_per_strip || ''}
+                                                    onChange={(e) => setEditingStockItem({ ...editingStockItem, tablets_per_strip: parseInt(e.target.value) || 1 })}
+                                                    required
+                                                    className="bg-white font-bold"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Reorder Level (Tabs)</label>
+                                            <Input
+                                                type="number"
+                                                value={editingStockItem.reorder_level || ''}
+                                                onChange={(e) => setEditingStockItem({ ...editingStockItem, reorder_level: parseInt(e.target.value) || 0 })}
+                                                className="bg-white font-bold"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Column 3: Pricing & Tax */}
+                                    <div className="space-y-4">
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-2 mb-2">Pricing & Tax (per Strip)</h3>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">MRP per Strip</label>
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                value={editingStockItem.mrp || ''}
+                                                onChange={(e) => setEditingStockItem({ ...editingStockItem, mrp: parseFloat(e.target.value) || 0 })}
+                                                required
+                                                className="bg-white font-bold text-slate-900"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Selling Price per Strip</label>
+                                            <Input
+                                                type="number"
+                                                step="0.01"
+                                                value={editingStockItem.selling_price || ''}
+                                                onChange={(e) => setEditingStockItem({ ...editingStockItem, selling_price: parseFloat(e.target.value) || 0 })}
+                                                required
+                                                className="bg-white font-bold text-blue-600"
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Purchase Rate</label>
+                                                <Input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={editingStockItem.purchase_rate || ''}
+                                                    onChange={(e) => setEditingStockItem({ ...editingStockItem, purchase_rate: parseFloat(e.target.value) || 0 })}
+                                                    className="bg-white font-bold text-slate-700"
+                                                />
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">PTR per Strip</label>
+                                                <Input
+                                                    type="number"
+                                                    step="0.01"
+                                                    value={editingStockItem.ptr || ''}
+                                                    onChange={(e) => setEditingStockItem({ ...editingStockItem, ptr: parseFloat(e.target.value) || 0 })}
+                                                    className="bg-white font-bold text-slate-700"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">GST %</label>
+                                            <Input
+                                                type="number"
+                                                value={editingStockItem.gst_percent || ''}
+                                                onChange={(e) => setEditingStockItem({ ...editingStockItem, gst_percent: parseFloat(e.target.value) || 0 })}
+                                                className="bg-white font-bold"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Modal Actions */}
+                                <div className="border-t border-slate-200 pt-6 flex justify-end gap-4 shrink-0">
+                                    <button type="button" onClick={() => setEditingStockItem(null)} className="px-6 py-3 font-bold text-slate-500 hover:bg-slate-100 rounded-xl transition-all uppercase tracking-widest text-xs">Cancel</button>
+                                    <Button type="submit" className="px-8 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-lg shadow-blue-500/20 uppercase tracking-widest text-xs flex items-center gap-2">
+                                        <Save size={16} /> Save Changes
+                                    </Button>
+                                </div>
+                            </form>
                         </motion.div>
                     </div>
                 )}
@@ -1225,7 +1504,7 @@ const Pharmacy = () => {
                                 <table className="w-full text-left border-collapse">
                                     <thead className="bg-white sticky top-0 shadow-sm">
                                         <tr>
-                                            {['Product', 'Mfg', 'Batch', 'Exp', 'Pack', 'HSN', 'Qty', 'Free', 'MRP', 'PTR', 'Disc%', 'TaxPerc', 'Amount'].map((h, i) => (
+                                            {['Product', 'Mfg', 'Batch', 'Exp', 'Pack', 'HSN', 'Qty', 'Free', 'MRP', ...(isPharmacist ? [] : ['PTR']), 'Disc%', 'TaxPerc', 'Amount'].map((h, i) => (
                                                 <th key={h} className={`px-4 py-4 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b-2 border-slate-300 whitespace-nowrap ${i === 0 ? 'border-l-2' : ''} border-r-2 border-slate-300`}>{h}</th>
                                             ))}
                                         </tr>
@@ -1249,7 +1528,9 @@ const Pharmacy = () => {
                                                     <td className="px-4 py-3 font-bold text-emerald-600 text-center border-r-2 border-slate-300">{item.qty}</td>
                                                     <td className="px-4 py-3 font-medium text-emerald-500 text-center border-r-2 border-slate-300">{item.free_qty > 0 ? `+${item.free_qty}` : '-'}</td>
                                                     <td className="px-4 py-3 text-sm text-slate-600 whitespace-nowrap border-r-2 border-slate-300">₹{item.mrp}</td>
-                                                    <td className="px-4 py-3 text-sm text-slate-600 whitespace-nowrap border-r-2 border-slate-300">₹{item.ptr}</td>
+                                                    {!isPharmacist && (
+                                                        <td className="px-4 py-3 text-sm text-slate-600 whitespace-nowrap border-r-2 border-slate-300">₹{item.ptr}</td>
+                                                    )}
                                                     <td className="px-4 py-3 text-sm text-rose-500 font-bold whitespace-nowrap text-center border-r-2 border-slate-300">{item.discount_percent > 0 ? `${item.discount_percent}%` : '-'}</td>
                                                     <td className="px-4 py-3 text-sm text-blue-600 font-bold whitespace-nowrap text-center border-r-2 border-slate-300">{item.gst_percent || 0}%</td>
                                                     <td className="px-4 py-3 font-black text-slate-900 whitespace-nowrap border-r-2 border-slate-300">₹{totalItemAmount.toFixed(2)}</td>
@@ -1260,7 +1541,7 @@ const Pharmacy = () => {
                                     <tfoot className="bg-slate-50 border-t-2 border-slate-100">
                                         {/* Subtotal */}
                                         <tr>
-                                            <td colSpan="11" className="px-4 py-2 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">Item Total (Taxable + GST)</td>
+                                            <td colSpan={isPharmacist ? 10 : 11} className="px-4 py-2 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest">Item Total (Taxable + GST)</td>
                                             <td colSpan="2" className="px-4 py-2 text-right text-sm font-bold text-slate-600">
                                                 ₹{selectedImport.items_detail?.reduce((acc, item) => {
                                                     const taxable = ((item.ptr || 0) * item.qty) - (((item.ptr || 0) * item.qty) * ((item.discount_percent || 0) / 100));
@@ -1271,7 +1552,7 @@ const Pharmacy = () => {
                                         </tr>
                                         {/* Cash Discount */}
                                         <tr>
-                                            <td colSpan="11" className="px-4 py-2 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest"> Cash Discount</td>
+                                            <td colSpan={isPharmacist ? 10 : 11} className="px-4 py-2 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest"> Cash Discount</td>
                                             <td colSpan="2" className="px-4 py-2 text-right">
                                                 <input
                                                     type="number"
@@ -1284,7 +1565,7 @@ const Pharmacy = () => {
                                         </tr>
                                         {/* Courier Charge */}
                                         <tr>
-                                            <td colSpan="11" className="px-4 py-2 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest"> Courier Charge</td>
+                                            <td colSpan={isPharmacist ? 10 : 11} className="px-4 py-2 text-right text-[10px] font-bold text-slate-400 uppercase tracking-widest"> Courier Charge</td>
                                             <td colSpan="2" className="px-4 py-2 text-right">
                                                 <input
                                                     type="number"
@@ -1297,7 +1578,7 @@ const Pharmacy = () => {
                                         </tr>
                                         {/* Grand Total */}
                                         <tr className="bg-slate-100">
-                                            <td colSpan="11" className="px-4 py-4 text-right text-xs font-black text-slate-900 uppercase tracking-widest">Grand Total</td>
+                                            <td colSpan={isPharmacist ? 10 : 11} className="px-4 py-4 text-right text-xs font-black text-slate-900 uppercase tracking-widest">Grand Total</td>
                                             <td colSpan="2" className="px-4 py-4 text-right">
                                                 <div className="text-xl font-black text-blue-600">
                                                     ₹{Math.round(selectedImport.total_amount || 0)}
