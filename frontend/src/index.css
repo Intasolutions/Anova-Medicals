@@ -1,85 +1,139 @@
 @import "tailwindcss";
 
-@theme {
-  --color-brand-primary: #E1007A;
-  --color-brand-primary-hover: #C20068;
-  --color-brand-primary-light: #FCE6F2;
-  --color-brand-secondary: #00A0E3;
-  --color-brand-secondary-hover: #0087C2;
-  --color-brand-secondary-light: #E6F6FC;
-  --color-brand-accent: #0B4DA2;
-  --color-brand-accent-hover: #083A7A;
-  --color-brand-dark: #0F172A;
-}
-
 :root {
-  --color-brand-primary: #E1007A;
-  --color-brand-primary-hover: #C20068;
-  --color-brand-primary-light: #FCE6F2;
-  --color-brand-secondary: #00A0E3;
-  --color-brand-secondary-hover: #0087C2;
-  --color-brand-secondary-light: #E6F6FC;
-  --color-brand-accent: #0B4DA2;
-  --color-brand-accent-hover: #083A7A;
-  --color-brand-dark: #0F172A;
-  background-color: #f9fafb;
+    --primary: 14, 165, 233;
+    --secondary: 16, 185, 129;
+    --accent: 79, 70, 229;
 }
 
 body {
-  margin: 0;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    @apply bg-slate-50 text-slate-900 overflow-x-hidden;
+    font-family: 'Inter', sans-serif;
 }
 
-/* Print Utilities */
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+    /* Added for horizontal scroll */
+}
+
+::-webkit-scrollbar-track {
+    @apply bg-transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    @apply bg-slate-200 rounded-full hover:bg-slate-300 transition-colors;
+}
+
+/* Glassmorphism Classes */
+.glass {
+    @apply bg-white/70 backdrop-blur-md border-white/20 shadow-xl;
+}
+
+.glass-dark {
+    @apply bg-slate-900/70 backdrop-blur-md border-slate-700/30 shadow-2xl;
+}
+
+/* Hide Number Input Spinners */
+.no-spinner::-webkit-inner-spin-button,
+.no-spinner::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.no-spinner {
+    -moz-appearance: textfield;
+}
+
+/* Print Visibility Helper - Hidden by default on screen */
 .print-only {
-  display: none !important;
+    display: none;
 }
 
+/* Print Styles */
 @media print {
-  @page {
-    size: A4 portrait;
-    margin: 15mm 15mm 20mm 15mm;
-  }
-  
-  .no-print {
-    display: none !important;
-  }
+    body * {
+        visibility: hidden !important;
+    }
 
-  .print-only {
-    display: block !important;
-  }
+    #printable-area,
+    #printable-area *,
+    #invoice-print-area,
+    #invoice-print-area *,
+    #print-portal,
+    #print-portal * {
+        visibility: visible !important;
+    }
 
-  /* Reset layout to maximize space */
-  body, main, #root {
-    background-color: white !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    width: 100% !important;
-    height: 100% !important;
-    box-shadow: none !important;
-  }
+    #printable-area,
+    #print-portal,
+    #invoice-print-area {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+    }
 
-  /* Ensure text is black for clarity */
-  .print-only * {
-    color: #000 !important;
-  }
+    .no-print {
+        display: none !important;
+    }
 
-  /* Table styling for print */
-  .print-only table {
-    width: 100% !important;
-    border-collapse: collapse !important;
-    margin-top: 1rem !important;
-  }
-  .print-only th, .print-only td {
-    border: 1px solid #000 !important;
-    padding: 8px !important;
-    text-align: left !important;
-    font-size: 11px !important;
-  }
-  .print-only th {
-    background-color: #f1f5f9 !important;
-    -webkit-print-color-adjust: exact;
-    color-adjust: exact;
-    font-weight: bold !important;
-  }
+    /* Reset layout for print to avoid blank pages */
+    @page {
+        size: auto;
+        margin: 0mm;
+    }
+
+    html,
+    body,
+    #root {
+        height: auto !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        /* Hide non-print scrollbars */
+    }
+
+    #invoice-print-area,
+    #print-portal {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 40px !important;
+        /* Set reasonable print padding */
+        overflow: visible !important;
+        background: white !important;
+        font-size: 10pt !important;
+    }
+
+    /* Robust print visibility helpers */
+    .print-only {
+        display: block !important;
+        visibility: visible !important;
+    }
+
+    .print-text-black {
+        color: black !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    /* Fix Framer Motion Prints */
+    .print-modal,
+    .print-modal * {
+        transform: none !important;
+        position: static !important;
+    }
+
+    /* Hide everything else explicitly just in case, but keep our known print portals */
+    body>*:not(#root):not(#printable-area):not(#invoice-print-area):not(#print-portal) {
+        display: none !important;
+    }
 }
