@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -83,7 +83,7 @@ const Reception = () => {
     const [notification, setNotification] = useState(null); // { type: 'success'|'error', message: '' }
 
     // Registration Form
-    const [form, setForm] = useState({ registration_number: '', full_name: '', age: '', age_months: '', gender: 'M', phone: '', address: '' });
+    const [form, setForm] = useState({ registration_number: '', full_name: '', age: '', age_months: '', gender: 'M', phone: '', address: '', medical_history: '' });
     const [errors, setErrors] = useState({});
 
     // Visit Form
@@ -229,7 +229,6 @@ const Reception = () => {
 
     const validateForm = () => {
         let newErrors = {};
-        if (!form.registration_number.trim()) newErrors.registration_number = "Registration Number is mandatory.";
         if (!form.full_name.trim()) newErrors.full_name = "Full Name is mandatory.";
         const ageVal = parseInt(form.age || '0');
         const monthsVal = parseInt(form.age_months || '0');
@@ -277,7 +276,7 @@ const Reception = () => {
             setEditingPatientId(null); // Reset edit mode
             setPage(1);
             fetchPatients();
-            setForm({ registration_number: '', full_name: '', age: '', gender: 'M', phone: '', address: '' });
+            setForm({ registration_number: '', full_name: '', age: '', gender: 'M', phone: '', address: '', medical_history: '' });
             setErrors({});
 
         } catch (err) {
@@ -298,7 +297,8 @@ const Reception = () => {
             age: p.age || '',
             gender: p.gender || 'M',
             phone: p.phone || '',
-            address: p.address || ''
+            address: p.address || '',
+            medical_history: p.medical_history || ''
         });
         setEditingPatientId(p.p_id || p.id);
         setShowAddModal(true);
@@ -326,7 +326,7 @@ const Reception = () => {
     };
 
     const handleAddNewPatient = () => {
-        setForm({ registration_number: '', full_name: '', age: '', gender: 'M', phone: '', address: '' });
+        setForm({ registration_number: '', full_name: '', age: '', gender: 'M', phone: '', address: '', medical_history: '' });
         setEditingPatientId(null);
         setErrors({});
         setShowAddModal(true);
@@ -680,20 +680,6 @@ const Reception = () => {
                                         <div className="p-10 space-y-6 overflow-y-auto custom-scrollbar">
                                             <div className="space-y-4">
                                                 <div>
-                                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Registration Number</label>
-                                                    <div className={`flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border-2 transition-all ${errors.registration_number ? 'border-rose-200 bg-rose-50' : 'border-slate-100 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10'}`}>
-                                                        <FileText className={errors.registration_number ? "text-rose-400" : "text-slate-400"} size={20} />
-                                                        <input
-                                                            type="text"
-                                                            placeholder="e.g. OP-2024-001"
-                                                            className="flex-1 bg-transparent font-semibold text-slate-900 placeholder:text-slate-400 outline-none"
-                                                            value={form.registration_number}
-                                                            onChange={(e) => setForm({ ...form, registration_number: e.target.value })}
-                                                        />
-                                                    </div>
-                                                    {errors.registration_number && <p className="text-xs font-bold text-rose-500 mt-2 ml-2 flex items-center gap-1"><AlertCircle size={12} /> {errors.registration_number}</p>}
-                                                </div>
-                                                <div>
                                                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Full Name</label>
                                                     <div className={`flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border-2 transition-all ${errors.full_name ? 'border-rose-200 bg-rose-50' : 'border-slate-100 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10'}`}>
                                                         <UserIcon className={errors.full_name ? "text-rose-400" : "text-slate-400"} size={20} />
@@ -777,6 +763,51 @@ const Reception = () => {
                                                         />
                                                     </div>
                                                     {errors.address && <p className="text-xs font-bold text-rose-500 mt-2 ml-2 flex items-center gap-1"><AlertCircle size={12} /> {errors.address}</p>}
+                                                </div>
+
+                                                <div>
+                                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Medical History (Optional)</label>
+                                                    
+                                                    <div className="flex flex-wrap gap-2 mb-2">
+                                                        {['Diabetes (Sugar)', 'Hypertension (BP)', 'Asthma', 'Thyroid', 'Heart Disease'].map((condition) => {
+                                                            const isActive = (form.medical_history || '').includes(condition);
+                                                            return (
+                                                                <button
+                                                                    key={condition}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        let current = form.medical_history || '';
+                                                                        if (isActive) {
+                                                                            const newHistory = current.replace(condition, '').split(',').map(s => s.trim()).filter(Boolean).join(', ');
+                                                                            setForm({ ...form, medical_history: newHistory });
+                                                                        } else {
+                                                                            const parts = current.split(',').map(s => s.trim()).filter(Boolean);
+                                                                            parts.push(condition);
+                                                                            setForm({ ...form, medical_history: parts.join(', ') });
+                                                                        }
+                                                                    }}
+                                                                    className={`px-3 py-1.5 rounded-full text-[10px] font-bold border transition-all ${
+                                                                        isActive 
+                                                                            ? 'bg-blue-500 text-white border-blue-500 shadow-sm shadow-blue-500/30' 
+                                                                            : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300 hover:bg-blue-50'
+                                                                    }`}
+                                                                >
+                                                                    {isActive ? '✓ ' : '+ '}{condition}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+
+                                                    <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all">
+                                                        <Activity className="mt-1 text-slate-400" size={20} />
+                                                        <textarea
+                                                            rows="2"
+                                                            placeholder="e.g. Hypertension, Diabetes, Asthma..."
+                                                            className="flex-1 bg-transparent font-semibold text-slate-900 placeholder:text-slate-400 outline-none resize-none"
+                                                            value={form.medical_history}
+                                                            onChange={(e) => setForm({ ...form, medical_history: e.target.value })}
+                                                        />
+                                                    </div>
                                                 </div>
                                             </div>
                                             <button

@@ -37,7 +37,6 @@ const Sidebar = () => {
             {/* --- Branding Section --- */}
             <div className="h-20 flex items-center px-6 gap-4 overflow-hidden border-b border-slate-50">
                 <div className="flex-shrink-0 relative">
-                    <img src="/logo/logo.png" alt="Revive" className="w-18 h-18 object-contain rounded-xl shadow-lg shadow-blue-500/10" />
                 </div>
                 <AnimatePresence>
                     {isHovered && (
@@ -47,7 +46,7 @@ const Sidebar = () => {
                             exit={{ opacity: 0, x: -10 }}
                             className="flex flex-col whitespace-nowrap"
                         >
-                            <span className="text-slate-950 font-bold text-xl tracking-tight">Revive</span>
+                            <span className="text-slate-950 font-bold text-xl tracking-tight">Demo</span>
                             <span className="text-slate-400 text-[10px] uppercase tracking-widest font-bold">Health Systems</span>
                         </motion.div>
                     )}

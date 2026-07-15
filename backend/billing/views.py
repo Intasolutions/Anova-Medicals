@@ -18,6 +18,8 @@ class IsAdminOrReception(permissions.BasePermission):
 class InvoiceViewSet(viewsets.ModelViewSet):
     queryset = Invoice.objects.all().order_by('-created_at')
     serializer_class = InvoiceSerializer
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ['visit__patient', 'payment_status', 'visit']
 
     def get_queryset(self):
         queryset = Invoice.objects.all().order_by('-created_at')

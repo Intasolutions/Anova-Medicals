@@ -49,6 +49,30 @@ const HistoryModal = ({ history, onClose }) => {
                     </button>
                 </div>
                 <div className="p-8 overflow-y-auto custom-scrollbar space-y-8">
+                    {/* Vitals */}
+                    {history.vitals && Object.keys(history.vitals).some(k => history.vitals[k]) && (
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                                <div className="p-1.5 bg-rose-100 rounded-lg text-rose-600"><Activity size={16} /></div>
+                                Recorded Vitals
+                            </div>
+                            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                                {[
+                                    { label: 'BP', icon: Heart, key: 'bp', color: 'blue' },
+                                    { label: 'Temp', icon: Thermometer, key: 'temp', color: 'amber' },
+                                    { label: 'Pulse', icon: Activity, key: 'pulse', color: 'rose' },
+                                    { label: 'SpO2', icon: Wind, key: 'spo2', color: 'cyan' },
+                                    { label: 'Weight', icon: Scale, key: 'weight', color: 'slate' },
+                                ].map((v) => history.vitals[v.key] ? (
+                                    <div key={v.key} className={`p-3 bg-${v.color}-50 rounded-2xl border border-${v.color}-100`}>
+                                        <label className={`text-[10px] font-black text-${v.color}-600 uppercase block mb-1 flex items-center gap-1`}><v.icon size={10} /> {v.label}</label>
+                                        <p className="text-sm font-bold text-slate-900">{history.vitals[v.key]}</p>
+                                    </div>
+                                ) : null)}
+                            </div>
+                        </div>
+                    )}
+
                     {/* Diagnosis & Notes */}
                     <div className="space-y-4">
                         <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
@@ -189,15 +213,19 @@ const Doctor = () => {
     const [patientHistory, setPatientHistory] = useState([]);
     const [historyLoading, setHistoryLoading] = useState(false);
     const [viewingHistory, setViewingHistory] = useState(null);
+    const [doctorsList, setDoctorsList] = useState([]);
 
     // Form States
     const [notes, setNotes] = useState({ diagnosis: '', prescription: {}, notes: '' });
+    const [vitals, setVitals] = useState({ bp: '', temp: '', pulse: '', spo2: '', weight: '' });
+    const [medicalHistory, setMedicalHistory] = useState('');
 
     // Medicine States
     const [medSearch, setMedSearch] = useState('');
     const [medResults, setMedResults] = useState([]);
     const [selectedMeds, setSelectedMeds] = useState([]);
-    const [referral, setReferral] = useState('NONE'); // NONE, LAB, PHARMACY, CASUALTY
+    const [referral, setReferral] = useState('NONE'); // NONE, LAB, PHARMACY, CASUALTY, DOCTOR
+    const [referredDoctorId, setReferredDoctorId] = useState('');
 
     // Lab Search States
     const [labSearch, setLabSearch] = useState('');
@@ -207,16 +235,30 @@ const Doctor = () => {
 
 
     // --- Effects ---
+    const fetchDoctors = async () => {
+        try {
+            const { data } = await api.get('/users/management/doctors/');
+            const docs = Array.isArray(data) ? data : (data.results || []);
+            setDoctorsList(docs.filter(d => (d.u_id || d.id) !== (user?.u_id || user?.id)));
+        } catch (err) { console.error("Error fetching doctors", err); }
+    };
+
     useEffect(() => {
-        if (user) fetchQueue();
+        if (user) {
+            fetchQueue();
+            fetchDoctors();
+        }
     }, [user, page, globalSearch]);
 
     useEffect(() => {
         if (selectedVisit) {
             // Reset forms
             setNotes({ diagnosis: '', prescription: {}, notes: '' });
+            setVitals(selectedVisit.vitals && Object.keys(selectedVisit.vitals).length > 0 ? selectedVisit.vitals : { bp: '', temp: '', pulse: '', spo2: '', weight: '' });
+            setMedicalHistory(selectedVisit.patient_medical_history || '');
             setSelectedMeds([]);
             setReferral('NONE');
+            setReferredDoctorId('');
             setSelectedTests([]);
             setExistingNoteId(null);
 
@@ -291,7 +333,7 @@ const Doctor = () => {
         if (showLoading) setLoading(true);
         try {
             const doctorFilter = user?.role === 'DOCTOR' ? `&doctor=${user.u_id}` : '';
-            const { data } = await api.get(`/reception/visits/?status__in=OPEN,IN_PROGRESS&assigned_role__in=DOCTOR${doctorFilter}&page=${page}${globalSearch ? `&search=${encodeURIComponent(globalSearch)}` : ''}`);
+            const { data } = await api.get(`/reception/visits/?status__in=OPEN,IN_PROGRESS&assigned_role__in=DOCTOR,LAB${doctorFilter}&page=${page}${globalSearch ? `&search=${encodeURIComponent(globalSearch)}` : ''}`);
             // Safety filter: Ensure no Pharmacy referrals appear even if backend update lags
             const cleanResults = (data.results || data).filter(v => v.assigned_role !== 'PHARMACY');
             setVisitsData({ ...data, results: cleanResults });
@@ -343,8 +385,12 @@ const Doctor = () => {
             // In a real app, you'd likely have a specific endpoint for history
             const { data: notesData } = await api.get('/medical/doctor-notes/');
             const { data: visitsData } = await api.get(`/reception/visits/?patient=${pId}`);
-            const vIds = (visitsData.results || visitsData).map(v => v.v_id || v.id);
-            const filteredNotes = (notesData.results || notesData).filter(n => vIds.includes(n.visit));
+            const visits = visitsData.results || visitsData;
+            const vIds = visits.map(v => v.v_id || v.id);
+            const filteredNotes = (notesData.results || notesData).filter(n => vIds.includes(n.visit)).map(note => {
+                const visit = visits.find(v => (v.v_id || v.id) === note.visit);
+                return { ...note, vitals: visit ? visit.vitals : {} };
+            });
             setPatientHistory(filteredNotes);
         } catch (err) {
             console.error("History fetch error", err);
@@ -420,7 +466,24 @@ const Doctor = () => {
 
     const handleSaveConsultation = async () => {
         if (!selectedVisit) return;
+        
+        if (referral === 'DOCTOR' && !referredDoctorId) {
+            showToast('error', 'Please select a doctor to refer to');
+            return;
+        }
+
         try {
+            // Update patient medical history if changed
+            if (medicalHistory !== (selectedVisit.patient_medical_history || '')) {
+                try {
+                    await api.patch(`/reception/patients/${selectedVisit.patient}/`, {
+                        medical_history: medicalHistory
+                    });
+                } catch (historyErr) {
+                    console.error("Failed to update medical history:", historyErr);
+                }
+            }
+
             const prescriptionObj = {};
             selectedMeds.forEach(m => {
                 prescriptionObj[m.name] = `${m.dosage} | ${m.duration} | Qty: ${m.count}`;
@@ -441,16 +504,18 @@ const Doctor = () => {
                 await api.post('/medical/doctor-notes/', payload);
             }
 
-            let updatePayload;
+            let updatePayload = { vitals: vitals };
             if (referral === 'LAB') {
                 // Keep patient in doctor's queue (don't clear doctor)
-                updatePayload = { status: 'OPEN', assigned_role: referral };
+                updatePayload = { ...updatePayload, status: 'OPEN', assigned_role: referral };
+            } else if (referral === 'DOCTOR') {
+                updatePayload = { ...updatePayload, status: 'OPEN', assigned_role: 'DOCTOR', doctor: referredDoctorId };
             } else if (referral !== 'NONE') {
                 // Release to other department (keep doctor field intact)
-                updatePayload = { status: 'OPEN', assigned_role: referral };
+                updatePayload = { ...updatePayload, status: 'OPEN', assigned_role: referral };
             } else {
                 // Discharge
-                updatePayload = { status: 'CLOSED' };
+                updatePayload = { ...updatePayload, status: 'CLOSED' };
             }
 
             await api.patch(`/reception/visits/${selectedVisit.v_id || selectedVisit.id}/`, updatePayload);
@@ -581,19 +646,46 @@ const Doctor = () => {
                                                 {selectedVisit.patient_gender === 'M' ? 'Male' : selectedVisit.patient_gender === 'F' ? 'Female' : 'Other'} • {selectedVisit.patient_age} Yrs {selectedVisit.patient_age_months > 0 ? `${selectedVisit.patient_age_months} Mos` : ''}
                                             </span>
                                         </div>
+                                        {selectedVisit.patient_medical_history && (
+                                            <div className="mt-2 text-xs font-bold bg-rose-100 text-rose-800 px-2 py-1 rounded-lg inline-flex items-center gap-2 border border-rose-200">
+                                                <Activity size={12} className="text-rose-600" />
+                                                Medical History: {selectedVisit.patient_medical_history}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="flex gap-3 items-center">
-                                    <select
-                                        value={referral}
-                                        onChange={(e) => setReferral(e.target.value)}
-                                        className="h-10 pl-3 pr-8 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-blue-500 hover:border-blue-300 transition-all cursor-pointer"
-                                    >
-                                        <option value="NONE">No Referral</option>
-                                        <option value="LAB">Refer to Lab</option>
-                                        <option value="PHARMACY">Refer to Pharmacy</option>
-                                        <option value="CASUALTY">Refer to Casualty</option>
-                                    </select>
+                                    <div className="flex gap-2">
+                                        <select
+                                            value={referral}
+                                            onChange={(e) => {
+                                                setReferral(e.target.value);
+                                                if (e.target.value !== 'DOCTOR') setReferredDoctorId('');
+                                            }}
+                                            className="h-10 pl-3 pr-8 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-blue-500 hover:border-blue-300 transition-all cursor-pointer"
+                                        >
+                                            <option value="NONE">No Referral</option>
+                                            <option value="LAB">Refer to Lab</option>
+                                            <option value="PHARMACY">Refer to Pharmacy</option>
+                                            <option value="CASUALTY">Refer to Casualty</option>
+                                            <option value="DOCTOR">Refer to Another Doctor</option>
+                                        </select>
+                                        
+                                        {referral === 'DOCTOR' && (
+                                            <select
+                                                value={referredDoctorId}
+                                                onChange={(e) => setReferredDoctorId(e.target.value)}
+                                                className="h-10 pl-3 pr-8 bg-indigo-50 border border-indigo-200 rounded-xl text-xs font-bold text-indigo-700 outline-none focus:border-indigo-500 hover:border-indigo-300 transition-all cursor-pointer min-w-[150px]"
+                                            >
+                                                <option value="">Select Doctor...</option>
+                                                {doctorsList.map(doc => (
+                                                    <option key={doc.id || doc.u_id} value={doc.id || doc.u_id}>
+                                                        Dr. {doc.first_name ? `${doc.first_name} ${doc.last_name}` : doc.username}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        )}
+                                    </div>
 
                                     <button
                                         onClick={() => setSelectedVisit(null)}
@@ -617,6 +709,76 @@ const Doctor = () => {
 
                                     {/* Main Clinical Column (2/3) */}
                                     <div className="col-span-2 space-y-8">
+
+                                        {/* Vitals Section */}
+                                        <div className="group">
+                                            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-3">
+                                                <div className="p-1.5 bg-rose-100 rounded-lg text-rose-600"><Activity size={16} /></div>
+                                                Vitals Check
+                                            </label>
+                                            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                                                {[
+                                                    { label: 'BP', icon: Heart, key: 'bp', ph: '120/80', color: 'blue' },
+                                                    { label: 'Temp', icon: Thermometer, key: 'temp', ph: '98.6', color: 'amber' },
+                                                    { label: 'Pulse', icon: Activity, key: 'pulse', ph: '72', color: 'rose' },
+                                                    { label: 'SpO2', icon: Wind, key: 'spo2', ph: '98%', color: 'cyan' },
+                                                    { label: 'Weight', icon: Scale, key: 'weight', ph: 'Kg', color: 'slate' },
+                                                ].map((v) => (
+                                                    <div key={v.key} className={`p-3 bg-${v.color}-50 rounded-2xl border border-${v.color}-100 transition-all`}>
+                                                        <label className={`text-[10px] font-black text-${v.color}-600 uppercase block mb-1 flex items-center gap-1`}><v.icon size={10} /> {v.label}</label>
+                                                        <input className="w-full bg-transparent font-black text-slate-900 outline-none text-xs" placeholder={v.ph} value={vitals[v.key] || ''} onChange={e => setVitals({ ...vitals, [v.key]: e.target.value })} />
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Medical History Update Section */}
+                                        <div className="group">
+                                            <label className="flex items-center justify-between text-sm font-bold text-slate-700 mb-3">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="p-1.5 bg-rose-100 rounded-lg text-rose-600"><Activity size={16} /></div>
+                                                    Patient Medical History (Pre-existing conditions)
+                                                </div>
+                                            </label>
+                                            
+                                            <div className="flex flex-wrap gap-2 mb-3">
+                                                {['Diabetes (Sugar)', 'Hypertension (BP)', 'Asthma', 'Thyroid', 'Heart Disease'].map((condition) => {
+                                                    const isActive = (medicalHistory || '').includes(condition);
+                                                    return (
+                                                        <button
+                                                            key={condition}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                let current = medicalHistory || '';
+                                                                if (isActive) {
+                                                                    const newHistory = current.replace(condition, '').split(',').map(s => s.trim()).filter(Boolean).join(', ');
+                                                                    setMedicalHistory(newHistory);
+                                                                } else {
+                                                                    const parts = current.split(',').map(s => s.trim()).filter(Boolean);
+                                                                    parts.push(condition);
+                                                                    setMedicalHistory(parts.join(', '));
+                                                                }
+                                                            }}
+                                                            className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${
+                                                                isActive 
+                                                                    ? 'bg-rose-500 text-white border-rose-500 shadow-sm shadow-rose-500/30' 
+                                                                    : 'bg-white text-slate-600 border-slate-200 hover:border-rose-300 hover:bg-rose-50'
+                                                            }`}
+                                                        >
+                                                            {isActive ? '✓ ' : '+ '}{condition}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+
+                                            <textarea
+                                                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-medium text-slate-800 focus:bg-white focus:border-rose-500 focus:ring-4 focus:ring-rose-500/10 outline-none transition-all resize-none placeholder:text-slate-400"
+                                                rows="2"
+                                                placeholder="Update known conditions (e.g. Hypertension, Diabetes, Asthma)..."
+                                                value={medicalHistory}
+                                                onChange={(e) => setMedicalHistory(e.target.value)}
+                                            />
+                                        </div>
 
                                         {/* Diagnosis Section */}
                                         <div className="group">
@@ -976,35 +1138,6 @@ const Doctor = () => {
                                     {/* Right Sidebar: History & Info (1/3) */}
                                     <div className="col-span-1 border-l border-slate-100 pl-8">
                                         <div className="sticky top-0 space-y-8">
-
-                                            {/* Vital Stats (Mockup/Placeholder) */}
-                                            <div className="space-y-4">
-                                                <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
-                                                    <Activity size={16} className="text-rose-500" /> Vitals Today
-                                                </label>
-                                                <div className="grid grid-cols-2 xl:grid-cols-3 gap-3">
-                                                    <div className="p-3 bg-blue-50 rounded-2xl border border-blue-100">
-                                                        <p className="text-[10px] text-blue-400 font-bold uppercase flex items-center gap-1"><Heart size={10} /> BP</p>
-                                                        <p className="text-lg font-bold text-slate-900">{selectedVisit.vitals?.bp || '--/--'}</p>
-                                                    </div>
-                                                    <div className="p-3 bg-amber-50 rounded-2xl border border-amber-100">
-                                                        <p className="text-[10px] text-amber-400 font-bold uppercase flex items-center gap-1"><Thermometer size={10} /> Temp</p>
-                                                        <p className="text-lg font-bold text-slate-900">{selectedVisit.vitals?.temp ? `${selectedVisit.vitals.temp}°F` : '--'}</p>
-                                                    </div>
-                                                    <div className="p-3 bg-rose-50 rounded-2xl border border-rose-100">
-                                                        <p className="text-[10px] text-rose-400 font-bold uppercase flex items-center gap-1"><Activity size={10} /> Pulse</p>
-                                                        <p className="text-lg font-bold text-slate-900">{selectedVisit.vitals?.pulse ? `${selectedVisit.vitals.pulse} bpm` : '--'}</p>
-                                                    </div>
-                                                    <div className="p-3 bg-cyan-50 rounded-2xl border border-cyan-100">
-                                                        <p className="text-[10px] text-cyan-400 font-bold uppercase flex items-center gap-1"><Wind size={10} /> SpO2</p>
-                                                        <p className="text-lg font-bold text-slate-900">{selectedVisit.vitals?.spo2 ? `${selectedVisit.vitals.spo2}%` : '--'}</p>
-                                                    </div>
-                                                    <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200">
-                                                        <p className="text-[10px] text-slate-400 font-bold uppercase flex items-center gap-1"><Scale size={10} /> Weight</p>
-                                                        <p className="text-lg font-bold text-slate-900">{selectedVisit.vitals?.weight ? `${selectedVisit.vitals.weight} kg` : '--'}</p>
-                                                    </div>
-                                                </div>
-                                            </div>
 
                                             {/* Patient History Timeline */}
                                             <div>

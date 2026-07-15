@@ -20,6 +20,12 @@ class Patient(BaseModel):
     phone = models.CharField(max_length=15)
     address = models.TextField()
     id_proof = models.CharField(max_length=50, blank=True, null=True)
+    medical_history = models.TextField(blank=True, null=True, help_text="Pre-existing conditions like BP, Diabetes, etc.")
+
+    def save(self, *args, **kwargs):
+        if not self.registration_number or self.registration_number == 'TEMP':
+            self.registration_number = f"REV-{uuid.uuid4().hex[:6].upper()}"
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.full_name} ({self.phone})"

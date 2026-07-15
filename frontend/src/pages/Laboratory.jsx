@@ -102,10 +102,12 @@ const Laboratory = () => {
             const first = items[0];
             const allCompleted = items.every(i => i.status === 'COMPLETED' || i.status === 'CANCELLED');
             const anyPending = items.some(i => i.status === 'PENDING');
+            const anyVerification = items.some(i => i.status === 'VERIFICATION');
 
             let status = 'CANCELLED';
             if (allCompleted) status = 'COMPLETED';
             else if (anyPending) status = 'PENDING';
+            else if (anyVerification) status = 'VERIFICATION';
 
             // Unique Key: VisitID + Time of first item (ensures uniqueness for separate batches)
             const uniqueKey = `${first.visit?.id || first.visit}_${new Date(first.created_at).getTime()}`;
@@ -629,11 +631,11 @@ const Laboratory = () => {
         setShowResultModal(true);
     };
 
-    const handleSubmitResults = async (e) => {
-        e.preventDefault();
+    const handleSubmitResults = async (e, finalStatus = 'COMPLETED') => {
+        e?.preventDefault();
         try {
             await api.patch(`lab/charges/${selectedCharge.lc_id}/`, {
-                status: 'COMPLETED',
+                status: finalStatus,
                 results: resultData.results,
                 technician_name: resultData.technician_name,
                 specimen: resultData.specimen,
@@ -642,7 +644,7 @@ const Laboratory = () => {
             });
             setShowResultModal(false);
             fetchCharges();
-            showToast('success', 'Results published successfully');
+            showToast('success', finalStatus === 'VERIFICATION' ? 'Results submitted for verification' : 'Results verified and published');
         } catch (err) { showToast('error', "Failed to save results"); }
     };
 
@@ -830,7 +832,7 @@ const Laboratory = () => {
                     {activeTab === 'queue' && (
                         <>
                             <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex gap-2 overflow-x-auto shrink-0">
-                                {['ALL', 'PENDING', 'COMPLETED', 'CANCELLED'].map(s => (
+                                {['ALL', 'PENDING', 'VERIFICATION', 'COMPLETED', 'CANCELLED'].map(s => (
                                     <button
                                         key={s}
                                         onClick={() => { setStatusFilter(s); setPage(1); }}
@@ -897,7 +899,12 @@ const Laboratory = () => {
 
                                         {/* Actual Lab Charges - GROUPED */}
                                         {groupedCharges.map(group => (
-                                            <tr key={group.uniqueKey} className="hover:bg-slate-50 transition-colors group align-top border-b border-slate-50">
+                                            <tr key={group.uniqueKey} className={`transition-colors group align-top border-b border-slate-50 ${
+                                                group.status === 'COMPLETED' ? 'bg-emerald-50 hover:bg-emerald-100' :
+                                                group.status === 'VERIFICATION' ? 'bg-indigo-50 hover:bg-indigo-100' :
+                                                group.status === 'CANCELLED' ? 'bg-red-50 hover:bg-red-100' :
+                                                'bg-amber-50 hover:bg-amber-100'
+                                            }`}>
                                                 {/* Patient Info */}
                                                 <td className="px-6 py-4">
                                                     <div className="flex items-center gap-3">
@@ -940,10 +947,12 @@ const Laboratory = () => {
                                                 <td className="px-6 py-4">
                                                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wide border ${group.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
                                                         group.status === 'CANCELLED' ? 'bg-red-50 text-red-600 border-red-100' :
-                                                            'bg-amber-50 text-amber-600 border-amber-100'
+                                                            group.status === 'VERIFICATION' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
+                                                                'bg-amber-50 text-amber-600 border-amber-100'
                                                         }`}>
                                                         {group.status === 'COMPLETED' && <CheckCircle2 size={12} />}
                                                         {group.status === 'PENDING' && <Clock size={12} />}
+                                                        {group.status === 'VERIFICATION' && <CheckCircle2 size={12} />}
                                                         {group.status}
                                                     </span>
                                                 </td>
@@ -956,17 +965,17 @@ const Laboratory = () => {
                                                 {/* Actions */}
                                                 <td className="px-6 py-4">
                                                     <div className="flex flex-col gap-2">
-                                                        {/* Individual Actions if Pending */}
-                                                        {group.status === 'PENDING' && (
+                                                        {/* Individual Actions if Pending or Verification */}
+                                                        {['PENDING', 'VERIFICATION'].includes(group.status) && (
                                                             <div className="flex gap-1 flex-wrap">
-                                                                {group.items.filter(i => i.status === 'PENDING').map(t => (
+                                                                {group.items.filter(i => ['PENDING', 'VERIFICATION'].includes(i.status)).map(t => (
                                                                     <React.Fragment key={t.lc_id}>
                                                                         <button
                                                                             onClick={() => handleOpenResultEntry(t)}
-                                                                            className="px-2 py-1 bg-blue-50 text-blue-600 text-[10px] font-bold rounded hover:bg-blue-100 transition-all border border-blue-100"
-                                                                            title={`Enter Result for ${t.test_name}`}
+                                                                            className={`px-2 py-1 text-[10px] font-bold rounded transition-all border ${t.status === 'VERIFICATION' ? 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'}`}
+                                                                            title={`${t.status === 'VERIFICATION' ? 'Verify' : 'Enter'} Result for ${t.test_name}`}
                                                                         >
-                                                                            Result: {t.test_name}
+                                                                            {t.status === 'VERIFICATION' ? 'Verify:' : 'Result:'} {t.test_name}
                                                                         </button>
                                                                         <button
                                                                             onClick={() => handleUpdateStatus(t.lc_id, 'CANCELLED')}
@@ -1708,7 +1717,7 @@ const Laboratory = () => {
                                 <button onClick={() => setShowResultModal(false)} className="p-2 rounded-full hover:bg-white shadow-sm"><X size={20} className="text-slate-400" /></button>
                             </div>
 
-                            <form onSubmit={handleSubmitResults} className="flex-1 overflow-y-auto p-8 space-y-8">
+                            <form onSubmit={(e) => e.preventDefault()} className="flex-1 overflow-y-auto p-8 space-y-8">
                                 <div className="grid grid-cols-12 gap-4 text-xs font-black text-slate-400 uppercase tracking-widest px-2 border-b border-slate-100 pb-2">
                                     <span className="col-span-4">Parameter Name</span>
                                     <span className="col-span-4">Result Value</span>
@@ -1829,7 +1838,15 @@ const Laboratory = () => {
 
                             <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
                                 <Button variant="secondary" className="rounded-xl px-6 font-bold" onClick={() => setShowResultModal(false)}>Cancel</Button>
-                                <Button onClick={handleSubmitResults} className="rounded-xl px-8 font-bold bg-blue-600 shadow-lg shadow-blue-500/30">Publish Results</Button>
+                                {selectedCharge.status === 'PENDING' && (
+                                    <Button type="button" onClick={(e) => handleSubmitResults(e, 'VERIFICATION')} className="rounded-xl px-6 font-bold bg-indigo-600 shadow-lg shadow-indigo-500/30">Submit for Verification</Button>
+                                )}
+                                {selectedCharge.status === 'VERIFICATION' && (
+                                    <Button type="button" onClick={(e) => handleSubmitResults(e, 'COMPLETED')} className="rounded-xl px-8 font-bold bg-emerald-600 shadow-lg shadow-emerald-500/30">Verify & Complete</Button>
+                                )}
+                                {selectedCharge.status === 'COMPLETED' && (
+                                    <Button type="button" onClick={(e) => handleSubmitResults(e, 'COMPLETED')} className="rounded-xl px-8 font-bold bg-emerald-600 shadow-lg shadow-emerald-500/30">Save Changes</Button>
+                                )}
                             </div>
                         </motion.div>
                     </div>
@@ -1859,7 +1876,7 @@ const Laboratory = () => {
                                             <TestTube2 size={32} />
                                         </div>
                                         <div>
-                                            <h1 className="text-3xl font-black text-slate-900 tracking-tighter">REVIVE HOSPITAL</h1>
+                                            <h1 className="text-3xl font-black text-slate-900 tracking-tighter">DEMO HOSPITAL</h1>
                                             <p className="text-sm font-bold text-slate-500 tracking-widest uppercase mt-1">
                                                 {printCharge.groupStatus === 'PENDING' ? 'Lab Request / Receipt' : 'Laboratory Report'}
                                             </p>
@@ -1959,7 +1976,7 @@ const Laboratory = () => {
                                 )}
                                 <div className="flex justify-between items-end mt-20 pt-8 border-t border-slate-200">
                                     <div className="text-xs font-medium text-slate-400">
-                                        <p>Generated by REVIVE Hospital Management System</p>
+                                        <p>Generated by DEMO Hospital Management System</p>
                                         <p>{(() => {
                                             const d = new Date();
                                             return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).toUpperCase()}`;
@@ -2054,11 +2071,11 @@ const Laboratory = () => {
                                         <TestTube2 size={24} />
                                     </div>
                                     <div>
-                                        <h1 className="text-2xl font-black text-slate-900 tracking-tighter">REVIVE HOSPITAL</h1>
+                                        <h1 className="text-2xl font-black text-slate-900 tracking-tighter">DEMO HOSPITAL</h1>
                                         <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mt-0.5">
                                             {printCharge.groupStatus === 'PENDING' ? 'Lab Request / Receipt' : 'Laboratory Services'}
                                         </p>
-                                        <p className="text-[10px] font-bold text-slate-400 mt-0.5">Anjukunnu, Wayanad</p>
+                                        <p className="text-[10px] font-bold text-slate-400 mt-0.5">123 Health Ave, Metro City</p>
                                     </div>
                                 </div>
                                 <div className="text-right space-y-0.5">
@@ -2159,7 +2176,7 @@ const Laboratory = () => {
                             {/* Footer */}
                             <div className="flex justify-between items-end mt-auto pt-4 border-t border-slate-200">
                                 <div className="text-[10px] font-medium text-slate-400">
-                                    <p>Generated by REVIVE Hospital Management System</p>
+                                    <p>Generated by DEMO Hospital Management System</p>
                                     <p>{(() => {
                                         const d = new Date();
                                         return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true }).toUpperCase()}`;
