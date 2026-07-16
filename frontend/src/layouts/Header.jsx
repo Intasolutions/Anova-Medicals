@@ -4,6 +4,7 @@ import { useSearch } from '../context/SearchContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLocation } from 'react-router-dom';
 
 const Header = () => {
     const { globalSearch, setGlobalSearch } = useSearch();
@@ -69,26 +70,45 @@ const Header = () => {
 
     const unreadCount = notifications.filter(n => !n.is_read).length;
 
+    const location = useLocation();
+    
+    // Generate Breadcrumbs
+    const getBreadcrumbs = () => {
+        const path = location.pathname.split('/').filter(Boolean);
+        if (path.length === 0) return ['Dashboard'];
+        return ['Dashboard', ...path.map(p => p.charAt(0).toUpperCase() + p.slice(1))];
+    };
+    
+    const breadcrumbs = getBreadcrumbs();
+
     return (
-        <header className="h-20 bg-white/90 backdrop-blur-xl border-b border-slate-100 px-8 flex items-center justify-between sticky top-0 z-40">
-            {/* --- Left: Smart Search --- */}
-            <div className="flex items-center gap-8 flex-1">
-                {!isPharmacyOnly && (
-                    <div className="relative w-full max-w-md group">
-                        <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
-                        <input
-                            type="text"
-                            placeholder="Search patients or prescriptions..."
-                            className="w-full pl-11 pr-12 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium transition-all focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 focus:bg-white"
-                            value={globalSearch}
-                            onChange={(e) => setGlobalSearch(e.target.value)}
-                        />
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 px-1.5 py-1 bg-white border border-slate-200 rounded-lg shadow-sm">
-                            <Command size={10} className="text-slate-400" />
-                            <span className="text-[10px] font-bold text-slate-400">K</span>
+        <header className="h-16 bg-white/90 backdrop-blur-xl border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-40">
+            {/* --- Left: Breadcrumbs & Smart Search --- */}
+            <div className="flex items-center gap-6 flex-1">
+                <div className="flex items-center gap-2 text-sm font-bold">
+                    {breadcrumbs.map((crumb, index) => (
+                        <div key={index} className="flex items-center gap-2">
+                            <span className={index === breadcrumbs.length - 1 ? "text-slate-900" : "text-slate-400"}>
+                                {crumb}
+                            </span>
+                            {index < breadcrumbs.length - 1 && <span className="text-slate-300">/</span>}
                         </div>
+                    ))}
+                </div>
+
+                <div className="relative w-full max-w-sm group ml-4 hidden md:block">
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+                    <input
+                        type="text"
+                        placeholder="Search system..."
+                        className="w-full pl-9 pr-10 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold transition-all focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-600 focus:bg-white"
+                        value={globalSearch}
+                        onChange={(e) => setGlobalSearch(e.target.value)}
+                    />
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[9px] font-bold text-slate-400 shadow-sm">
+                        Ctrl+K
                     </div>
-                )}
+                </div>
             </div>
 
             {/* --- Right: IST Clock & Tools --- */}
@@ -186,17 +206,6 @@ const Header = () => {
                     <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
                     <span className="text-[10px] font-bold text-green-700 uppercase tracking-wider">System Live</span>
                 </div>
-
-                {isPharmacyOnly && (
-                    <button 
-                        onClick={logout}
-                        className="ml-2 p-2 bg-red-50 text-red-600 border border-red-100 rounded-xl hover:bg-red-600 hover:text-white transition-all flex items-center gap-2"
-                        title="Logout"
-                    >
-                        <LogOut size={16} />
-                        <span className="text-[10px] font-bold uppercase tracking-widest hidden sm:inline">Logout</span>
-                    </button>
-                )}
             </div>
         </header>
     );

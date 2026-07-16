@@ -1,13 +1,16 @@
 @import "tailwindcss";
 
 :root {
-    --primary: 14, 165, 233;
+    /* Enterprise Blue */
+    --primary: 37, 99, 235;
+    /* Enterprise Green */
     --secondary: 16, 185, 129;
-    --accent: 79, 70, 229;
+    /* Enterprise Gray/Slate */
+    --accent: 100, 116, 139;
 }
 
 body {
-    @apply bg-slate-50 text-slate-900 overflow-x-hidden;
+    @apply bg-[#F8FAFC] text-slate-900 overflow-x-hidden;
     font-family: 'Inter', sans-serif;
 }
 

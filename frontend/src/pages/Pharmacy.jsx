@@ -97,6 +97,7 @@ const Pharmacy = () => {
     const [suppliers, setSuppliers] = useState([]);
     const [filterSupplier, setFilterSupplier] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
+    const [filterExpiring, setFilterExpiring] = useState(false);
     const [inventorySearch, setInventorySearch] = useState(''); // New State
     const [editingStockItem, setEditingStockItem] = useState(null);
 
@@ -594,7 +595,19 @@ const Pharmacy = () => {
     const confirmCheckout = async () => {
         let visitId = selectedPatient?.v_id || null;
         if (!visitId && selectedPatient) { const matchInQueue = pendingVisits.find(v => v.patient === selectedPatient.id || (v.patient?.id === selectedPatient.id) || v.patient_name === selectedPatient.full_name); if (matchInQueue) visitId = matchInQueue.id || matchInQueue.v_id; }
-        const payload = { visit: visitId, patient: selectedPatient?.p_id || selectedPatient?.id || null, items: cart.map(item => ({ med_stock: item.med_id || item.id, qty: item.qty, unit_price: parseFloat(item.selling_price.toFixed(2)), gst_percent: item.gst_applied || 0 })), payment_status: 'PENDING' };
+        const payload = { 
+            visit: visitId, 
+            patient: selectedPatient?.p_id || selectedPatient?.id || null, 
+            items: cart.map(item => ({ 
+                med_stock: item.med_id || item.id, 
+                qty: item.qty, 
+                unit_price: parseFloat(item.selling_price.toFixed(2)), 
+                gst_percent: item.gst_applied || 0,
+                dosage: item.dosage || '',
+                timing: item.duration || item.timing || ''
+            })), 
+            payment_status: 'PENDING' 
+        };
         try {
             const { data } = await api.post('pharmacy/sales/', payload);
             setLastSale({ ...data, patient: selectedPatient, doctor: selectedDoctor, details: cart });
@@ -805,6 +818,13 @@ const Pharmacy = () => {
                             <option value="">Filter: All Suppliers</option>
                             {suppliers.map(s => <option key={s.id} value={s.id}>{s.supplier_name}</option>)}
                         </select>
+                        <button 
+                            onClick={() => setFilterExpiring(!filterExpiring)}
+                            className={`px-4 py-2 text-xs font-bold rounded-xl transition-all shadow-sm border ${filterExpiring ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                        >
+                            <AlertTriangle size={14} className="inline mr-2" />
+                            {filterExpiring ? 'Showing Expiring Soon' : 'Alert: Expiring Soon (< 6 mo)'}
+                        </button>
                     </div>
                 )}
             </div>
@@ -819,7 +839,13 @@ const Pharmacy = () => {
                             <table className="w-full text-left border-collapse">
                                 <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm"><tr>{['Drug Name', 'Category', 'Type', 'Batch', 'Expiry', 'Total (Tab)', ...(isPharmacist ? [] : ['P.Rate']), 'Sales Price/Tab', 'MRP', 'Action'].map(h => <th key={h} className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">{h}</th>)}</tr></thead>
                                 <tbody className="divide-y divide-slate-50">
-                                    {(stockData?.results || []).map(s => (
+                                    {(stockData?.results || []).filter(s => {
+                                        if (!filterExpiring) return true;
+                                        const expiryDate = new Date(s.expiry_date);
+                                        const sixMonthsFromNow = new Date();
+                                        sixMonthsFromNow.setMonth(sixMonthsFromNow.getMonth() + 6);
+                                        return expiryDate <= sixMonthsFromNow;
+                                    }).map(s => (
                                         <tr key={s.med_id} className="hover:bg-slate-50 transition-colors group">
                                             <td className="px-6 py-4 border-b border-gray-200"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-lg border border-gray-300 text-gray-700 flex items-center justify-center font-bold"><Pill size={14} /></div><div><p className="font-bold text-slate-900 text-sm">{s.name}</p><p className="text-xs font-bold text-slate-400 uppercase">{s.manufacturer || 'Generic'}</p></div></div></td>
                                             <td className="px-6 py-4 border-b border-gray-200">
@@ -833,7 +859,24 @@ const Pharmacy = () => {
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 border-b border-gray-200 font-mono text-xs font-bold text-slate-600">{s.batch_no}</td>
-                                            <td className="px-6 py-4 border-b border-gray-200 font-mono text-xs font-bold text-slate-600">{new Date(s.expiry_date).toLocaleDateString(undefined, { month: 'short', year: '2-digit' })}</td>
+                                            <td className="px-6 py-4 border-b border-gray-200 font-mono text-xs font-bold">
+                                                {(() => {
+                                                    const expiryDate = new Date(s.expiry_date);
+                                                    const now = new Date();
+                                                    const sixMonthsFromNow = new Date();
+                                                    sixMonthsFromNow.setMonth(now.getMonth() + 6);
+                                                    
+                                                    let alertClass = 'text-slate-600';
+                                                    if (expiryDate < now) alertClass = 'text-red-600 bg-red-50 border border-red-200 px-2 py-1 rounded';
+                                                    else if (expiryDate <= sixMonthsFromNow) alertClass = 'text-amber-600 bg-amber-50 border border-amber-200 px-2 py-1 rounded';
+                                                    
+                                                    return (
+                                                        <span className={alertClass}>
+                                                            {expiryDate.toLocaleDateString(undefined, { month: 'short', year: '2-digit' })}
+                                                        </span>
+                                                    );
+                                                })()}
+                                            </td>
                                             <td className="px-6 py-4 border-b border-gray-200">
                                                 <div className="flex flex-col">
                                                     <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold ${s.qty_available < 10 ? 'border border-red-500 text-red-600' : 'border border-gray-300 text-gray-700'}`}>
@@ -1478,6 +1521,8 @@ const Pharmacy = () => {
                                                                         <thead className="bg-slate-50 border-b border-slate-200">
                                                                             <tr>
                                                                                 <th className="px-4 py-2 text-[10px] font-black text-slate-500 uppercase tracking-wider">Item</th>
+                                                                                <th className="px-4 py-2 text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Dosage</th>
+                                                                                <th className="px-4 py-2 text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Timing</th>
                                                                                 <th className="px-4 py-2 text-[10px] font-black text-slate-500 uppercase tracking-wider text-center">Qty</th>
                                                                                 <th className="px-4 py-2 text-[10px] font-black text-slate-500 uppercase tracking-wider text-right">Price</th>
                                                                                 <th className="px-4 py-2 text-[10px] font-black text-slate-500 uppercase tracking-wider text-right">Total</th>
@@ -1487,6 +1532,8 @@ const Pharmacy = () => {
                                                                             {sale.items?.map((item, idx) => (
                                                                                 <tr key={idx}>
                                                                                     <td className="px-4 py-2 font-bold text-gray-900 text-sm">{item.med_name || `Item #${item.med_stock}`}</td>
+                                                                                    <td className="px-4 py-2 font-bold text-slate-500 text-xs text-center">{item.dosage || '-'}</td>
+                                                                                    <td className="px-4 py-2 font-bold text-slate-500 text-xs text-center">{item.timing || '-'}</td>
                                                                                     <td className="px-4 py-2 font-bold text-slate-600 text-center">{item.qty}</td>
                                                                                     <td className="px-4 py-2 font-mono text-slate-500 text-xs text-right">₹{item.unit_price}</td>
                                                                                     <td className="px-4 py-2 font-black text-gray-900 text-sm text-right">₹{(item.qty * item.unit_price).toFixed(2)}</td>

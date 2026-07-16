@@ -436,66 +436,66 @@ const Reception = () => {
                         {/* --- Dashboard Stats Section --- */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                             {/* New Patients */}
-                            <div className="bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                                 <div className="flex items-center justify-between mb-4">
-                                    <div className="p-3 bg-blue-50 rounded-xl">
-                                        <UserPlus className="w-6 h-6 text-blue-600" />
+                                    <div className="p-2.5 bg-blue-600 rounded-lg shadow-sm">
+                                        <UserPlus className="w-5 h-5 text-white" />
                                     </div>
-                                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Today</span>
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Today</span>
                                 </div>
                                 <div>
-                                    <h3 className="text-3xl font-bold text-slate-900 mb-1">
+                                    <h3 className="text-3xl font-black text-slate-900 mb-1">
                                         {statsLoading ? '...' : stats.newPatients}
                                     </h3>
-                                    <p className="text-sm font-semibold text-slate-500">New Patients</p>
+                                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">New Patients</p>
                                 </div>
                             </div>
 
                             {/* Active Visits */}
-                            <div className="bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                                 <div className="flex items-center justify-between mb-4">
-                                    <div className="p-3 bg-orange-50 rounded-xl">
-                                        <Activity className="w-6 h-6 text-orange-600" />
+                                    <div className="p-2.5 bg-blue-600 rounded-lg shadow-sm">
+                                        <Activity className="w-5 h-5 text-white" />
                                     </div>
-                                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Active</span>
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active</span>
                                 </div>
                                 <div>
-                                    <h3 className="text-3xl font-bold text-slate-900 mb-1">
+                                    <h3 className="text-3xl font-black text-slate-900 mb-1">
                                         {statsLoading ? '...' : stats.activeVisits}
                                     </h3>
-                                    <p className="text-sm font-semibold text-slate-500">Active Visits</p>
+                                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Active Visits</p>
                                 </div>
                             </div>
 
                             {/* Today's Revenue */}
-                            <div className="bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                                 <div className="flex items-center justify-between mb-4">
-                                    <div className="p-3 bg-green-50 rounded-xl">
-                                        <IndianRupee className="w-6 h-6 text-green-600" />
+                                    <div className="p-2.5 bg-blue-600 rounded-lg shadow-sm">
+                                        <IndianRupee className="w-5 h-5 text-white" />
                                     </div>
-                                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Today</span>
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Today</span>
                                 </div>
                                 <div>
-                                    <h3 className="text-3xl font-bold text-slate-900 mb-1">
+                                    <h3 className="text-3xl font-black text-slate-900 mb-1">
                                         {statsLoading ? '...' : `₹${stats.todayRevenue.toLocaleString()}`}
                                     </h3>
-                                    <p className="text-sm font-semibold text-slate-500">Today's Revenue</p>
+                                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Revenue</p>
                                 </div>
                             </div>
 
-                            {/* Recent Visits */}
-                            <div className="bg-white rounded-[24px] p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                            {/* Recent Visits (Paid) */}
+                            <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                                 <div className="flex items-center justify-between mb-4">
-                                    <div className="p-3 bg-purple-50 rounded-xl">
-                                        <FileText className="w-6 h-6 text-purple-600" />
+                                    <div className="p-2.5 bg-blue-600 rounded-lg shadow-sm">
+                                        <CheckCircle2 className="w-5 h-5 text-white" />
                                     </div>
-                                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Latest</span>
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Settled</span>
                                 </div>
                                 <div>
-                                    <h3 className="text-3xl font-bold text-slate-900 mb-1">
+                                    <h3 className="text-3xl font-black text-slate-900 mb-1">
                                         {statsLoading ? '...' : stats.recentVisits.length}
                                     </h3>
-                                    <p className="text-sm font-semibold text-slate-500">Recent Visits</p>
+                                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Paid Visits</p>
                                 </div>
                             </div>
                         </div>
@@ -518,7 +518,7 @@ const Reception = () => {
                         </div>
 
                         {/* Main Data Card */}
-                        <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden animate-in fade-in duration-700">
+                        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden animate-in fade-in duration-700">
                             {loading ? (
                                 <TableSkeleton />
                             ) : (
@@ -526,11 +526,11 @@ const Reception = () => {
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-left border-collapse">
                                             <thead>
-                                                <tr className="border-b border-slate-100 bg-slate-50/50 text-[11px] uppercase tracking-widest font-bold text-slate-400">
-                                                    <th className="px-8 py-6">Patient Identity</th>
-                                                    <th className="px-6 py-6 text-center">History</th>
-                                                    <th className="px-6 py-6">Contact Info</th>
-                                                    <th className="px-6 py-6 text-right">Action</th>
+                                                <tr className="border-b border-slate-200 bg-slate-50 text-[10px] uppercase tracking-widest font-black text-slate-500">
+                                                    <th className="px-6 py-4">Patient Identity</th>
+                                                    <th className="px-6 py-4 text-center">History</th>
+                                                    <th className="px-6 py-4">Contact Info</th>
+                                                    <th className="px-6 py-4 text-right">Action</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-50">
@@ -549,43 +549,35 @@ const Reception = () => {
                                                 ) : (
                                                     patientsData.results.map((p) => (
                                                         <tr key={p.p_id} onClick={() => { setSelectedPatient(p); fetchHistory(p.p_id); }} className="group hover:bg-blue-50/30 transition-colors cursor-pointer">
-                                                            <td className="px-8 py-5">
-                                                                <div className="flex items-center gap-4">
-                                                                    <div className="relative">
-                                                                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-blue-500/20">
-                                                                            {p.full_name.charAt(0)}
-                                                                        </div>
-                                                                        <div className="absolute -bottom-1 -right-1 bg-white p-0.5 rounded-full">
-                                                                            <div className="w-3 h-3 bg-emerald-500 rounded-full border-2 border-white" />
-                                                                        </div>
-                                                                    </div>
+                                                            <td className="px-6 py-4">
+                                                                <div className="flex items-center gap-3">
                                                                     <div>
-                                                                        <p className="font-bold text-slate-900 text-[15px]">{p.full_name}</p>
-                                                                        <p className="text-xs font-bold text-slate-400 font-mono tracking-wide">
-                                                                            ID: {p.registration_number || p.p_id.slice(0, 8)} • {p.age}Y {p.age_months > 0 ? `${p.age_months}M` : ''} • {p.gender}
+                                                                        <p className="font-bold text-slate-900 text-sm">{p.full_name}</p>
+                                                                        <p className="text-[10px] font-black text-slate-400 font-mono tracking-wider uppercase mt-0.5">
+                                                                            {p.registration_number || p.p_id.slice(0, 8)} • {p.age}Y {p.age_months > 0 ? `${p.age_months}M` : ''} • {p.gender}
                                                                         </p>
                                                                     </div>
                                                                 </div>
                                                             </td>
-                                                            <td className="px-6 py-5 text-center">
-                                                                <div className="inline-flex flex-col items-center justify-center bg-slate-100 px-4 py-2 rounded-xl">
-                                                                    <span className="text-xl font-bold text-slate-900">{p.total_visits || 0}</span>
-                                                                    <span className="text-[10px] font-bold text-slate-500 uppercase">Visits</span>
+                                                            <td className="px-6 py-4 text-center">
+                                                                <div className="inline-flex flex-col items-center justify-center bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg">
+                                                                    <span className="text-sm font-black text-slate-900">{p.total_visits || 0}</span>
+                                                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Visits</span>
                                                                 </div>
                                                             </td>
-                                                            <td className="px-6 py-5">
+                                                            <td className="px-6 py-4">
                                                                 <div className="space-y-1">
-                                                                    <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                                                                        <Phone size={14} className="text-slate-400" />
+                                                                    <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                                                                        <Phone size={12} className="text-slate-400" />
                                                                         {p.phone}
                                                                     </div>
-                                                                    <div className="flex items-center gap-2 text-xs text-slate-400 truncate max-w-[200px]">
-                                                                        <MapPin size={12} />
+                                                                    <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400 truncate max-w-[200px] uppercase">
+                                                                        <MapPin size={10} />
                                                                         {p.address}
                                                                     </div>
                                                                 </div>
                                                             </td>
-                                                            <td className="px-6 py-5 text-right">
+                                                            <td className="px-6 py-4 text-right">
                                                                 <div className="flex items-center justify-end gap-2">
                                                                     <button
                                                                         onClick={(e) => handleEditPatient(p, e)}

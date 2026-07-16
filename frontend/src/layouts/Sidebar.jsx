@@ -15,7 +15,7 @@ const Sidebar = () => {
 
     const menuItems = [
         { name: 'Dashboard', icon: LayoutDashboard, path: '/', roles: ['ADMIN'] },
-        { name: 'Reception', icon: Users, path: '/reception', roles: ['ADMIN', 'RECEPTION', 'PHARMACY', 'LAB'] },
+        { name: 'Reception', icon: Users, path: '/reception', roles: ['ADMIN', 'RECEPTION', 'LAB'] },
         { name: 'Casualty', icon: Activity, path: '/casualty', roles: ['ADMIN', 'CASUALTY'] },
         { name: 'Doctor', icon: Stethoscope, path: '/doctor', roles: ['ADMIN', 'DOCTOR'] },
         { name: 'Pharmacy', icon: Pill, path: '/pharmacy', roles: ['ADMIN', 'PHARMACY'] },
@@ -67,8 +67,8 @@ const Sidebar = () => {
                             <div className={`
                                 flex items-center w-full px-4 py-3.5 rounded-2xl transition-all duration-300
                                 ${isActive
-                                    ? 'bg-slate-950 text-white shadow-lg shadow-slate-900/20'
-                                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}
+                                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+                                    : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}
                             `}>
                                 <div className="flex-shrink-0">
                                     <item.icon size={22} strokeWidth={isActive ? 2 : 1.5} />

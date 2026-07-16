@@ -302,6 +302,10 @@ class PharmacySaleItem(BaseModel):
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     gst_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0)  # GST rate applied at sale time
+    
+    # Optional fields populated from Doctor's prescription
+    dosage = models.CharField(max_length=255, blank=True)
+    timing = models.CharField(max_length=255, blank=True)
 
     def __str__(self):
         return f"{self.med_stock.name} x {self.qty}"

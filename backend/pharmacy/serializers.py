@@ -247,6 +247,8 @@ class PharmacySaleItemSerializer(serializers.ModelSerializer):
     med_name = serializers.CharField(source='med_stock.name', read_only=True)
     batch_no = serializers.CharField(source='med_stock.batch_no', read_only=True)
     expiry_date = serializers.DateField(source='med_stock.expiry_date', read_only=True)
+    dosage = serializers.CharField(required=False, allow_blank=True)
+    timing = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = PharmacySaleItem
