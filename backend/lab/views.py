@@ -25,8 +25,8 @@ class IsLabOrAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
         if not (request.user and request.user.is_authenticated):
             return False
-        # Allow LAB, ADMIN, and DOCTOR (doctors need to search lab tests for requisitions)
-        return request.user.is_superuser or getattr(request.user, "role", None) in ["LAB", "ADMIN", "DOCTOR"]
+        # Allow LAB, ADMIN, DOCTOR (for requisitions), and RECEPTION (for assigning tests & viewing results)
+        return request.user.is_superuser or getattr(request.user, "role", None) in ["LAB", "ADMIN", "DOCTOR", "RECEPTION"]
 
 
 class LabCategoryViewSet(viewsets.ModelViewSet):

@@ -31,10 +31,15 @@ class PatientViewSet(viewsets.ModelViewSet):
         
         # Filter Logic: Exclude active patients if requested
         exclude_active = self.request.query_params.get('exclude_active')
+        active_statuses = ['OPEN', 'IN_PROGRESS', 'WAITING']
         if exclude_active == 'true':
             # Exclude patients who have any active visit
-            active_statuses = ['OPEN', 'IN_PROGRESS', 'WAITING']
             qs = qs.exclude(visits__status__in=active_statuses)
+            
+        # Filter Logic: Only include active patients
+        only_active = self.request.query_params.get('only_active')
+        if only_active == 'true':
+            qs = qs.filter(visits__status__in=active_statuses).distinct()
             
         return qs
 
@@ -123,6 +128,27 @@ class VisitViewSet(viewsets.ModelViewSet):
         visit = serializer.save()
         match_role = None
         
+        # If lab_tests are passed, create LabCharge entries
+        lab_tests = self.request.data.get('lab_tests', [])
+        if lab_tests and isinstance(lab_tests, list):
+            from lab.models import LabCharge, LabTest
+            for test_id in lab_tests:
+                try:
+                    test_obj = LabTest.objects.get(id=test_id)
+                    LabCharge.objects.create(
+                        visit=visit,
+                        test_name=test_obj.name,
+                        sub_name=test_obj.sub_name,
+                        amount=test_obj.price,
+                        status='PENDING'
+                    )
+                except Exception as e:
+                    print(f"Error assigning lab test {test_id} to visit {visit.id}: {e}")
+
+            # Route to Billing first for pre-payment of lab tests
+            visit.assigned_role = 'BILLING'
+            visit.save()
+
         # Determine who to notify
         if visit.assigned_role and visit.assigned_role != 'DOCTOR':
             match_role = visit.assigned_role

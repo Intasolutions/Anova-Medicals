@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     UserPlus, Phone, User as UserIcon, ArrowRight, X,
     Activity, Thermometer, Heart, Scale, Stethoscope,
-    MapPin, ChevronRight, Search, CheckCircle2, AlertCircle, FileText, IndianRupee, Edit, Trash2
+    MapPin, ChevronRight, Search, CheckCircle2, AlertCircle, FileText, IndianRupee, Edit, Trash2,
+    Users, Info
 } from 'lucide-react';
 import { useSearch } from '../context/SearchContext';
 import { useAuth } from '../context/AuthContext';
@@ -65,6 +66,7 @@ const Reception = () => {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [activeTab, setActiveTab] = useState('front-desk'); // 'front-desk' | 'billing'
+    const [frontDeskTab, setFrontDeskTab] = useState('all'); // 'all' | 'active'
     const [editingPatientId, setEditingPatientId] = useState(null);
 
     // Modals
@@ -76,8 +78,11 @@ const Reception = () => {
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [patientHistory, setPatientHistory] = useState([]);
     const [patientInvoices, setPatientInvoices] = useState([]); // New state for invoices
-    const [historyTab, setHistoryTab] = useState('visits'); // 'visits' | 'billing'
+    const [patientLabResults, setPatientLabResults] = useState([]); // New state for lab results
+    const [historyTab, setHistoryTab] = useState('visits'); // 'visits' | 'billing' | 'lab'
     const [doctors, setDoctors] = useState([]);
+    const [availableLabTests, setAvailableLabTests] = useState([]);
+    const [selectedLabTests, setSelectedLabTests] = useState([]);
 
     // Feedback State
     const [notification, setNotification] = useState(null); // { type: 'success'|'error', message: '' }
@@ -85,6 +90,8 @@ const Reception = () => {
     // Registration Form
     const [form, setForm] = useState({ registration_number: '', full_name: '', age: '', age_months: '', gender: 'M', phone: '', address: '', medical_history: '' });
     const [errors, setErrors] = useState({});
+    const [phoneSearchResults, setPhoneSearchResults] = useState([]);
+    const [isSearchingPhone, setIsSearchingPhone] = useState(false);
 
     // Visit Form
     const [visitForm, setVisitForm] = useState({
@@ -113,7 +120,7 @@ const Reception = () => {
     useEffect(() => {
         fetchPatients(true);
         fetchStats();
-    }, [page, globalSearch, pageSize]);
+    }, [page, globalSearch, pageSize, frontDeskTab]);
 
     // Add 4-second automatic refresh
     useEffect(() => {
@@ -123,7 +130,7 @@ const Reception = () => {
         }, 4000);
 
         return () => clearInterval(interval);
-    }, [page, globalSearch, pageSize]);
+    }, [page, globalSearch, pageSize, frontDeskTab]);
 
     useEffect(() => {
         fetchStats();
@@ -139,6 +146,28 @@ const Reception = () => {
         };
     }, []);
 
+    // Phone Search Effect
+    useEffect(() => {
+        const searchPhone = async () => {
+            if (form.phone && form.phone.length === 10 && !editingPatientId) {
+                setIsSearchingPhone(true);
+                try {
+                    const { data } = await api.get(`/reception/patients/?search=${form.phone}`);
+                    setPhoneSearchResults(data.results || data);
+                } catch (err) {
+                    console.error("Phone search failed", err);
+                } finally {
+                    setIsSearchingPhone(false);
+                }
+            } else {
+                setPhoneSearchResults([]);
+            }
+        };
+
+        const timeoutId = setTimeout(searchPhone, 500);
+        return () => clearTimeout(timeoutId);
+    }, [form.phone, editingPatientId]);
+
     // --- API Functions ---
     const fetchPatients = async (showSkeleton = true) => {
         if (showSkeleton) setLoading(true);
@@ -149,6 +178,10 @@ const Reception = () => {
                 url += `&page_size=10000`;
             } else {
                 url += `&page_size=${pageSize}`;
+            }
+
+            if (frontDeskTab === 'active') {
+                url += `&only_active=true`;
             }
 
             url += `${globalSearch ? `&search=${encodeURIComponent(globalSearch)}` : ''}`;
@@ -183,14 +216,14 @@ const Reception = () => {
             const todayRevenue = invoicesRes.data.results?.filter(inv => inv.payment_status === 'PAID')
                 .reduce((sum, inv) => sum + parseFloat(inv.total_amount || 0), 0) || 0;
 
-            // Get recent visits
-            const recentVisitsRes = await api.get(`/reception/visits/?ordering=-created_at&limit=5`);
+            // Get recent visits (Settled/Paid Invoices)
+            const recentInvoicesRes = await api.get(`/billing/invoices/?payment_status=PAID&ordering=-created_at&limit=5`);
 
             setStats({
                 newPatients,
                 activeVisits,
                 todayRevenue,
-                recentVisits: recentVisitsRes.data.results || recentVisitsRes.data || []
+                recentVisits: recentInvoicesRes.data.results || recentInvoicesRes.data || []
             });
         } catch (err) {
             console.error('Error fetching stats:', err);
@@ -199,25 +232,31 @@ const Reception = () => {
         }
     };
 
-    const fetchDoctors = async () => {
+    const fetchDoctorsAndTests = async () => {
         try {
-            const { data } = await api.get('/users/management/doctors/');
-            setDoctors(data);
+            const [docsRes, testsRes] = await Promise.all([
+                api.get('/users/management/doctors/'),
+                api.get('/lab/tests/')
+            ]);
+            setDoctors(docsRes.data);
+            setAvailableLabTests(testsRes.data.results || testsRes.data);
         } catch (err) {
             console.error(err);
-            showToast('error', 'Could not fetch doctors list.');
+            showToast('error', 'Could not fetch required data.');
         }
     };
 
     const fetchHistory = async (patientId) => {
         try {
-            const [visitsRes, invoicesRes] = await Promise.all([
+            const [visitsRes, invoicesRes, labRes] = await Promise.all([
                 api.get(`/reception/visits/?patient=${patientId}`),
-                api.get(`/billing/invoices/?visit__patient=${patientId}`)
+                api.get(`/billing/invoices/?visit__patient=${patientId}`),
+                api.get(`/lab/charges/?visit__patient=${patientId}`)
             ]);
 
             setPatientHistory(visitsRes.data.results || visitsRes.data);
             setPatientInvoices(invoicesRes.data.results || invoicesRes.data); // Store invoices
+            setPatientLabResults(labRes.data.results || labRes.data); // Store lab results
 
             setShowHistoryModal(true);
             setHistoryTab('visits'); // Reset to visits tab
@@ -334,7 +373,9 @@ const Reception = () => {
 
     const handleNewVisit = async (p) => {
         setSelectedPatient(p);
-        await fetchDoctors();
+        setVisitForm({ assigned_role: 'DOCTOR', doctor: '', vitals: { temp: '', bp: '', pulse: '', weight: '' } });
+        setSelectedLabTests([]);
+        await fetchDoctorsAndTests();
         setShowVisitModal(true);
     };
 
@@ -361,11 +402,20 @@ const Reception = () => {
                 doctor: visitForm.assigned_role === 'DOCTOR' ? visitForm.doctor : null,
                 assigned_role: visitForm.assigned_role,
                 status: 'OPEN',
-                vitals: visitForm.vitals
+                vitals: visitForm.vitals,
+                lab_tests: visitForm.assigned_role === 'LAB' ? selectedLabTests : []
             });
             setShowVisitModal(false);
+            
+            if (visitForm.assigned_role === 'LAB') {
+                setActiveTab('billing');
+                showToast('success', `Redirected to Billing. Please collect payment for lab tests.`);
+            } else {
+                showToast('success', `Visit token generated for ${selectedPatient.full_name}`);
+            }
+
             setVisitForm({ assigned_role: 'DOCTOR', doctor: '', vitals: { temp: '', bp: '', pulse: '', weight: '' } });
-            showToast('success', `Visit token generated for ${selectedPatient.full_name}`);
+            setSelectedLabTests([]);
         } catch (err) {
             showToast('error', 'Failed to create visit record.');
         }
@@ -384,7 +434,7 @@ const Reception = () => {
             </AnimatePresence>
 
             {/* --- Tab Navigation Header --- */}
-            <div className="bg-white border-b border-slate-200 px-8 py-0 flex items-center justify-between flex-shrink-0 h-16 z-20 shadow-sm">
+            <div className="bg-white border-b border-slate-200 px-8 py-0 flex items-center justify-between flex-shrink-0 h-16 z-30 shadow-sm sticky top-0">
                 <div className="flex items-center gap-8 h-full">
                     <button
                         onClick={() => setActiveTab('front-desk')}
@@ -504,7 +554,20 @@ const Reception = () => {
                         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
                             <div>
                                 <h1 className="text-3xl font-bold tracking-tight text-slate-950">Patient Management</h1>
-                                <p className="text-slate-500 font-medium mt-1">Register new patients and manage daily visits.</p>
+                                <div className="flex items-center gap-4 mt-4">
+                                    <button 
+                                        onClick={() => { setFrontDeskTab('all'); setPage(1); }}
+                                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${frontDeskTab === 'all' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}
+                                    >
+                                        All Patients
+                                    </button>
+                                    <button 
+                                        onClick={() => { setFrontDeskTab('active'); setPage(1); }}
+                                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${frontDeskTab === 'active' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}
+                                    >
+                                        Active Patients
+                                    </button>
+                                </div>
                             </div>
                             <button
                                 onClick={handleAddNewPatient}
@@ -593,12 +656,24 @@ const Reception = () => {
                                                                     >
                                                                         <Trash2 size={16} />
                                                                     </button>
-                                                                    <button
-                                                                        onClick={(e) => handleApproveCasualty(e, p)}
-                                                                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 text-red-600 border border-red-100 text-xs font-bold hover:bg-red-600 hover:text-white transition-all shadow-sm active:scale-95"
-                                                                    >
-                                                                        Approve to Casualty
-                                                                    </button>
+                                                                    {p.active_visit_role ? (
+                                                                        <div className={`inline-flex flex-col items-center justify-center px-3 py-1.5 rounded-lg border ${
+                                                                            p.active_visit_role === 'DOCTOR' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' :
+                                                                            p.active_visit_role === 'LAB' ? 'bg-purple-50 border-purple-200 text-purple-700' :
+                                                                            p.active_visit_role === 'BILLING' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                                                                            'bg-blue-50 border-blue-200 text-blue-700'
+                                                                        }`}>
+                                                                            <span className="text-[10px] font-black uppercase tracking-widest">{p.active_visit_role}</span>
+                                                                            <span className="text-[8px] font-black opacity-50 uppercase tracking-widest">Active Phase</span>
+                                                                        </div>
+                                                                    ) : (
+                                                                        <button
+                                                                            onClick={(e) => { e.stopPropagation(); handleNewVisit(p); }}
+                                                                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-all shadow-sm active:scale-95"
+                                                                        >
+                                                                            Start Visit
+                                                                        </button>
+                                                                    )}
                                                                 </div>
                                                             </td>
                                                         </tr>
@@ -672,6 +747,77 @@ const Reception = () => {
                                         <div className="p-10 space-y-6 overflow-y-auto custom-scrollbar">
                                             <div className="space-y-4">
                                                 <div>
+                                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Contact Number (Primary)</label>
+                                                    <div className={`flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border-2 transition-all ${errors.phone ? 'border-rose-200 bg-rose-50' : 'border-slate-100 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10'}`}>
+                                                        <Phone className={errors.phone ? "text-rose-400" : "text-slate-400"} size={20} />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Enter 10-digit Mobile Number..."
+                                                            maxLength={10}
+                                                            className="flex-1 bg-transparent font-black text-lg text-slate-900 placeholder:text-slate-400 outline-none tracking-wider"
+                                                            value={form.phone}
+                                                            onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                                                            autoFocus={!editingPatientId}
+                                                        />
+                                                        {isSearchingPhone && <Activity className="animate-spin text-blue-500" size={20} />}
+                                                    </div>
+                                                    {errors.phone && <p className="text-xs font-bold text-rose-500 mt-2 ml-2 flex items-center gap-1"><AlertCircle size={12} /> {errors.phone}</p>}
+                                                    
+                                                    {/* Existing Patients Alert */}
+                                                    {phoneSearchResults.length > 0 && !editingPatientId && (
+                                                        <div className="mt-3 bg-blue-50 border border-blue-100 rounded-xl p-4 animate-in fade-in slide-in-from-top-2">
+                                                            <div className="flex items-center gap-2 mb-3">
+                                                                <Users className="text-blue-600" size={16} />
+                                                                <p className="text-xs font-bold text-blue-900 uppercase tracking-wider">Existing Profiles Found</p>
+                                                            </div>
+                                                            <div className="space-y-2">
+                                                                {phoneSearchResults.map(p => (
+                                                                    <div key={p.p_id} className="flex items-center justify-between bg-white p-3 rounded-lg border border-blue-100 shadow-sm">
+                                                                        <div>
+                                                                            <p className="text-sm font-bold text-slate-900">{p.full_name}</p>
+                                                                            <p className="text-xs text-slate-500">{p.age} Yrs • {p.gender === 'M' ? 'Male' : 'Female'}</p>
+                                                                            {p.address && <p className="text-[10px] text-slate-400 mt-1 flex items-center gap-1"><MapPin size={10}/> {p.address}</p>}
+                                                                            <p className="text-[10px] text-slate-400 mt-0.5">Last Visit: {p.created_at ? new Date(p.created_at).toLocaleDateString() : 'N/A'}</p>
+                                                                        </div>
+                                                                        <div className="flex gap-2">
+                                                                            <button 
+                                                                                type="button"
+                                                                                onClick={() => {
+                                                                                    // Pre-fill family address, etc.
+                                                                                    setForm(prev => ({
+                                                                                        ...prev,
+                                                                                        address: p.address || prev.address
+                                                                                    }));
+                                                                                    showToast('success', `Copied family details from ${p.full_name}`);
+                                                                                }}
+                                                                                className="px-3 py-1.5 bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900 rounded-lg text-xs font-bold transition-colors"
+                                                                            >
+                                                                                Use Address
+                                                                            </button>
+                                                                            <button 
+                                                                                type="button"
+                                                                                onClick={() => {
+                                                                                    setShowAddModal(false);
+                                                                                    setSelectedPatient(p);
+                                                                                    setShowVisitModal(true);
+                                                                                }}
+                                                                                className="px-3 py-1.5 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 shadow-md shadow-blue-500/20"
+                                                                            >
+                                                                                <span>Start Next Visit</span>
+                                                                                <ChevronRight size={14} />
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                            <p className="text-[10px] font-bold text-blue-700 mt-3 flex items-center gap-1 uppercase tracking-widest">
+                                                                <AlertCircle size={12} /> Or fill the form below to add a new family member
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div>
                                                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Full Name</label>
                                                     <div className={`flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border-2 transition-all ${errors.full_name ? 'border-rose-200 bg-rose-50' : 'border-slate-100 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10'}`}>
                                                         <UserIcon className={errors.full_name ? "text-rose-400" : "text-slate-400"} size={20} />
@@ -724,22 +870,6 @@ const Reception = () => {
                                                             ))}
                                                         </div>
                                                     </div>
-                                                </div>
-
-                                                <div>
-                                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Contact Number</label>
-                                                    <div className={`flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border-2 transition-all ${errors.phone ? 'border-rose-200 bg-rose-50' : 'border-slate-100 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10'}`}>
-                                                        <Phone className={errors.phone ? "text-rose-400" : "text-slate-400"} size={20} />
-                                                        <input
-                                                            type="text"
-                                                            placeholder="9876543210"
-                                                            maxLength={10}
-                                                            className="flex-1 bg-transparent font-semibold text-slate-900 placeholder:text-slate-400 outline-none"
-                                                            value={form.phone}
-                                                            onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                                                        />
-                                                    </div>
-                                                    {errors.phone && <p className="text-xs font-bold text-rose-500 mt-2 ml-2 flex items-center gap-1"><AlertCircle size={12} /> {errors.phone}</p>}
                                                 </div>
 
                                                 <div>
@@ -928,7 +1058,6 @@ const Reception = () => {
                                                 >
                                                     <option value="DOCTOR">Doctor (Consultation)</option>
                                                     <option value="LAB">Laboratory</option>
-                                                    <option value="CASUALTY">Casualty / Emergency</option>
                                                 </select>
                                             </div>
 
@@ -941,20 +1070,20 @@ const Reception = () => {
                                                         <div
                                                             key={doc.u_id}
                                                             onClick={() => setVisitForm({ ...visitForm, doctor: doc.u_id })}
-                                                            className={`p-4 rounded-2xl border-2 transition-all cursor-pointer flex items-center gap-4 group ${visitForm.doctor === doc.u_id
-                                                                ? 'border-blue-600 bg-blue-50 shadow-md'
+                                                            className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center gap-4 group ${visitForm.doctor === doc.u_id
+                                                                ? 'border-blue-600 bg-blue-50 shadow-sm'
                                                                 : 'border-slate-100 hover:border-blue-200 hover:bg-slate-50'
                                                                 }`}
                                                         >
-                                                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors ${visitForm.doctor === doc.u_id ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 group-hover:text-blue-500'
+                                                            <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${visitForm.doctor === doc.u_id ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 group-hover:text-blue-500'
                                                                 }`}>
-                                                                <UserIcon size={20} />
+                                                                <UserIcon size={18} />
                                                             </div>
                                                             <div className="flex-1">
                                                                 <p className={`font-bold text-sm ${visitForm.doctor === doc.u_id ? 'text-blue-900' : 'text-slate-900'}`}>
                                                                     Dr. {doc.username}
                                                                 </p>
-                                                                <p className="text-xs text-slate-400 font-medium">Available Now</p>
+                                                                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Available Now</p>
                                                             </div>
                                                             <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${visitForm.doctor === doc.u_id ? 'border-blue-600' : 'border-slate-300'
                                                                 }`}>
@@ -964,17 +1093,46 @@ const Reception = () => {
                                                     ))}
                                                 </div>
                                             ) : (
-                                                <div className="flex-1 flex flex-col items-center justify-center text-center p-6 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                                                    <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mb-3 shadow-sm">
-                                                        {visitForm.assigned_role === 'LAB' && <Activity className="text-blue-500" size={32} />}
-                                                        {visitForm.assigned_role === 'CASUALTY' && <AlertCircle className="text-red-500" size={32} />}
+                                                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar flex flex-col">
+                                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Select Lab Tests (Optional)</label>
+                                                    {availableLabTests.length === 0 ? (
+                                                        <p className="text-sm text-slate-400 text-center py-4">No lab tests available.</p>
+                                                    ) : (
+                                                        <div className="space-y-2">
+                                                            {availableLabTests.map(test => {
+                                                                const isSelected = selectedLabTests.includes(test.id);
+                                                                return (
+                                                                    <div
+                                                                        key={test.id}
+                                                                        onClick={() => {
+                                                                            if (isSelected) {
+                                                                                setSelectedLabTests(selectedLabTests.filter(id => id !== test.id));
+                                                                            } else {
+                                                                                setSelectedLabTests([...selectedLabTests, test.id]);
+                                                                            }
+                                                                        }}
+                                                                        className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                                                                            isSelected ? 'border-blue-500 bg-blue-50/50' : 'border-slate-100 hover:border-slate-200'
+                                                                        }`}
+                                                                    >
+                                                                        <div>
+                                                                            <p className="text-sm font-bold text-slate-900">{test.name}</p>
+                                                                            <p className="text-xs text-slate-500 font-medium">₹{test.price}</p>
+                                                                        </div>
+                                                                        <div className={`w-5 h-5 rounded flex items-center justify-center border ${
+                                                                            isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'
+                                                                        }`}>
+                                                                            {isSelected && <CheckCircle2 size={14} />}
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                    <div className="mt-4 p-4 bg-blue-50/50 rounded-xl border border-blue-100 text-xs font-medium text-blue-800 flex gap-2">
+                                                        <AlertCircle size={16} className="text-blue-500 shrink-0" />
+                                                        <p>Patient will be sent to the billing queue for these tests before proceeding to the laboratory.</p>
                                                     </div>
-                                                    <h4 className="font-bold text-slate-900">
-                                                        Assign to {visitForm.assigned_role === 'LAB' ? 'Laboratory' : 'Casualty'}
-                                                    </h4>
-                                                    <p className="text-xs text-slate-500 mt-1 max-w-[200px]">
-                                                        Patient will be added to the {visitForm.assigned_role.toLowerCase()} queue directly.
-                                                    </p>
                                                 </div>
                                             )}
 
@@ -1031,6 +1189,14 @@ const Reception = () => {
                                                 onClick={() => setHistoryTab('billing')}
                                             >
                                                 Billing
+                                            </button>
+                                            <button
+                                                className={`flex-1 py-3 text-sm font-bold transition-all ${historyTab === 'lab'
+                                                    ? 'text-purple-600 border-b-2 border-purple-600 bg-purple-50/50'
+                                                    : 'text-slate-500 hover:text-slate-700'}`}
+                                                onClick={() => setHistoryTab('lab')}
+                                            >
+                                                Lab Results
                                             </button>
                                         </div>
 
@@ -1090,7 +1256,7 @@ const Reception = () => {
                                                         </div>
                                                     ))
                                                 )
-                                            ) : (
+                                            ) : historyTab === 'billing' ? (
                                                 patientInvoices.length === 0 ? (
                                                     <p className="text-center text-slate-400 py-10">No invoices found for this patient.</p>
                                                 ) : (
@@ -1159,7 +1325,38 @@ const Reception = () => {
                                                         </div>
                                                     ))
                                                 )
-                                            )}
+                                            ) : historyTab === 'lab' ? (
+                                                patientLabResults.length === 0 ? (
+                                                    <p className="text-center text-slate-400 py-10">No lab results found for this patient.</p>
+                                                ) : (
+                                                    patientLabResults.map((test) => (
+                                                        <div key={test.id} className="p-4 rounded-2xl border border-slate-100 bg-slate-50 hover:border-purple-200 transition-all space-y-3">
+                                                            <div className="flex justify-between items-start">
+                                                                <div>
+                                                                    <p className="font-bold text-slate-900 text-sm">{test.test_name}</p>
+                                                                    <span className="text-xs font-bold text-slate-400">{(() => { const d = new Date(test.created_at); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()}</span>
+                                                                </div>
+                                                                <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${test.status === 'COMPLETED' ? 'bg-purple-100 text-purple-700' : test.status === 'PENDING' ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-700'}`}>
+                                                                    {test.status}
+                                                                </span>
+                                                            </div>
+                                                            {test.status === 'COMPLETED' && test.results && Object.keys(test.results).length > 0 && (
+                                                                <div className="bg-white p-3 rounded-xl border border-slate-200">
+                                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Test Results</p>
+                                                                    <div className="space-y-1">
+                                                                        {Object.entries(test.results).map(([param, val], idx) => (
+                                                                            <div key={idx} className="flex justify-between items-center text-xs">
+                                                                                <span className="font-bold text-slate-700">{param}</span>
+                                                                                <span className="text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">{val}</span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))
+                                                )
+                                            ) : null}
                                         </div>
                                     </motion.div>
                                 </div>

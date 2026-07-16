@@ -40,10 +40,15 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         invoice = serializer.save()
         self._deduct_stock(invoice)
         
-        # Close the visit and reset role to prevent it from showing in 'Ready for Billing'
+        # Only close the visit if it is fully paid AND there are no pending lab charges
         if invoice.visit:
             visit = invoice.visit
-            visit.status = 'CLOSED'
+            if invoice.payment_status == 'PAID':
+                if visit.lab_charges.filter(status='PENDING').exists():
+                    visit.assigned_role = 'LAB'
+                    visit.status = 'OPEN'
+                else:
+                    visit.status = 'CLOSED'
             visit.save()
 
     @transaction.atomic
@@ -158,6 +163,14 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         # Allow small buffer for float errors (converted to Decimal)
         if total_paid >= invoice.total_amount - Decimal('0.5'):
             invoice.payment_status = 'PAID'
+            if invoice.visit and invoice.visit.lab_charges.filter(status='PENDING').exists():
+                invoice.visit.assigned_role = 'LAB'
+                invoice.visit.status = 'OPEN'
+                invoice.visit.save()
+            else:
+                if invoice.visit:
+                    invoice.visit.status = 'CLOSED'
+                    invoice.visit.save()
         else:
             invoice.payment_status = 'PENDING'
             

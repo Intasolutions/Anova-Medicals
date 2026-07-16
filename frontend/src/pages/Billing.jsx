@@ -570,6 +570,22 @@ const Billing = () => {
             const uniqueCasualtyMeds = visitCasualtyMedicines.filter(i => !existingKeys.has(`${i.description}-${i.batch || ''}`)); // Using description-batch for meds
             const uniqueCasualtyServices = visitCasualtyServices.filter(i => !existingKeys.has(`${i.description}-`)); // Services have no batch
 
+            // Sync Lab Items
+            const visitLabItems = ((visitData && visitData.lab_charges_data) || []).map(item => ({
+                dept: "LAB",
+                description: item.test_name,
+                qty: 1,
+                unit_price: parseFloat(item.amount),
+                amount: parseFloat(item.amount),
+                hsn: "",
+                batch: "",
+                gst_percent: 0,
+                stock_deducted: false,
+                deducted_qty: 0
+            }));
+
+            const uniqueLabItems = visitLabItems.filter(i => !existingKeys.has(`${i.description}-`));
+
             setFormData({
                 id: invoice.id,
                 patient_name: invoice.patient_name,
@@ -582,7 +598,8 @@ const Billing = () => {
                     ...baseItems.map(i => ({ ...i, stock_deducted: true })),
                     ...uniquePharmacyItems,
                     ...uniqueCasualtyMeds,
-                    ...uniqueCasualtyServices
+                    ...uniqueCasualtyServices,
+                    ...uniqueLabItems
                 ]
             });
 

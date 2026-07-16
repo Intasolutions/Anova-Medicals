@@ -34,7 +34,13 @@ class UserViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ['username', 'email', 'role']
 
-    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def get_permissions(self):
+        if self.action == 'doctors':
+            from core.permissions import IsHospitalStaff
+            return [IsHospitalStaff()]
+        return super().get_permissions()
+
+    @action(detail=False, methods=['get'])
     def doctors(self, request):
         doctors = User.objects.filter(role='DOCTOR', is_active=True)
         # doctors = self.filter_queryset(doctors)  <-- Removed to prevent unexpected filtering
