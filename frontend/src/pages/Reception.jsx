@@ -83,6 +83,7 @@ const Reception = () => {
     const [doctors, setDoctors] = useState([]);
     const [availableLabTests, setAvailableLabTests] = useState([]);
     const [selectedLabTests, setSelectedLabTests] = useState([]);
+    const [labTestSearchQ, setLabTestSearchQ] = useState('');
 
     // Feedback State
     const [notification, setNotification] = useState(null); // { type: 'success'|'error', message: '' }
@@ -334,6 +335,7 @@ const Reception = () => {
             registration_number: p.registration_number || '',
             full_name: p.full_name || '',
             age: p.age || '',
+            age_months: p.age_months || '',
             gender: p.gender || 'M',
             phone: p.phone || '',
             address: p.address || '',
@@ -365,7 +367,7 @@ const Reception = () => {
     };
 
     const handleAddNewPatient = () => {
-        setForm({ registration_number: '', full_name: '', age: '', gender: 'M', phone: '', address: '', medical_history: '' });
+        setForm({ registration_number: '', full_name: '', age: '', age_months: '', gender: 'M', phone: '', address: '', medical_history: '' });
         setEditingPatientId(null);
         setErrors({});
         setShowAddModal(true);
@@ -398,7 +400,7 @@ const Reception = () => {
         e.preventDefault();
         try {
             await api.post('/reception/visits/', {
-                patient: selectedPatient.p_id,
+                patient: selectedPatient.p_id || selectedPatient.id,
                 doctor: visitForm.assigned_role === 'DOCTOR' ? visitForm.doctor : null,
                 assigned_role: visitForm.assigned_role,
                 status: 'OPEN',
@@ -960,7 +962,7 @@ const Reception = () => {
                                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                                         animate={{ opacity: 1, scale: 1, y: 0 }}
                                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                                        className="relative bg-white w-full max-w-4xl rounded-[32px] shadow-2xl overflow-hidden flex flex-col md:flex-row"
+                                        className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl overflow-hidden flex flex-col md:flex-row"
                                     >
                                         {/* Left: Vitals */}
                                         <div className="md:w-1/2 p-8 border-r border-slate-100 bg-slate-50/50">
@@ -1093,13 +1095,25 @@ const Reception = () => {
                                                     ))}
                                                 </div>
                                             ) : (
-                                                <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar flex flex-col">
-                                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Select Lab Tests (Optional)</label>
-                                                    {availableLabTests.length === 0 ? (
-                                                        <p className="text-sm text-slate-400 text-center py-4">No lab tests available.</p>
+                                                <div className="flex-1 overflow-hidden flex flex-col pt-2">
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Select Lab Tests (Optional)</label>
+                                                    </div>
+                                                    <div className="relative mb-3 flex-shrink-0">
+                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Search lab tests..."
+                                                            className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                                                            value={labTestSearchQ}
+                                                            onChange={(e) => setLabTestSearchQ(e.target.value)}
+                                                        />
+                                                    </div>
+                                                    {availableLabTests.filter(t => t.name.toLowerCase().includes(labTestSearchQ.toLowerCase())).length === 0 ? (
+                                                        <p className="text-sm text-slate-400 text-center py-4">No lab tests match your search.</p>
                                                     ) : (
-                                                        <div className="space-y-2">
-                                                            {availableLabTests.map(test => {
+                                                        <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                                                            {availableLabTests.filter(t => t.name.toLowerCase().includes(labTestSearchQ.toLowerCase())).map(test => {
                                                                 const isSelected = selectedLabTests.includes(test.id);
                                                                 return (
                                                                     <div
@@ -1129,7 +1143,7 @@ const Reception = () => {
                                                             })}
                                                         </div>
                                                     )}
-                                                    <div className="mt-4 p-4 bg-blue-50/50 rounded-xl border border-blue-100 text-xs font-medium text-blue-800 flex gap-2">
+                                                    <div className="mt-4 p-4 bg-blue-50/50 rounded-xl border border-blue-100 text-xs font-medium text-blue-800 flex gap-2 flex-shrink-0">
                                                         <AlertCircle size={16} className="text-blue-500 shrink-0" />
                                                         <p>Patient will be sent to the billing queue for these tests before proceeding to the laboratory.</p>
                                                     </div>
@@ -1138,7 +1152,7 @@ const Reception = () => {
 
                                             <button
                                                 onClick={submitVisit}
-                                                disabled={visitForm.assigned_role === 'DOCTOR' && !visitForm.doctor}
+                                                disabled={(visitForm.assigned_role === 'DOCTOR' && !visitForm.doctor) || (visitForm.assigned_role === 'LAB' && selectedLabTests.length === 0)}
                                                 className="mt-6 w-full py-4 bg-slate-950 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-2xl shadow-xl shadow-slate-900/20 transition-all active:scale-[0.98] flex items-center justify-center gap-3"
                                             >
                                                 <span>Generate Token</span>
@@ -1224,16 +1238,27 @@ const Reception = () => {
                                                             )}
 
                                                             {/* Prescription */}
-                                                            {visit.prescription && Object.keys(visit.prescription).length > 0 && (
+                                                            {visit.prescription && (Array.isArray(visit.prescription) ? visit.prescription.length > 0 : Object.keys(visit.prescription).length > 0) && (
                                                                 <div className="bg-white p-3 rounded-xl border border-slate-200">
                                                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Prescription</p>
                                                                     <div className="space-y-2">
-                                                                        {Object.entries(visit.prescription).map(([med, details], idx) => (
-                                                                            <div key={idx} className="flex justify-between items-start text-xs border-b border-slate-50 last:border-0 pb-1 last:pb-0">
-                                                                                <span className="font-bold text-slate-800">{med}</span>
-                                                                                <span className="text-slate-500 text-[10px]">{details}</span>
-                                                                            </div>
-                                                                        ))}
+                                                                        {Array.isArray(visit.prescription) ? (
+                                                                            visit.prescription.map((med, idx) => (
+                                                                                <div key={idx} className="flex justify-between items-start text-xs border-b border-slate-50 last:border-0 pb-1 last:pb-0">
+                                                                                    <span className="font-bold text-slate-800">{med.name || med.medication || 'Medicine'}</span>
+                                                                                    <span className="text-slate-500 text-[10px]">{med.dosage || ''} {med.duration ? `• ${med.duration}` : ''}</span>
+                                                                                </div>
+                                                                            ))
+                                                                        ) : (
+                                                                            Object.entries(visit.prescription).map(([med, details], idx) => (
+                                                                                <div key={idx} className="flex justify-between items-start text-xs border-b border-slate-50 last:border-0 pb-1 last:pb-0">
+                                                                                    <span className="font-bold text-slate-800">{med}</span>
+                                                                                    <span className="text-slate-500 text-[10px]">
+                                                                                        {typeof details === 'object' ? `${details.dosage || ''} ${details.duration || ''}` : String(details)}
+                                                                                    </span>
+                                                                                </div>
+                                                                            ))
+                                                                        )}
                                                                     </div>
                                                                 </div>
                                                             )}
@@ -1264,7 +1289,7 @@ const Reception = () => {
                                                         <div key={inv.id} className="p-4 rounded-2xl border border-slate-100 bg-slate-50 hover:border-indigo-200 transition-all group space-y-3">
                                                             <div className="flex justify-between items-start">
                                                                 <div>
-                                                                    <p className="font-bold text-slate-900 text-sm">Invoice #{inv.id.toString().slice(0, 8)}</p>
+                                                                    <p className="font-bold text-slate-900 text-sm">{inv.invoice_number || `Invoice #${inv.id.toString().slice(0, 8).toUpperCase()}`}</p>
                                                                     <span className="text-xs font-bold text-slate-400">{(() => { const d = new Date(inv.created_at); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()}</span>
                                                                 </div>
                                                                 <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${inv.payment_status === 'PAID' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
@@ -1345,9 +1370,16 @@ const Reception = () => {
                                                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Test Results</p>
                                                                     <div className="space-y-1">
                                                                         {Object.entries(test.results).map(([param, val], idx) => (
-                                                                            <div key={idx} className="flex justify-between items-center text-xs">
-                                                                                <span className="font-bold text-slate-700">{param}</span>
-                                                                                <span className="text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">{val}</span>
+                                                                            <div key={idx} className="flex justify-between items-center text-xs border-b border-slate-50 last:border-0 pb-1 last:pb-0">
+                                                                                <span className="font-bold text-slate-700">{typeof val === 'object' && val?.name ? val.name : param}</span>
+                                                                                <div className="text-right">
+                                                                                    <span className="text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-100 font-mono font-bold">
+                                                                                        {typeof val === 'object' && val !== null ? val.value : String(val)}
+                                                                                    </span>
+                                                                                    {typeof val === 'object' && val?.unit && (
+                                                                                        <span className="text-[9px] text-slate-400 ml-1">{val.unit}</span>
+                                                                                    )}
+                                                                                </div>
                                                                             </div>
                                                                         ))}
                                                                     </div>

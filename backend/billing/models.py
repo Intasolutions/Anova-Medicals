@@ -11,9 +11,23 @@ class Invoice(BaseModel):
     payment_status = models.CharField(max_length=20, default='PENDING', choices=PAYMENT_STATUS)
     payment_mode = models.CharField(max_length=20, null=True, blank=True, choices=(('CASH', 'Cash'), ('UPI', 'Google Pay / UPI'), ('CARD', 'Card')))
     remarks = models.TextField(null=True, blank=True)
+    invoice_number = models.CharField(max_length=50, unique=True, blank=True, null=True)
+
+    def save(self, *args, **kwargs):
+        if not self.invoice_number:
+            last_invoice = Invoice.objects.all().order_by('created_at').last()
+            if not last_invoice or not last_invoice.invoice_number:
+                self.invoice_number = "INV-1000"
+            else:
+                try:
+                    last_num = int(last_invoice.invoice_number.split('-')[1])
+                    self.invoice_number = f"INV-{last_num + 1}"
+                except (IndexError, ValueError):
+                    self.invoice_number = f"INV-1000"
+        super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"Invoice {self.id} - {self.total_amount}"
+        return f"{self.invoice_number or self.id} - {self.total_amount}"
 
 class InvoiceItem(BaseModel):
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='items')

@@ -24,10 +24,16 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Invoice.objects.all().order_by('-created_at')
         
+        date_str = self.request.query_params.get('date')
         month = self.request.query_params.get('month')
         year = self.request.query_params.get('year')
         
-        if month and year:
+        if date_str:
+            try:
+                queryset = queryset.filter(created_at__date=date_str)
+            except ValueError:
+                pass
+        elif month and year:
             try:
                 queryset = queryset.filter(created_at__month=month, created_at__year=year)
             except ValueError:
@@ -133,6 +139,17 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
         from django.db import transaction
         
+        # Calculate proposed total
+        proposed_total = sum(float(p.get('amount') or 0) for p in payments_list if float(p.get('amount') or 0) > 0)
+        current_paid = sum(p.amount for p in invoice.payments.all())
+        from decimal import Decimal
+        
+        if proposed_total <= 0:
+            return Response({'error': 'Payment amount must be greater than zero.'}, status=400)
+            
+        if (current_paid + Decimal(str(proposed_total))) > invoice.total_amount + Decimal('0.5'):
+            return Response({'error': 'Total payment exceeds invoice balance due.'}, status=400)
+        
         with transaction.atomic():
             for payment in payments_list:
                 amount_val = payment.get('amount')
@@ -171,6 +188,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 if invoice.visit:
                     invoice.visit.status = 'CLOSED'
                     invoice.visit.save()
+        elif total_paid > 0:
+            invoice.payment_status = 'PARTIAL'
         else:
             invoice.payment_status = 'PENDING'
             
@@ -194,20 +213,30 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def stats(self, request):
         today = timezone.now().date()
+        date_str = request.query_params.get('date')
         
-        # Get query params for month/year, default to current
-        try:
-            current_month = int(request.query_params.get('month', timezone.now().month))
-            current_year = int(request.query_params.get('year', timezone.now().year))
-        except ValueError:
-            current_month = timezone.now().month
-            current_year = timezone.now().year
+        monthly_payments = PaymentTransaction.objects.all()
+        pending_query = Invoice.objects.filter(payment_status='PENDING')
+        
+        if date_str:
+            try:
+                monthly_payments = monthly_payments.filter(created_at__date=date_str)
+                pending_query = pending_query.filter(created_at__date=date_str)
+            except ValueError:
+                pass
+        else:
+            # Get query params for month/year, default to current
+            try:
+                current_month = int(request.query_params.get('month', timezone.now().month))
+                current_year = int(request.query_params.get('year', timezone.now().year))
+            except ValueError:
+                current_month = timezone.now().month
+                current_year = timezone.now().year
+                
+            monthly_payments = monthly_payments.filter(created_at__month=current_month, created_at__year=current_year)
+            pending_query = pending_query.filter(created_at__month=current_month, created_at__year=current_year)
 
-        # 1. Total Collection This Month (Sum of all PaymentTransactions in filtered month)
-        monthly_payments = PaymentTransaction.objects.filter(
-            created_at__month=current_month,
-            created_at__year=current_year
-        )
+        # 1. Total Collection
         total_monthly_collection = monthly_payments.aggregate(Sum('amount'))['amount__sum'] or 0
         
         # 2. Breakdown
@@ -228,20 +257,13 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         
         collection_today = PaymentTransaction.objects.filter(created_at__date=today).aggregate(Sum('amount'))['amount__sum'] or 0
 
-        # Pending Amount (Global or Monthly?) -> "Pending" is usually a current state of liability.
-        # Filtering it by month means "Invoices created in this month that are still pending".
-        # Let's filter pending by the selected month/year too to keep context.
-        pending_query = Invoice.objects.filter(payment_status='PENDING')
-        if request.query_params.get('month') and request.query_params.get('year'):
-             pending_query = pending_query.filter(created_at__month=current_month, created_at__year=current_year)
-             
-        pending = pending_query.aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+        total_pending = pending_query.aggregate(Sum('balance_due'))['balance_due__sum'] or 0
         
         count = Invoice.objects.filter(created_at__date=today).count()
 
         return Response({
             'revenue_today': collection_today,
-            'pending_amount': pending,
+            'pending_amount': total_pending,
             'invoices_today': count,
             'monthly_total': total_monthly_collection,
             'monthly_breakdown': {

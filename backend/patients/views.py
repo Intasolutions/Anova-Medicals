@@ -2,6 +2,7 @@ from rest_framework import viewsets, permissions, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
+from django.db.models import Exists, OuterRef
 from revive_cms.utils import export_to_csv
 
 from .models import Patient, Visit
@@ -27,19 +28,26 @@ class PatientViewSet(viewsets.ModelViewSet):
     search_fields = ['full_name', 'phone', 'registration_number']
 
     def get_queryset(self):
-        qs = Patient.objects.all().order_by('-created_at')
+        active_statuses = ['OPEN', 'IN_PROGRESS', 'WAITING']
+        
+        active_visits_subquery = Visit.objects.filter(
+            patient=OuterRef('pk'),
+            status__in=active_statuses
+        )
+        
+        qs = Patient.objects.annotate(
+            has_active_visit=Exists(active_visits_subquery)
+        ).order_by('has_active_visit', '-created_at')
         
         # Filter Logic: Exclude active patients if requested
         exclude_active = self.request.query_params.get('exclude_active')
-        active_statuses = ['OPEN', 'IN_PROGRESS', 'WAITING']
         if exclude_active == 'true':
-            # Exclude patients who have any active visit
-            qs = qs.exclude(visits__status__in=active_statuses)
+            qs = qs.filter(has_active_visit=False)
             
         # Filter Logic: Only include active patients
         only_active = self.request.query_params.get('only_active')
         if only_active == 'true':
-            qs = qs.filter(visits__status__in=active_statuses).distinct()
+            qs = qs.filter(has_active_visit=True)
             
         return qs
 

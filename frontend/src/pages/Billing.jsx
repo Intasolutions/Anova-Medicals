@@ -27,21 +27,7 @@ const Billing = () => {
     const globalSearch = searchTerm; // Map searchTerm to globalSearch for compatibility with the copied logic
 
     // --- Date Filter State ---
-    const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1); // 1-12
-    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-
-    const MONTHS = [
-        { value: 1, label: 'January' }, { value: 2, label: 'February' }, { value: 3, label: 'March' },
-        { value: 4, label: 'April' }, { value: 5, label: 'May' }, { value: 6, label: 'June' },
-        { value: 7, label: 'July' }, { value: 8, label: 'August' }, { value: 9, label: 'September' },
-        { value: 10, label: 'October' }, { value: 11, label: 'November' }, { value: 12, label: 'December' }
-    ];
-
-    const generateYears = () => {
-        const currentYear = new Date().getFullYear();
-        return Array.from({ length: 5 }, (_, i) => currentYear - i);
-    };
-    const YEARS = generateYears();
+    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
     // --- Forms ---
     const [doctors, setDoctors] = useState([]);
@@ -97,13 +83,13 @@ const Billing = () => {
             socket.off('pharmacy_sale_update', onPharmacySale);
         };
 
-    }, [page, globalSearch, selectedMonth, selectedYear]);
+    }, [page, globalSearch, selectedDate]);
 
     // --- API Calls ---
     const fetchInvoices = async (showLoading = true) => {
         if (showLoading) setLoading(true);
         try {
-            const { data } = await api.get(`/billing/invoices/?page=${page}${globalSearch ? `&search=${encodeURIComponent(globalSearch)}` : ''}&month=${selectedMonth}&year=${selectedYear}`);
+            const { data } = await api.get(`/billing/invoices/?page=${page}${globalSearch ? `&search=${encodeURIComponent(globalSearch)}` : ''}${selectedDate ? `&date=${selectedDate}` : ''}`);
             setInvoices(data.results || (Array.isArray(data) ? data : []));
         } catch (err) {
             showToast('error', 'Failed to load invoices.');
@@ -130,7 +116,7 @@ const Billing = () => {
     const fetchStats = async (showLoading = false) => {
         if (showLoading) setLoading(true);
         try {
-            const { data } = await api.get(`/billing/invoices/stats/?month=${selectedMonth}&year=${selectedYear}`);
+            const { data } = await api.get(`/billing/invoices/stats/?${selectedDate ? `date=${selectedDate}` : ''}`);
             setStats(data);
         } catch (err) {
             console.error('Failed to load billing stats', err);
@@ -482,12 +468,26 @@ const Billing = () => {
         };
 
         try {
-            if (formData.id) await api.patch(`billing/invoices/${formData.id}/`, invoiceData);
-            else await api.post(`billing/invoices/`, invoiceData);
+            let savedInvoice;
+            if (formData.id) {
+                const res = await api.patch(`billing/invoices/${formData.id}/`, invoiceData);
+                savedInvoice = res.data;
+            } else {
+                const res = await api.post(`billing/invoices/`, invoiceData);
+                savedInvoice = res.data;
+            }
             setShowModal(false);
             setFormData({ patient_name: "", visit: null, doctor: "", payment_status: "PENDING", items: [] });
-            fetchInvoices(); fetchStats(); fetchPendingVisits();
-            showToast('success', "Invoice saved successfully!");
+            fetchInvoices(false); fetchStats(false); fetchPendingVisits(false);
+            
+            // Highlight payment by automatically opening the payment modal
+            if (savedInvoice && savedInvoice.payment_status === 'PENDING') {
+                setPaymentData({ invoice: savedInvoice, payments: { CASH: '', UPI: '', CARD: '' }, remarks: '' });
+                setShowPaymentModal(true);
+                showToast('success', "Invoice generated! Please collect payment.");
+            } else {
+                showToast('success', "Invoice saved successfully!");
+            }
         } catch (err) {
             console.error("Invoice save error:", err);
             const errorMsg = err.response?.data?.error || err.response?.data?.detail || "Failed to save invoice.";
@@ -643,6 +643,14 @@ const Billing = () => {
             return;
         }
 
+        const due = paymentData.invoice.balance_due !== undefined ? paymentData.invoice.balance_due : paymentData.invoice.total_amount;
+        const totalEntered = paymentsList.reduce((sum, p) => sum + p.amount, 0);
+
+        if (totalEntered > parseFloat(due)) {
+            showToast('error', `Payment cannot exceed balance due (₹${due}).`);
+            return;
+        }
+
         try {
             // New Endpoint for Adding Payment
             await api.post(`billing/invoices/${paymentData.invoice.id}/add_payment/`, {
@@ -680,35 +688,23 @@ const Billing = () => {
         <div className="p-6 md:p-8 max-w-[1600px] mx-auto min-h-screen bg-[#F8FAFC] font-sans text-slate-900 relative print:p-0 print:m-0 print:min-h-0 print:bg-white print:overflow-visible print:max-w-none">
 
             <div className="no-print print:hidden space-y-8">
-                {/* --- Header --- */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6 mb-8">
-                    <div>
-                        <h1 className="text-3xl font-bold text-slate-900 tracking-tight font-outfit uppercase">Billing & Finance</h1>
-                        <div className="flex items-center gap-2 text-slate-500 font-medium mt-1 text-sm">
-                            <span>Financial Overview</span>
-                            <div className="w-1 h-1 rounded-full bg-slate-300" />
-                            <span>{new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                        </div>
-                    </div>
-                    <div className="flex gap-3 items-end">
+                {/* --- Header Actions --- */}
+                <div className="flex justify-end items-center gap-3 mb-6">
+                    <div className="flex gap-3 items-center">
                         {/* Date Filter Controls */}
                         <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm h-[42px]">
                             <Calendar size={16} className="text-slate-400" />
-                            <select
-                                value={selectedMonth}
-                                onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                                className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer"
-                            >
-                                {MONTHS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
-                            </select>
-                            <div className="w-px h-4 bg-slate-200"></div>
-                            <select
-                                value={selectedYear}
-                                onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                                className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer"
-                            >
-                                {YEARS.map(y => <option key={y} value={y}>{y}</option>)}
-                            </select>
+                            <input
+                                type="date"
+                                value={selectedDate}
+                                onChange={(e) => setSelectedDate(e.target.value)}
+                                className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer uppercase"
+                            />
+                            {selectedDate && (
+                                <button onClick={() => setSelectedDate("")} className="text-slate-400 hover:text-slate-600 ml-1">
+                                    <X size={14} />
+                                </button>
+                            )}
                         </div>
 
                         <button className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 font-bold text-xs uppercase tracking-wider transition-colors shadow-sm h-[42px]">
@@ -757,16 +753,44 @@ const Billing = () => {
                                         </div>
                                     </div>
                                     <div className="space-y-1 mt-3">
-                                        <div className="flex justify-between text-xs">
-                                            <span className="text-slate-500 font-medium">Consultation</span>
-                                            <span className="font-bold text-slate-700">₹{visit.consultation_fee || 500}</span>
-                                        </div>
-                                        <div className="flex justify-between text-xs">
-                                            <span className="text-slate-500 font-medium">Pharmacy</span>
-                                            <span className="font-bold text-slate-700">
-                                                ₹{(visit.pharmacy_items || []).reduce((sum, i) => sum + parseFloat(i.amount), 0).toFixed(0)}
-                                            </span>
-                                        </div>
+                                        {(visit.consultation_fee && parseFloat(visit.consultation_fee) > 0) ? (
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-slate-500 font-medium">Consultation</span>
+                                                <span className="font-bold text-slate-700">₹{parseFloat(visit.consultation_fee).toFixed(2)}</span>
+                                            </div>
+                                        ) : (visit.doctor ? (
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-slate-500 font-medium">Consultation</span>
+                                                <span className="font-bold text-slate-700 text-[10px]">TBD</span>
+                                            </div>
+                                        ) : null)}
+
+                                        {(visit.pharmacy_items && visit.pharmacy_items.length > 0) && (
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-slate-500 font-medium">Pharmacy</span>
+                                                <span className="font-bold text-slate-700">
+                                                    ₹{visit.pharmacy_items.reduce((sum, i) => sum + (parseFloat(i.amount) || parseFloat(i.total_price) || 0), 0).toFixed(2)}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        {(visit.lab_charges_data && visit.lab_charges_data.length > 0) && (
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-slate-500 font-medium">Lab Tests</span>
+                                                <span className="font-bold text-slate-700">
+                                                    ₹{visit.lab_charges_data.reduce((sum, i) => sum + parseFloat(i.amount || 0), 0).toFixed(2)}
+                                                </span>
+                                            </div>
+                                        )}
+
+                                        {(visit.casualty_services && visit.casualty_services.length > 0) && (
+                                            <div className="flex justify-between text-xs">
+                                                <span className="text-slate-500 font-medium">Services</span>
+                                                <span className="font-bold text-slate-700">
+                                                    ₹{visit.casualty_services.reduce((sum, i) => sum + parseFloat(i.total_charge || 0), 0).toFixed(2)}
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center">
                                         <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded">PENDING</span>
@@ -821,9 +845,9 @@ const Billing = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {invoices.filter(inv => (inv.patient_name || "").toLowerCase().includes(searchTerm.toLowerCase()) || (inv.id || "").toString().includes(searchTerm)).map((invoice) => (
+                            {invoices.filter(inv => (inv.patient_name || "").toLowerCase().includes(searchTerm.toLowerCase()) || (inv.invoice_number || inv.id || "").toString().toLowerCase().includes(searchTerm.toLowerCase())).map((invoice) => (
                                 <tr key={invoice.id} className="hover:bg-slate-50/80 transition-colors group">
-                                    <td className="px-6 py-4 font-mono text-xs font-bold text-slate-500">#{invoice.id?.toString().slice(0, 8).toUpperCase()}</td>
+                                    <td className="px-6 py-4 font-mono text-xs font-bold text-slate-500">{invoice.invoice_number || `#${invoice.id?.toString().slice(0, 8).toUpperCase()}`}</td>
                                     <td className="px-6 py-4 font-bold text-slate-900">{invoice.patient_name || "Guest"}</td>
                                     <td className="px-6 py-4 font-bold text-slate-700">₹{invoice.total_amount}</td>
                                     <td className="px-6 py-4">
