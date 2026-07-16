@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Search, Bell, Check, Command, Clock, Inbox, Globe } from 'lucide-react';
+import { Search, Bell, Check, Command, Clock, Inbox, Globe, LogOut } from 'lucide-react';
 import { useSearch } from '../context/SearchContext';
 import { useAuth } from '../context/AuthContext';
 import api from '../api/axios';
@@ -7,7 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const Header = () => {
     const { globalSearch, setGlobalSearch } = useSearch();
-    const { user } = useAuth();
+    const { user, logout } = useAuth();
+    const isPharmacyOnly = user?.role === 'PHARMACY';
     const [notifications, setNotifications] = useState([]);
     const [showDropdown, setShowDropdown] = useState(false);
     const [currentTime, setCurrentTime] = useState(new Date());
@@ -72,20 +73,22 @@ const Header = () => {
         <header className="h-20 bg-white/90 backdrop-blur-xl border-b border-slate-100 px-8 flex items-center justify-between sticky top-0 z-40">
             {/* --- Left: Smart Search --- */}
             <div className="flex items-center gap-8 flex-1">
-                <div className="relative w-full max-w-md group">
-                    <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
-                    <input
-                        type="text"
-                        placeholder="Search patients or prescriptions..."
-                        className="w-full pl-11 pr-12 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium transition-all focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 focus:bg-white"
-                        value={globalSearch}
-                        onChange={(e) => setGlobalSearch(e.target.value)}
-                    />
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 px-1.5 py-1 bg-white border border-slate-200 rounded-lg shadow-sm">
-                        <Command size={10} className="text-slate-400" />
-                        <span className="text-[10px] font-bold text-slate-400">K</span>
+                {!isPharmacyOnly && (
+                    <div className="relative w-full max-w-md group">
+                        <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+                        <input
+                            type="text"
+                            placeholder="Search patients or prescriptions..."
+                            className="w-full pl-11 pr-12 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium transition-all focus:outline-none focus:ring-4 focus:ring-blue-500/5 focus:border-blue-600 focus:bg-white"
+                            value={globalSearch}
+                            onChange={(e) => setGlobalSearch(e.target.value)}
+                        />
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 px-1.5 py-1 bg-white border border-slate-200 rounded-lg shadow-sm">
+                            <Command size={10} className="text-slate-400" />
+                            <span className="text-[10px] font-bold text-slate-400">K</span>
+                        </div>
                     </div>
-                </div>
+                )}
             </div>
 
             {/* --- Right: IST Clock & Tools --- */}
@@ -183,6 +186,17 @@ const Header = () => {
                     <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
                     <span className="text-[10px] font-bold text-green-700 uppercase tracking-wider">System Live</span>
                 </div>
+
+                {isPharmacyOnly && (
+                    <button 
+                        onClick={logout}
+                        className="ml-2 p-2 bg-red-50 text-red-600 border border-red-100 rounded-xl hover:bg-red-600 hover:text-white transition-all flex items-center gap-2"
+                        title="Logout"
+                    >
+                        <LogOut size={16} />
+                        <span className="text-[10px] font-bold uppercase tracking-widest hidden sm:inline">Logout</span>
+                    </button>
+                )}
             </div>
         </header>
     );

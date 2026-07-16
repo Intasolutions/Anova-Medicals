@@ -427,6 +427,25 @@ class PharmacySaleViewSet(viewsets.ModelViewSet):
                 models.Q(patient__full_name__icontains=search) |
                 models.Q(patient__phone__icontains=search)
             )
+            
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        
+        if start_date:
+            try:
+                qs = qs.filter(sale_date__date__gte=start_date)
+            except ValueError:
+                pass
+                
+        if end_date:
+            try:
+                qs = qs.filter(sale_date__date__lte=end_date)
+            except ValueError:
+                pass
+        patient_id = self.request.query_params.get('patient_id')
+        if patient_id:
+            qs = qs.filter(patient_id=patient_id)
+            
         return qs
 
     def get_serializer_context(self):

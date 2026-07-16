@@ -257,6 +257,7 @@ class PharmacySaleItemSerializer(serializers.ModelSerializer):
 class PharmacySaleSerializer(serializers.ModelSerializer):
     sale_id = serializers.UUIDField(source='id', read_only=True)
     patient_name = serializers.CharField(source='patient.full_name', read_only=True)
+    patient_registration_number = serializers.CharField(source='patient.registration_number', read_only=True)
     # allow creating items in same request
     items = PharmacySaleItemSerializer(many=True)
 
