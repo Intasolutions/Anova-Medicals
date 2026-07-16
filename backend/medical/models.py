@@ -8,7 +8,7 @@ class DoctorNote(BaseModel):
     # If you want ONLY one note per visit:
     visit = models.OneToOneField(Visit, on_delete=models.CASCADE, related_name='doctor_note')
 
-    diagnosis = models.TextField()
+    diagnosis = models.TextField(blank=True, default='')
     prescription = models.JSONField(default=dict, blank=True)
     notes = models.TextField(blank=True)
     lab_referral_details = models.TextField(blank=True)

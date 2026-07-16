@@ -622,24 +622,44 @@ const Pharmacy = () => {
         }
     };
     const loadPrescription = async (visit) => {
-        setSelectedPatient({ ...visit.patient, full_name: visit.patient_name, v_id: visit.id, diagnosis: visit.diagnosis });
+        setSelectedPatient({ id: visit.patient, p_id: visit.patient, full_name: visit.patient_name, v_id: visit.id, diagnosis: visit.diagnosis });
         if (visit.doctor_name) setSelectedDoctor({ username: visit.doctor_name, u_id: visit.doctor }); else setSelectedDoctor({ username: 'Referral', u_id: null });
         if (!visit.prescription) { showToast('info', 'No digital prescription.'); return; }
         setLoading(true); const newCart = [];
         try {
-            const medNames = Object.keys(visit.prescription); for (const name of medNames) {
-                const details = visit.prescription[name];
-                let qty = 1;
-                let dosage = '';
-                let duration = '';
+            const rawPrescription = visit.prescription;
+            let medList = [];
+            
+            if (Array.isArray(rawPrescription)) {
+                medList = rawPrescription.map(med => ({
+                    name: med.name || med.medication || 'Medicine',
+                    dosage: med.dosage || '',
+                    duration: med.duration || '',
+                    qty: parseInt(med.qty || med.count || 1)
+                }));
+            } else if (typeof rawPrescription === 'object' && rawPrescription !== null) {
+                medList = Object.entries(rawPrescription).map(([name, details]) => {
+                    let dosage = '';
+                    let duration = '';
+                    let qty = 1;
 
-                // Parse details (Format: "1-0-1 | 5 Days | Qty: 15")
-                const parts = details.split('|');
-                if (parts.length > 0) dosage = parts[0].trim();
-                if (parts.length > 1) duration = parts[1].trim();
+                    if (typeof details === 'object' && details !== null) {
+                        dosage = details.dosage || '';
+                        duration = details.duration || '';
+                        qty = parseInt(details.qty || details.count || 1);
+                    } else if (typeof details === 'string') {
+                        const parts = details.split('|');
+                        if (parts.length > 0) dosage = parts[0].trim();
+                        if (parts.length > 1) duration = parts[1].trim();
+                        const qtyMatch = details.match(/Qty:\s*(\d+)/i);
+                        if (qtyMatch) qty = parseInt(qtyMatch[1]);
+                    }
+                    return { name, dosage, duration, qty };
+                });
+            }
 
-                const qtyMatch = details.match(/Qty:\s*(\d+)/i);
-                if (qtyMatch) qty = parseInt(qtyMatch[1]);
+            for (const med of medList) {
+                const { name, dosage, duration, qty } = med;
 
                 const { data } = await api.get(`pharmacy/stock/?search=${encodeURIComponent(name)}`);
                 const results = data.results || data || [];
