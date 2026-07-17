@@ -144,6 +144,8 @@ class LabCharge(BaseModel):
     # Store dynamic test results (e.g. {"Cholesterol": {"value": "142", "unit": "mg/dl", "normal": "Up to 200 mg/dl"}})
     results = models.JSONField(null=True, blank=True)
     report_date = models.DateTimeField(null=True, blank=True)
+    drawn_date = models.DateTimeField(null=True, blank=True)
+    received_date = models.DateTimeField(null=True, blank=True)
     technician_name = models.CharField(max_length=255, blank=True, null=True)
     specimen = models.CharField(max_length=100, default='BLOOD', blank=True, null=True)
 

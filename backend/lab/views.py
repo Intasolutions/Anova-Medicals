@@ -201,6 +201,14 @@ class LabChargeViewSet(viewsets.ModelViewSet):
         # Capture old status from the instance before it is updated
         old_status = serializer.instance.status
         
+        # Set timestamps based on new status
+        new_status = serializer.validated_data.get('status', old_status)
+        from django.utils import timezone
+        if new_status == 'DRAWN' and old_status != 'DRAWN':
+            serializer.validated_data['drawn_date'] = timezone.now()
+        elif new_status == 'RECEIVED' and old_status != 'RECEIVED':
+            serializer.validated_data['received_date'] = timezone.now()
+        
         # Save the update
         instance = serializer.save()
         
