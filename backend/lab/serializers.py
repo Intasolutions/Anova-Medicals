@@ -274,6 +274,7 @@ class LabChargeSerializer(serializers.ModelSerializer):
                 async_to_sync(sio.emit)('lab_update', {
                     'lc_id': str(instance.id),
                     'visit_id': str(instance.visit.id),
+                    'patient_name': instance.visit.patient.full_name if instance.visit and instance.visit.patient else 'Patient',
                     'status': 'COMPLETED'
                 })
              except Exception as e:

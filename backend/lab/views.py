@@ -185,8 +185,8 @@ class LabChargeViewSet(viewsets.ModelViewSet):
                 # Check if specific consumption data was sent (Wastage Handling)
                 consumed_items = self.request.data.get('consumed_items')
                 
-                if consumed_items and isinstance(consumed_items, list):
-                    # Manual/Actual Consumption Provided
+                if consumed_items is not None and isinstance(consumed_items, list):
+                    # Manual/Actual Consumption Provided (Even if empty [])
                     for item in consumed_items:
                         inv_id = item.get('inventory_item')
                         qty_used = int(item.get('qty', 0))
@@ -246,42 +246,10 @@ class LabChargeViewSet(viewsets.ModelViewSet):
             except Exception as e:
                 print(f"Inventory Auto-Stockout Error: {e}")
 
-            # --- AUTO RETURN TO DOCTOR ---
-            # If status became COMPLETED, send patient back to Doctor's queue
-            # so they can see the results.
-            # UPDATE: Only send back if the valid referral came from doctor.
-            if instance.visit and instance.visit.assigned_role == 'LAB':
-                should_notify = False
-                
-                # Check Doctor Note for this test
-                try:
-                    if hasattr(instance.visit, 'doctor_note'):
-                        note = instance.visit.doctor_note
-                        referral_text = (note.lab_referral_details or "").lower()
-                        # Normalize test name for permissive matching
-                        current_test = instance.test_name.lower().strip()
-                        
-                        # Basic substring check - effective enough for now
-                        if current_test in referral_text:
-                            should_notify = True
-                except Exception:
-                    pass
-
-                if should_notify:
-                    instance.visit.assigned_role = 'DOCTOR'
-                    instance.visit.status = 'OPEN' 
-                    instance.visit.save()
-                    
-                    # Notify Doctor
-                    from core.models import Notification
-                    if instance.visit.doctor:
-                        Notification.objects.create(
-                            recipient=instance.visit.doctor,
-                            message=f"Lab Results Ready: {instance.visit.patient.full_name} ({instance.test_name})",
-                            type='LAB_RESULT',
-                            related_id=instance.visit.id
-                        )
-
+            # --- AUTO RETURN TO DOCTOR & BILLING ---
+            # These were previously here. We moved AUTO RETURN out of the COMPLETED block
+            # so it also triggers on CANCELLED if it's the last test.
+            
             # --- BILLING LOGIC ---
             # 1. Get/Create Invoice for this Visit
             # We look for a pending invoice for this visit, or create one.
@@ -305,7 +273,30 @@ class LabChargeViewSet(viewsets.ModelViewSet):
             )
 
             # 3. Update Invoice Total
-            # Recalculate total to be safe
             total = sum(item.amount for item in invoice.items.all())
             invoice.total_amount = total
             invoice.save()
+            
+        # Check if all tests for this visit are completed/cancelled
+        if instance.status in ['COMPLETED', 'CANCELLED'] and old_status != instance.status:
+            if instance.visit and instance.visit.assigned_role == 'LAB':
+                # Check if there are any pending/verification tests for this visit
+                pending_tests = LabCharge.objects.filter(
+                    visit=instance.visit,
+                    status__in=['PENDING', 'VERIFICATION']
+                ).exists()
+                
+                if not pending_tests:
+                    instance.visit.assigned_role = 'DOCTOR'
+                    instance.visit.status = 'OPEN' 
+                    instance.visit.save()
+                    
+                    # Notify Doctor
+                    from core.models import Notification
+                    if instance.visit.doctor:
+                        Notification.objects.create(
+                            recipient=instance.visit.doctor,
+                            message=f"Lab Results Ready: {instance.visit.patient.full_name}",
+                            type='LAB_RESULT',
+                            related_id=instance.visit.id
+                        )
