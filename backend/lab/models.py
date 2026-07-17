@@ -129,6 +129,8 @@ class LabInventoryLog(BaseModel):
 class LabCharge(BaseModel):
     STATUS_CHOICES = (
         ('PENDING', 'Pending'),
+        ('DRAWN', 'Sample Drawn'),
+        ('RECEIVED', 'Sample Received'),
         ('VERIFICATION', 'Pending Verification'),
         ('COMPLETED', 'Completed'),
         ('CANCELLED', 'Cancelled'),

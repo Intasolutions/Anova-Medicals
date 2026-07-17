@@ -832,11 +832,11 @@ const Laboratory = () => {
                     {activeTab === 'queue' && (
                         <>
                             <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex gap-2 overflow-x-auto shrink-0">
-                                {['ALL', 'PENDING', 'VERIFICATION', 'COMPLETED', 'CANCELLED'].map(s => (
+                                {['ALL', 'PENDING', 'DRAWN', 'RECEIVED', 'VERIFICATION', 'COMPLETED', 'CANCELLED'].map(s => (
                                     <button
                                         key={s}
                                         onClick={() => { setStatusFilter(s); setPage(1); }}
-                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${statusFilter === s ? 'bg-slate-900 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'}`}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${statusFilter === s ? 'bg-slate-900 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'}`}
                                     >
                                         {s}
                                         {chargesData?.status_counts && (
@@ -953,10 +953,14 @@ const Laboratory = () => {
                                                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wide border ${group.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
                                                         group.status === 'CANCELLED' ? 'bg-red-50 text-red-600 border-red-100' :
                                                             group.status === 'VERIFICATION' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
-                                                                'bg-amber-50 text-amber-600 border-amber-100'
+                                                                group.status === 'RECEIVED' ? 'bg-cyan-50 text-cyan-600 border-cyan-100' :
+                                                                    group.status === 'DRAWN' ? 'bg-fuchsia-50 text-fuchsia-600 border-fuchsia-100' :
+                                                                        'bg-amber-50 text-amber-600 border-amber-100'
                                                         }`}>
                                                         {group.status === 'COMPLETED' && <CheckCircle2 size={12} />}
                                                         {group.status === 'PENDING' && <Clock size={12} />}
+                                                        {group.status === 'DRAWN' && <FlaskConical size={12} />}
+                                                        {group.status === 'RECEIVED' && <TestTube2 size={12} />}
                                                         {group.status === 'VERIFICATION' && <CheckCircle2 size={12} />}
                                                         {group.status}
                                                     </span>
@@ -970,18 +974,36 @@ const Laboratory = () => {
                                                 {/* Actions */}
                                                 <td className="px-6 py-4">
                                                     <div className="flex flex-col gap-2">
-                                                        {/* Individual Actions if Pending or Verification */}
-                                                        {['PENDING', 'VERIFICATION'].includes(group.status) && (
+                                                        {/* Individual Actions if Not Completed */}
+                                                        {['PENDING', 'DRAWN', 'RECEIVED', 'VERIFICATION'].includes(group.status) && (
                                                             <div className="flex gap-1 flex-wrap">
-                                                                {group.items.filter(i => ['PENDING', 'VERIFICATION'].includes(i.status)).map(t => (
+                                                                {group.items.filter(i => ['PENDING', 'DRAWN', 'RECEIVED', 'VERIFICATION'].includes(i.status)).map(t => (
                                                                     <React.Fragment key={t.lc_id}>
-                                                                        <button
-                                                                            onClick={() => handleOpenResultEntry(t)}
-                                                                            className={`px-2 py-1 text-[10px] font-bold rounded transition-all border ${t.status === 'VERIFICATION' ? 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'}`}
-                                                                            title={`${t.status === 'VERIFICATION' ? 'Verify' : 'Enter'} Result for ${t.test_name}`}
-                                                                        >
-                                                                            {t.status === 'VERIFICATION' ? 'Verify:' : 'Result:'} {t.test_name}
-                                                                        </button>
+                                                                        {t.status === 'PENDING' && (
+                                                                            <button
+                                                                                onClick={() => handleUpdateStatus(t.lc_id, 'DRAWN')}
+                                                                                className="px-2 py-1 bg-fuchsia-50 text-fuchsia-600 text-[10px] font-bold rounded hover:bg-fuchsia-100 transition-all border border-fuchsia-100"
+                                                                            >
+                                                                                Mark Drawn
+                                                                            </button>
+                                                                        )}
+                                                                        {t.status === 'DRAWN' && (
+                                                                            <button
+                                                                                onClick={() => handleUpdateStatus(t.lc_id, 'RECEIVED')}
+                                                                                className="px-2 py-1 bg-cyan-50 text-cyan-600 text-[10px] font-bold rounded hover:bg-cyan-100 transition-all border border-cyan-100"
+                                                                            >
+                                                                                Mark Received
+                                                                            </button>
+                                                                        )}
+                                                                        {['PENDING', 'DRAWN', 'RECEIVED', 'VERIFICATION'].includes(t.status) && (
+                                                                            <button
+                                                                                onClick={() => handleOpenResultEntry(t)}
+                                                                                className={`px-2 py-1 text-[10px] font-bold rounded transition-all border ${t.status === 'VERIFICATION' ? 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'}`}
+                                                                                title={`${t.status === 'VERIFICATION' ? 'Verify' : 'Enter'} Result for ${t.test_name}`}
+                                                                            >
+                                                                                {t.status === 'VERIFICATION' ? 'Verify:' : 'Result:'} {t.test_name}
+                                                                            </button>
+                                                                        )}
                                                                         <button
                                                                             onClick={() => handleUpdateStatus(t.lc_id, 'CANCELLED')}
                                                                             className="px-2 py-1 bg-red-50 text-red-600 text-[10px] font-bold rounded hover:bg-red-100 transition-all border border-red-100"
@@ -1012,9 +1034,9 @@ const Laboratory = () => {
                                                         )}
 
                                                         {/* Consolidated Print Action */}
-                                                        <button onClick={() => handleOpenPrintModal(group)} className="flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-700 shadow-md transition-all">
+                                                        <button onClick={() => handleOpenPrintModal(group)} className="flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-700 shadow-md transition-all mt-1">
                                                             <Printer size={14} />
-                                                            {group.status === 'PENDING' ? 'Print Receipt' : 'Print Report'}
+                                                            {['COMPLETED'].includes(group.status) ? 'Print Report' : 'Print Receipt'}
 
                                                         </button>
                                                     </div>
@@ -2147,11 +2169,11 @@ const Laboratory = () => {
                                             <span>SID</span>
                                             <span className="font-bold">: {printCharge.registration_number || '--'}</span>
                                             <span>Registered On</span>
-                                            <span className="font-bold">: {new Date(printCharge.created_at || Date.now()).toLocaleString('en-IN', {day:'2-digit', month:'short', year:'numeric', hour:'numeric', minute:'2-digit', hour12:true}).replace(',', '')}</span>
+                                            <span className="font-bold">: {new Date(printCharge.created_at || Date.now()).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}).replace(/ /g, '-')}</span>
                                             <span>Reported On</span>
-                                            <span className="font-bold">: {printCharge.report_date ? new Date(printCharge.report_date).toLocaleString('en-IN', {day:'2-digit', month:'short', year:'numeric', hour:'numeric', minute:'2-digit', hour12:true}).replace(',', '') : '--'}</span>
+                                            <span className="font-bold">: {printCharge.report_date ? new Date(printCharge.report_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}).replace(/ /g, '-') : '--'}</span>
                                             <span>Printed On</span>
-                                            <span className="font-bold">: {new Date().toLocaleString('en-IN', {day:'2-digit', month:'short', year:'numeric'}).replace(',', '')}</span>
+                                            <span className="font-bold">: {new Date().toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}).replace(/ /g, '-')}</span>
                                         </div>
                                     </div>
                                 </div>

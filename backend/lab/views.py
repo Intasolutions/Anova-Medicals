@@ -181,6 +181,8 @@ class LabChargeViewSet(viewsets.ModelViewSet):
         status_dict = {
             'ALL': base_qs.count(),
             'PENDING': 0,
+            'DRAWN': 0,
+            'RECEIVED': 0,
             'VERIFICATION': 0,
             'COMPLETED': 0,
             'CANCELLED': 0
