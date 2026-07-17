@@ -1016,28 +1016,10 @@ const Laboratory = () => {
                                                             </div>
                                                         )}
 
-                                                        {/* Edit Action for Completed Items */}
-                                                        {group.status === 'COMPLETED' && (
-                                                            <div className="flex gap-1 flex-wrap mb-2">
-                                                                {group.items.map(t => (
-                                                                    <button
-                                                                        key={t.lc_id}
-                                                                        onClick={() => handleOpenResultEntry(t)}
-                                                                        className="px-2 py-1 bg-purple-50 text-purple-600 text-[10px] font-bold rounded hover:bg-purple-100 transition-all border border-purple-100 flex items-center gap-1"
-                                                                        title={`Edit Result for ${t.test_name}`}
-                                                                    >
-                                                                        <Pencil size={10} />
-                                                                        Edit: {t.test_name}
-                                                                    </button>
-                                                                ))}
-                                                            </div>
-                                                        )}
-
                                                         {/* Consolidated Print Action */}
                                                         <button onClick={() => handleOpenPrintModal(group)} className="flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-700 shadow-md transition-all mt-1">
                                                             <Printer size={14} />
                                                             {['COMPLETED'].includes(group.status) ? 'Print Report' : 'Print Receipt'}
-
                                                         </button>
                                                     </div>
                                                 </td>
@@ -2167,9 +2149,13 @@ const Laboratory = () => {
                                         <p className="text-sm font-bold text-black underline mb-3">Sample Details:</p>
                                         <div className="grid grid-cols-[90px_1fr] gap-y-2 text-xs text-black">
                                             <span>SID</span>
-                                            <span className="font-bold">: {printCharge.registration_number || '--'}</span>
+                                            <span className="font-bold">: {printCharge.uniqueKey ? String(printCharge.uniqueKey).padStart(6, '0') : '--'}</span>
                                             <span>Registered On</span>
                                             <span className="font-bold">: {new Date(printCharge.created_at || Date.now()).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}).replace(/ /g, '-')}</span>
+                                            <span>Drawn On</span>
+                                            <span className="font-bold">: {printCharge.tests?.[0]?.drawn_date ? new Date(printCharge.tests[0].drawn_date).toLocaleString('en-IN', {day:'2-digit', month:'short', year:'numeric', hour:'numeric', minute:'2-digit', hour12:true}).replace(/, /g, ' - ') : '--'}</span>
+                                            <span>Received On</span>
+                                            <span className="font-bold">: {printCharge.tests?.[0]?.received_date ? new Date(printCharge.tests[0].received_date).toLocaleString('en-IN', {day:'2-digit', month:'short', year:'numeric', hour:'numeric', minute:'2-digit', hour12:true}).replace(/, /g, ' - ') : '--'}</span>
                                             <span>Reported On</span>
                                             <span className="font-bold">: {printCharge.report_date ? new Date(printCharge.report_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}).replace(/ /g, '-') : '--'}</span>
                                             <span>Printed On</span>
