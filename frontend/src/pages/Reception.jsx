@@ -5,7 +5,7 @@ import {
     UserPlus, Phone, User as UserIcon, ArrowRight, X,
     Activity, Thermometer, Heart, Scale, Stethoscope,
     MapPin, ChevronRight, Search, CheckCircle2, AlertCircle, FileText, IndianRupee, Edit, Trash2,
-    Users, Info
+    Users, Info, Wallet, Sparkles, CreditCard
 } from 'lucide-react';
 import { useSearch } from '../context/SearchContext';
 import { useAuth } from '../context/AuthContext';
@@ -78,12 +78,20 @@ const Reception = () => {
     const [selectedPatient, setSelectedPatient] = useState(null);
     const [patientHistory, setPatientHistory] = useState([]);
     const [patientInvoices, setPatientInvoices] = useState([]); // New state for invoices
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [paymentData, setPaymentData] = useState({ invoice: null, payments: { CASH: '', UPI: '', CARD: '' }, remarks: '' });
+    const [addingServiceInvoice, setAddingServiceInvoice] = useState(null);
+    const [invoiceServiceSearch, setInvoiceServiceSearch] = useState('');
+
     const [patientLabResults, setPatientLabResults] = useState([]); // New state for lab results
     const [historyTab, setHistoryTab] = useState('visits'); // 'visits' | 'billing' | 'lab'
     const [doctors, setDoctors] = useState([]);
     const [availableLabTests, setAvailableLabTests] = useState([]);
     const [selectedLabTests, setSelectedLabTests] = useState([]);
     const [labTestSearchQ, setLabTestSearchQ] = useState('');
+    const [serviceDefinitions, setServiceDefinitions] = useState([]);
+    const [selectedStartServices, setSelectedStartServices] = useState([]);
+    const [serviceSearchQ, setServiceSearchQ] = useState('');
 
     // Feedback State
     const [notification, setNotification] = useState(null); // { type: 'success'|'error', message: '' }
@@ -218,8 +226,8 @@ const Reception = () => {
             const todayRevenue = invoicesRes.data.results?.filter(inv => inv.payment_status === 'PAID')
                 .reduce((sum, inv) => sum + parseFloat(inv.total_amount || 0), 0) || 0;
 
-            // Get recent visits (Settled/Paid Invoices)
-            const recentInvoicesRes = await api.get(`/billing/invoices/?payment_status=PAID&ordering=-created_at&limit=5`);
+            // Get recent invoices (any non-draft, last 5)
+            const recentInvoicesRes = await api.get(`/billing/invoices/?ordering=-created_at&page_size=5`);
 
             setStats({
                 newPatients,
@@ -236,12 +244,14 @@ const Reception = () => {
 
     const fetchDoctorsAndTests = async () => {
         try {
-            const [docsRes, testsRes] = await Promise.all([
+            const [docsRes, testsRes, svcsRes] = await Promise.all([
                 api.get('/users/management/doctors/'),
-                api.get('/lab/tests/')
+                api.get('/lab/tests/'),
+                api.get('/casualty/service-definitions/')
             ]);
             setDoctors(docsRes.data);
             setAvailableLabTests(testsRes.data.results || testsRes.data);
+            setServiceDefinitions(svcsRes.data.results || svcsRes.data);
         } catch (err) {
             console.error(err);
             showToast('error', 'Could not fetch required data.');
@@ -378,6 +388,9 @@ const Reception = () => {
         setSelectedPatient(p);
         setVisitForm({ assigned_role: 'DOCTOR', doctor: '', vitals: { temp: '', bp: '', pulse: '', weight: '' } });
         setSelectedLabTests([]);
+        setSelectedStartServices([]);
+        setServiceSearchQ('');
+        setLabTestSearchQ('');
         await fetchDoctorsAndTests();
         setShowVisitModal(true);
     };
@@ -399,6 +412,12 @@ const Reception = () => {
 
     const submitVisit = async (e) => {
         e.preventDefault();
+
+        if (visitForm.assigned_role === 'CASUALTY' && selectedStartServices.length === 0) {
+            showToast('error', 'Please select at least one service to bill.');
+            return;
+        }
+
         try {
             await api.post('/reception/visits/', {
                 patient: selectedPatient.p_id || selectedPatient.id,
@@ -407,25 +426,111 @@ const Reception = () => {
                 status: 'OPEN',
                 vitals: visitForm.vitals,
                 referred_by: visitForm.assigned_role === 'LAB' ? (visitForm.referred_by || 'Self') : 'Self',
-                lab_tests: visitForm.assigned_role === 'LAB' ? selectedLabTests : []
+                lab_tests: visitForm.assigned_role === 'LAB' ? selectedLabTests : [],
+                casualty_services: visitForm.assigned_role === 'CASUALTY' ? selectedStartServices : []
             });
             setShowVisitModal(false);
             
-            if (visitForm.assigned_role === 'LAB') {
+            if (visitForm.assigned_role === 'LAB' || visitForm.assigned_role === 'CASUALTY') {
                 setActiveTab('billing');
-                showToast('success', `Redirected to Billing. Please collect payment for lab tests.`);
+                showToast('success', `Redirected to Billing. Please collect payment.`);
             } else {
                 showToast('success', `Visit token generated for ${selectedPatient.full_name}`);
             }
 
             setVisitForm({ assigned_role: 'DOCTOR', doctor: '', referred_by: 'Self', vitals: { temp: '', bp: '', pulse: '', weight: '' } });
             setSelectedLabTests([]);
+            setSelectedStartServices([]);
+            setServiceSearchQ('');
         } catch (err) {
             showToast('error', 'Failed to create visit record.');
         }
     };
 
+
+    const handleConfirmPayment = async () => {
+        if (!paymentData.invoice) return;
+
+        const paymentsList = [];
+        Object.entries(paymentData.payments).forEach(([mode, amount]) => {
+            const val = parseFloat(amount);
+            if (val > 0) {
+                paymentsList.push({ mode, amount: val });
+            }
+        });
+
+        if (paymentsList.length === 0) {
+            showToast('error', 'Please enter a payment amount.');
+            return;
+        }
+
+        const due = paymentData.invoice.balance_due !== undefined
+            ? paymentData.invoice.balance_due
+            : (parseFloat(paymentData.invoice.total_amount) - (parseFloat(paymentData.invoice.discount_amount) || 0));
+
+        const totalEntered = paymentsList.reduce((sum, p) => sum + p.amount, 0);
+
+        if (totalEntered > parseFloat(due)) {
+            showToast('error', `Payment cannot exceed balance due (₹${parseFloat(due).toFixed(2)}).`);
+            return;
+        }
+
+        try {
+            await api.post(`billing/invoices/${paymentData.invoice.id}/add_payment/`, {
+                payments: paymentsList,
+                remarks: paymentData.remarks
+            });
+
+            // Refresh the invoices for this patient
+            const patientId = paymentData.invoice.patient_id || selectedPatient?.p_id;
+            if (patientId) {
+                const invoicesRes = await api.get(`/billing/invoices/?visit__patient=${patientId}`);
+                setPatientInvoices(invoicesRes.data.results || invoicesRes.data);
+            }
+
+            fetchStats();
+            showToast('success', 'Payment recorded successfully.');
+            setShowPaymentModal(false);
+            setPaymentData({ invoice: null, payments: { CASH: '', UPI: '', CARD: '' }, remarks: '' });
+        } catch (error) {
+            console.error(error);
+            showToast('error', 'Failed to record payment.');
+        }
+    };
+
+    const handleAddServiceToInvoice = async (service) => {
+        if (!addingServiceInvoice) return;
+        try {
+            const newItem = {
+                dept: 'CASUALTY',
+                description: service.name,
+                qty: 1,
+                unit_price: service.base_charge,
+                amount: service.base_charge
+            };
+            const currentItems = addingServiceInvoice.items || [];
+            const newTotal = currentItems.reduce((sum, item) => sum + parseFloat(item.amount || 0), 0) + parseFloat(newItem.amount);
+            
+            await api.patch(`billing/invoices/${addingServiceInvoice.id}/`, {
+                items: [...currentItems, newItem],
+                total_amount: newTotal
+            });
+            
+            const patientId = addingServiceInvoice.patient_id || selectedPatient?.p_id;
+            if (patientId) {
+                const invoicesRes = await api.get(`/billing/invoices/?visit__patient=${patientId}`);
+                setPatientInvoices(invoicesRes.data.results || invoicesRes.data);
+            }
+            showToast('success', `Added ${service.name} to invoice.`);
+            setAddingServiceInvoice(null);
+        } catch (error) {
+            console.error(error);
+            showToast('error', 'Failed to add service to invoice.');
+        }
+    };
+
     const totalPages = Math.ceil((patientsData.count || 0) / 10);
+
 
     return (
         <div className="bg-slate-50 h-full flex flex-col overflow-hidden relative">
@@ -1062,8 +1167,7 @@ const Reception = () => {
                                                 >
                                                     <option value="DOCTOR">Doctor (Consultation)</option>
                                                     <option value="LAB">Laboratory</option>
-                                                    <option value="CASUALTY">Day Care / Services</option>
-                                                    <option value="PHARMACY">Pharmacy</option>
+                                                    <option value="CASUALTY">Services Only (Direct to Billing)</option>
                                                 </select>
                                             </div>
 
@@ -1097,11 +1201,6 @@ const Reception = () => {
                                                             </div>
                                                         </div>
                                                     ))}
-                                                </div>
-                                            ) : visitForm.assigned_role === 'PHARMACY' ? (
-                                                <div className="flex-1 flex flex-col justify-center items-center text-slate-400">
-                                                    <Pill size={48} className="mb-4 opacity-20" />
-                                                    <p className="text-sm font-bold text-center">Patient will be sent to the Pharmacy queue.</p>
                                                 </div>
                                             ) : (
                                                 <div className="flex-1 overflow-hidden flex flex-col pt-2">
@@ -1379,25 +1478,26 @@ const Reception = () => {
                                                                 </div>
                                                             )}
 
+                                                            <div className="px-3 pb-2 pt-1">
+                                                                {inv.payment_status === 'PENDING' && (
+                                                                    <button
+                                                                        onClick={() => { setAddingServiceInvoice(inv); setInvoiceServiceSearch(''); }}
+                                                                        className="text-xs font-bold text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
+                                                                    >
+                                                                        + Add Service
+                                                                    </button>
+                                                                )}
+                                                            </div>
+
                                                             <div className="flex justify-between items-center pt-2 border-t border-slate-200/50">
                                                                 <p className="text-xs font-bold text-slate-400 uppercase">Total Bill</p>
                                                                 <div className="flex items-center gap-3">
                                                                     <p className="text-lg font-black text-slate-900">₹{inv.total_amount}</p>
                                                                     {inv.payment_status === 'PENDING' && (
                                                                         <button
-                                                                            onClick={async () => {
-                                                                                if (!window.confirm(`Mark invoice #${inv.id} as PAID?`)) return;
-                                                                                try {
-                                                                                    await api.patch(`billing/invoices/${inv.id}/`, { payment_status: 'PAID' });
-                                                                                    showToast('success', 'Payment collected successfully!');
-                                                                                    // fetchHistory needs patient_id not p_id locally in this component context if I recall, but selectedPatient.p_id is likely correct
-                                                                                    // Let's check where fetchHistory comes from. It's likely defined in component.
-                                                                                    // Assuming fetchHistory is available in scope.
-                                                                                    if (selectedPatient && selectedPatient.p_id) fetchHistory(selectedPatient.p_id);
-                                                                                } catch (error) {
-                                                                                    console.error(error);
-                                                                                    showToast('error', 'Failed to update payment status.');
-                                                                                }
+                                                                            onClick={() => {
+                                                                                setPaymentData({ invoice: inv, payments: { CASH: '', UPI: '', CARD: '' }, remarks: '' });
+                                                                                setShowPaymentModal(true);
                                                                             }}
                                                                             className="p-2 bg-emerald-100 text-emerald-600 rounded-lg hover:bg-emerald-600 hover:text-white transition-all shadow-sm flex items-center gap-1"
                                                                             title="Collect Payment"
@@ -1456,6 +1556,160 @@ const Reception = () => {
                         </AnimatePresence>
                     </div>
                 )}
+            {/* --- Payment Modal --- */}
+            <AnimatePresence>
+                {showPaymentModal && paymentData.invoice && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 no-print">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                            onClick={() => setShowPaymentModal(false)}
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+                        >
+                            <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                                <h3 className="font-bold text-lg text-slate-800">Confirm Payment</h3>
+                                <button onClick={() => setShowPaymentModal(false)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                            </div>
+                            <div className="p-6 space-y-6">
+                                <div className="text-center">
+                                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wide">Net Amount</p>
+                                    <p className="text-4xl font-black text-slate-900 mt-1">₹{Math.max(0, parseFloat(paymentData.invoice.total_amount) - (parseFloat(paymentData.invoice.discount_amount) || 0)).toFixed(2)}</p>
+                                    {(paymentData.invoice.amount_paid > 0) && (
+                                        <p className="text-xs font-bold text-emerald-600 mt-1">Paid: ₹{paymentData.invoice.amount_paid} • Due: ₹{paymentData.invoice.balance_due}</p>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <div className="flex justify-between items-center mb-3">
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Payment Amount</label>
+                                        <span className="text-xs font-bold text-slate-400">
+                                            Entered: <span className="text-emerald-600">₹{Object.values(paymentData.payments).reduce((acc, curr) => acc + (parseFloat(curr) || 0), 0).toFixed(2)}</span>
+                                            {' • '}
+                                            Remaining: <span className="text-red-500">₹{Math.max(0, (parseFloat(paymentData.invoice.balance_due !== undefined ? paymentData.invoice.balance_due : paymentData.invoice.total_amount) - Object.values(paymentData.payments).reduce((acc, curr) => acc + (parseFloat(curr) || 0), 0))).toFixed(2)}</span>
+                                        </span>
+                                    </div>
+                                    <div className="space-y-3">
+                                        {['CASH', 'UPI', 'CARD'].map(mode => (
+                                            <div key={mode} className="flex items-center gap-3">
+                                                <div className="w-32 flex items-center gap-2 text-slate-600 font-bold text-sm">
+                                                    {mode === 'CASH' && <Wallet size={16} />}
+                                                    {mode === 'UPI' && <Sparkles size={16} />}
+                                                    {mode === 'CARD' && <CreditCard size={16} />}
+                                                    {mode}
+                                                </div>
+                                                <div className="relative flex-1">
+                                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
+                                                    <input
+                                                        type="number"
+                                                        placeholder="0"
+                                                        className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2 pl-7 pr-3 font-bold text-slate-900 outline-none focus:border-blue-500 transition-all placeholder:text-slate-300"
+                                                        value={paymentData.payments[mode]}
+                                                        onChange={(e) => setPaymentData({
+                                                            ...paymentData,
+                                                            payments: { ...paymentData.payments, [mode]: e.target.value }
+                                                        })}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block mb-2">Remarks (Optional)</label>
+                                    <textarea
+                                        rows="2"
+                                        className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl p-3 font-medium text-sm text-slate-700 outline-none focus:border-blue-500 transition-all resize-none"
+                                        placeholder="Add transaction ID or notes..."
+                                        value={paymentData.remarks}
+                                        onChange={(e) => setPaymentData({ ...paymentData, remarks: e.target.value })}
+                                    />
+                                </div>
+
+                                <button
+                                    onClick={handleConfirmPayment}
+                                    className="w-full py-4 bg-emerald-500 text-white rounded-xl font-bold text-lg shadow-xl shadow-emerald-500/20 hover:bg-emerald-600 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                                >
+                                    <CheckCircle2 size={20} /> Confirm Payment
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+            
+            {/* --- Add Service to Invoice Modal --- */}
+            <AnimatePresence>
+                {addingServiceInvoice && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4 no-print">
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+                            onClick={() => setAddingServiceInvoice(null)}
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
+                        >
+                            <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                                <div>
+                                    <h3 className="font-bold text-lg text-slate-800">Add Service to Invoice</h3>
+                                    <p className="text-xs text-slate-400">Invoice {addingServiceInvoice.invoice_number || `#${addingServiceInvoice.id.toString().slice(0,8).toUpperCase()}`}</p>
+                                </div>
+                                <button onClick={() => setAddingServiceInvoice(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
+                            </div>
+                            <div className="p-6 overflow-hidden flex flex-col gap-4">
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Search services to add..."
+                                        className="w-full pl-10 pr-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl outline-none focus:border-blue-500 font-medium text-sm transition-colors"
+                                        value={invoiceServiceSearch}
+                                        onChange={e => setInvoiceServiceSearch(e.target.value)}
+                                        autoFocus
+                                    />
+                                </div>
+                                <div className="overflow-y-auto flex-1 custom-scrollbar min-h-[200px] border border-slate-100 rounded-xl">
+                                    {serviceDefinitions.length === 0 ? (
+                                        <p className="text-sm text-slate-400 text-center py-8">No services found in database.</p>
+                                    ) : serviceDefinitions.filter(s => s.name.toLowerCase().includes(invoiceServiceSearch.toLowerCase())).length === 0 ? (
+                                        <p className="text-sm text-slate-400 text-center py-8">No services match your search.</p>
+                                    ) : (
+                                        <ul className="divide-y divide-slate-50">
+                                            {serviceDefinitions.filter(s => s.name.toLowerCase().includes(invoiceServiceSearch.toLowerCase())).map(service => (
+                                                <li key={service.id} className="flex justify-between items-center p-3 hover:bg-slate-50 transition-colors">
+                                                    <div>
+                                                        <p className="font-bold text-slate-800 text-sm">{service.name}</p>
+                                                        <p className="text-xs font-bold text-slate-500">₹{service.base_charge}</p>
+                                                    </div>
+                                                    <button 
+                                                        onClick={() => handleAddServiceToInvoice(service)}
+                                                        className="px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white rounded-lg text-xs font-bold transition-all shadow-sm"
+                                                    >
+                                                        Add
+                                                    </button>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
             </div>
         </div>
     );

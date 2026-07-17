@@ -171,6 +171,27 @@ class VisitViewSet(viewsets.ModelViewSet):
             visit.assigned_role = 'BILLING'
             visit.save()
 
+        # If casualty_services are passed, create CasualtyService entries
+        casualty_services = self.request.data.get('casualty_services', [])
+        if casualty_services and isinstance(casualty_services, list):
+            from casualty.models import CasualtyService, CasualtyServiceDefinition
+            for srv_id in casualty_services:
+                try:
+                    srv_obj = CasualtyServiceDefinition.objects.get(id=srv_id)
+                    CasualtyService.objects.create(
+                        visit=visit,
+                        service_definition=srv_obj,
+                        qty=1,
+                        unit_charge=srv_obj.base_charge,
+                        total_charge=srv_obj.base_charge
+                    )
+                except Exception as e:
+                    print(f"Error assigning casualty service {srv_id} to visit {visit.id}: {e}")
+
+            # Route directly to BILLING instead of Casualty queue (User requested removal of Casualty queue phase)
+            visit.assigned_role = 'BILLING'
+            visit.save()
+
         # Determine who to notify
         if visit.assigned_role and visit.assigned_role != 'DOCTOR':
             match_role = visit.assigned_role

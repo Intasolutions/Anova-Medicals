@@ -690,27 +690,31 @@ const Billing = () => {
             // For now, simpler to just append them if not present, OR rely on initial creation.
             // Let's rely on standard item merging logic below.
 
-            const existingKeys = new Set(baseItems.map(i => `${i.description}-${i.batch || ''}`));
+            let uniquePharmacyItems = [];
+            let uniqueCasualtyMeds = [];
+            let uniqueCasualtyServices = [];
+            let uniqueLabItems = [];
 
-            const uniquePharmacyItems = visitPharmacyItems.filter(i => !existingKeys.has(`${i.description}-${i.batch || ''}`));
-            const uniqueCasualtyMeds = visitCasualtyMedicines.filter(i => !existingKeys.has(`${i.description}-${i.batch || ''}`)); // Using description-batch for meds
-            const uniqueCasualtyServices = visitCasualtyServices.filter(i => !existingKeys.has(`${i.description}-`)); // Services have no batch
+            if (!invoice.payment_status || invoice.payment_status === 'DRAFT') {
+                const visitLabItems = ((visitData && visitData.lab_charges_data) || []).map(item => ({
+                    dept: "LAB",
+                    description: item.test_name,
+                    qty: 1,
+                    unit_price: parseFloat(item.amount),
+                    amount: parseFloat(item.amount),
+                    hsn: "",
+                    batch: "",
+                    gst_percent: 0,
+                    stock_deducted: false,
+                    deducted_qty: 0
+                }));
 
-            // Sync Lab Items
-            const visitLabItems = ((visitData && visitData.lab_charges_data) || []).map(item => ({
-                dept: "LAB",
-                description: item.test_name,
-                qty: 1,
-                unit_price: parseFloat(item.amount),
-                amount: parseFloat(item.amount),
-                hsn: "",
-                batch: "",
-                gst_percent: 0,
-                stock_deducted: false,
-                deducted_qty: 0
-            }));
-
-            const uniqueLabItems = visitLabItems.filter(i => !existingKeys.has(`${i.description}-`));
+                const existingKeys = new Set(baseItems.map(i => `${i.description}-${i.batch || ''}`));
+                uniquePharmacyItems = visitPharmacyItems.filter(i => !existingKeys.has(`${i.description}-${i.batch || ''}`));
+                uniqueCasualtyMeds = visitCasualtyMedicines.filter(i => !existingKeys.has(`${i.description}-${i.batch || ''}`));
+                uniqueCasualtyServices = visitCasualtyServices.filter(i => !existingKeys.has(`${i.description}-`));
+                uniqueLabItems = visitLabItems.filter(i => !existingKeys.has(`${i.description}-`));
+            }
 
             setFormData({
                 id: invoice.id,
@@ -1147,7 +1151,8 @@ const Billing = () => {
                                                     <td className="py-4 text-slate-400 font-mono">{idx + 1}</td>
                                                     <td className="py-4 relative" style={{ zIndex: stockSearch.index === idx ? 100 : 1 }}>
                                                         <input
-                                                            className="w-full bg-transparent outline-none font-bold text-slate-700 placeholder:text-slate-300"
+                                                            readOnly={!!formData.id && formData.payment_status !== 'DRAFT'}
+                                                            className={`w-full bg-transparent outline-none font-bold text-slate-700 placeholder:text-slate-300 ${!!formData.id && formData.payment_status !== 'DRAFT' ? 'cursor-not-allowed opacity-80' : ''}`}
                                                             placeholder="Item Name / Service"
                                                             autoComplete="off"
                                                             value={item.description}
@@ -1159,7 +1164,7 @@ const Billing = () => {
                                                                 handleStockSearch(val, idx);
                                                             }}
                                                             onFocus={() => {
-                                                                if (item.description.length >= 2) {
+                                                                if (item.description.length >= 2 && (!formData.id || formData.payment_status === 'DRAFT')) {
                                                                     handleStockSearch(item.description, idx);
                                                                 }
                                                             }}
@@ -1207,7 +1212,8 @@ const Billing = () => {
                                                     </td>
                                                     <td className="py-4 text-center">
                                                         <input
-                                                            type="number" className="w-full bg-transparent text-center font-bold outline-none"
+                                                            readOnly={!!formData.id && formData.payment_status !== 'DRAFT'}
+                                                            type="number" className={`w-full bg-transparent text-center font-bold outline-none ${!!formData.id && formData.payment_status !== 'DRAFT' ? 'cursor-not-allowed opacity-80' : ''}`}
                                                             value={item.qty}
                                                             onChange={(e) => {
                                                                 const qty = parseInt(e.target.value) || 0;
@@ -1219,7 +1225,8 @@ const Billing = () => {
                                                     </td>
                                                     <td className="py-4 text-center">
                                                         <input
-                                                            type="number" className="w-full bg-transparent text-center font-medium outline-none text-slate-500"
+                                                            readOnly={!!formData.id && formData.payment_status !== 'DRAFT'}
+                                                            type="number" className={`w-full bg-transparent text-center font-medium outline-none text-slate-500 ${!!formData.id && formData.payment_status !== 'DRAFT' ? 'cursor-not-allowed opacity-80' : ''}`}
                                                             value={item.gst_percent}
                                                             placeholder="0"
                                                             onChange={(e) => {
@@ -1232,7 +1239,8 @@ const Billing = () => {
                                                     </td>
                                                     <td className="py-4 text-right">
                                                         <input
-                                                            type="number" className="w-full bg-transparent text-right font-medium outline-none"
+                                                            readOnly={!!formData.id && formData.payment_status !== 'DRAFT'}
+                                                            type="number" className={`w-full bg-transparent text-right font-medium outline-none ${!!formData.id && formData.payment_status !== 'DRAFT' ? 'cursor-not-allowed opacity-80' : ''}`}
                                                             value={item.unit_price}
                                                             onChange={(e) => {
                                                                 const price = parseFloat(e.target.value) || 0;
@@ -1244,8 +1252,9 @@ const Billing = () => {
                                                     </td>
                                                     <td className="py-4 text-right">
                                                         <input
+                                                            readOnly={!!formData.id && formData.payment_status !== 'DRAFT'}
                                                             type="number"
-                                                            className="w-full bg-transparent text-right font-bold text-slate-900 outline-none placeholder:text-slate-300"
+                                                            className={`w-full bg-transparent text-right font-bold text-slate-900 outline-none placeholder:text-slate-300 ${!!formData.id && formData.payment_status !== 'DRAFT' ? 'cursor-not-allowed opacity-80' : ''}`}
                                                             value={item.amount}
                                                             onChange={(e) => {
                                                                 const newAmount = parseFloat(e.target.value) || 0;
@@ -1257,10 +1266,12 @@ const Billing = () => {
                                                         />
                                                     </td>
                                                     <td className="py-4 text-center">
-                                                        <button onClick={() => {
-                                                            const newItems = formData.items.filter((_, i) => i !== idx);
-                                                            setFormData({ ...formData, items: newItems });
-                                                        }} className="text-slate-300 hover:text-red-500 transition-colors"><X size={16} /></button>
+                                                        {(!formData.id || formData.payment_status === 'DRAFT') && (
+                                                            <button onClick={() => {
+                                                                const newItems = formData.items.filter((_, i) => i !== idx);
+                                                                setFormData({ ...formData, items: newItems });
+                                                            }} className="text-slate-300 hover:text-red-500 transition-colors"><X size={16} /></button>
+                                                        )}
                                                     </td>
                                                 </tr>
                                             ))}
@@ -1295,18 +1306,24 @@ const Billing = () => {
                             {/* Modal Footer */}
                             <div className="p-6 border-t border-slate-100 bg-slate-50/80 flex justify-between items-center">
                                 <div>
-                                    <button onClick={() => handleImportPrescription()} disabled={!selectedPatientId} className={`text-xs font-bold flex items-center gap-2 ${selectedPatientId ? 'text-blue-600 hover:text-blue-800' : 'text-slate-300 cursor-not-allowed'}`}>
-                                        <Import size={16} /> Import from Prescription
-                                    </button>
+                                    {(!formData.id || formData.payment_status === 'DRAFT') && (
+                                        <button onClick={() => handleImportPrescription()} disabled={!selectedPatientId} className={`text-xs font-bold flex items-center gap-2 ${selectedPatientId ? 'text-blue-600 hover:text-blue-800' : 'text-slate-300 cursor-not-allowed'}`}>
+                                            <Import size={16} /> Import from Prescription
+                                        </button>
+                                    )}
                                 </div>
                                 <div className="flex gap-3">
                                     <button onClick={() => setShowModal(false)} className="px-6 py-3 rounded-xl font-bold text-slate-600 hover:bg-white border border-transparent hover:border-slate-200 transition-all">Cancel</button>
-                                    <button onClick={() => handleCreateInvoice('DRAFT')} disabled={isSubmitting} className="px-6 py-3 rounded-xl font-bold text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-all">
-                                        Save as Draft
-                                    </button>
-                                    <button onClick={() => handleCreateInvoice('PENDING')} disabled={isSubmitting} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold shadow-xl shadow-slate-900/20 hover:bg-blue-600 transition-all flex items-center gap-2 disabled:bg-slate-400 disabled:cursor-not-allowed">
-                                        <CheckCircle2 size={18} /> {isSubmitting ? 'Saving...' : (formData.id && formData.payment_status !== 'DRAFT' ? 'Update Invoice' : 'Generate Invoice')}
-                                    </button>
+                                    {(!formData.id || formData.payment_status === 'DRAFT') && (
+                                        <>
+                                            <button onClick={() => handleCreateInvoice('DRAFT')} disabled={isSubmitting} className="px-6 py-3 rounded-xl font-bold text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-all">
+                                                Save as Draft
+                                            </button>
+                                            <button onClick={() => handleCreateInvoice('PENDING')} disabled={isSubmitting} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold shadow-xl shadow-slate-900/20 hover:bg-blue-600 transition-all flex items-center gap-2 disabled:bg-slate-400 disabled:cursor-not-allowed">
+                                                <CheckCircle2 size={18} /> {isSubmitting ? 'Saving...' : 'Generate Invoice'}
+                                            </button>
+                                        </>
+                                    )}
                                 </div>
                             </div>
                         </motion.div>

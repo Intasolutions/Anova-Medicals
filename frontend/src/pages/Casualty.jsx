@@ -248,6 +248,7 @@ const TriageModal = ({ visit, onClose, onSave, doctors = [], pharmacyStock = [],
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {[
                                     { val: 'REFER_DOCTOR', label: 'Consult Doctor', desc: 'Proceed to OP.', icon: Stethoscope },
+                                    { val: 'REFER_PHARMACY', label: 'Pharmacy', desc: 'Collect Medicines.', icon: Pill },
                                     { val: 'REFER_LAB', label: 'Lab Investigation', desc: 'Tests required.', icon: Activity },
                                     { val: 'REFER_BILLING', label: 'Discharge & Bill', desc: 'Send to Billing.', icon: FileText }
                                 ].map(opt => (
@@ -1026,6 +1027,8 @@ const CasualtyPage = () => {
                     updatePayload = { ...updatePayload, assigned_role: 'DOCTOR', status: 'OPEN', doctor: data.doctor || null };
                 } else if (data.transfer_path === 'REFER_LAB') {
                     updatePayload = { ...updatePayload, assigned_role: 'LAB', status: 'OPEN' };
+                } else if (data.transfer_path === 'REFER_PHARMACY') {
+                    updatePayload = { ...updatePayload, assigned_role: 'PHARMACY', status: 'OPEN' };
                 } else if (data.transfer_path === 'REFER_BILLING') {
                     updatePayload = { ...updatePayload, assigned_role: 'BILLING', status: 'OPEN' };
                 }
@@ -1050,6 +1053,41 @@ const CasualtyPage = () => {
             console.error(err);
             showToast('error', 'Failed to update patient');
             return false;
+        }
+    };
+
+    // Force release a patient from Casualty (closes observation + moves visit)
+    const handleForceDischarge = async (visit, targetRole = 'CLOSED') => {
+        const actionLabel = targetRole === 'CLOSED' ? 'discharge' : `transfer to ${targetRole}`;
+        const confirmed = window.confirm(
+            `Force ${actionLabel} for ${visit.patient_name}?\n\nThis will end any active observation and ${targetRole === 'CLOSED' ? 'close this visit.' : `move them to ${targetRole}.`}`
+        );
+        if (!confirmed) return;
+
+        try {
+            // End any active observation first
+            const activeObs = visit.casualty_observations?.find(o => o.is_active);
+            if (activeObs) {
+                await api.patch(`/casualty/observations/${activeObs.id}/`, {
+                    is_active: false,
+                    observation_notes: (activeObs.observation_notes || '') + '\n[Force released by staff]'
+                });
+            }
+
+            let updatePayload;
+            if (targetRole === 'CLOSED') {
+                updatePayload = { status: 'CLOSED', assigned_role: 'CASUALTY' };
+            } else {
+                updatePayload = { status: 'OPEN', assigned_role: targetRole };
+            }
+
+            await api.patch(`/reception/visits/${visit.id || visit.v_id}/`, updatePayload);
+            showToast('success', `${visit.patient_name} ${targetRole === 'CLOSED' ? 'discharged' : `sent to ${targetRole}`} successfully.`);
+            fetchQueue();
+            fetchStats();
+        } catch (err) {
+            console.error(err);
+            showToast('error', 'Failed to release patient. Please try again.');
         }
     };
 
@@ -1268,6 +1306,41 @@ const CasualtyPage = () => {
                                                             >
                                                                 {viewMode === 'HISTORY' ? <FileText size={14} /> : <Stethoscope size={14} />} {viewMode === 'HISTORY' ? 'View Details' : 'Assess'}
                                                             </button>
+                                                            {/* Force Release Dropdown — only in QUEUE mode */}
+                                                            {viewMode === 'QUEUE' && (
+                                                                <div className="relative group/release">
+                                                                    <button
+                                                                        className="px-3 py-2 text-xs font-bold rounded-xl border-2 border-rose-200 text-rose-600 bg-rose-50 hover:bg-rose-500 hover:text-white hover:border-rose-500 transition-all flex items-center gap-1.5 uppercase tracking-wide"
+                                                                        title="Force Release Patient"
+                                                                    >
+                                                                        <ArrowRight size={13} /> Release
+                                                                    </button>
+                                                                    <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-slate-200 rounded-xl shadow-2xl z-50 hidden group-hover/release:block py-1 overflow-hidden">
+                                                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest px-3 py-1.5">Move Patient To</p>
+                                                                        {[
+                                                                            { label: 'Doctor', role: 'DOCTOR', color: 'text-blue-600' },
+                                                                            { label: 'Pharmacy', role: 'PHARMACY', color: 'text-emerald-600' },
+                                                                            { label: 'Billing', role: 'BILLING', color: 'text-indigo-600' },
+                                                                        ].map(opt => (
+                                                                            <button
+                                                                                key={opt.role}
+                                                                                onClick={() => handleForceDischarge(visit, opt.role)}
+                                                                                className={`w-full text-left px-3 py-2 text-xs font-bold ${opt.color} hover:bg-slate-50 transition-colors`}
+                                                                            >
+                                                                                → {opt.label}
+                                                                            </button>
+                                                                        ))}
+                                                                        <div className="border-t border-slate-100 mt-1 pt-1">
+                                                                            <button
+                                                                                onClick={() => handleForceDischarge(visit, 'CLOSED')}
+                                                                                className="w-full text-left px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 transition-colors"
+                                                                            >
+                                                                                ✓ Discharge (Close)
+                                                                            </button>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            )}
                                                         </>
                                                     )}
                                                 </div>

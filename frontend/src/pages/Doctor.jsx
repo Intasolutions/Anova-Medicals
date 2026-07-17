@@ -233,6 +233,7 @@ const Doctor = () => {
     const [serviceResults, setServiceResults] = useState([]);
     const [selectedServices, setSelectedServices] = useState([]);
     const [existingNoteId, setExistingNoteId] = useState(null);
+    const [localSearch, setLocalSearch] = useState('');
 
     // ── Qty Calculator ────────────────────────────────────────────────────────
     const calculateQty = (dosage, duration) => {
@@ -315,12 +316,12 @@ const Doctor = () => {
         if (showLoading) setLoading(true);
         try {
             const df = user?.role === 'DOCTOR' ? `&doctor=${user.u_id}` : '';
-            const sf = globalSearch ? `&search=${encodeURIComponent(globalSearch)}` : '';
+            const sf = localSearch ? `&search=${encodeURIComponent(localSearch)}` : '';
             const { data } = await api.get(`/reception/visits/?status__in=OPEN,IN_PROGRESS${df}&page=${page}${sf}`);
             setVisitsData(data || { results: [], count: 0 });
         } catch (e) { showToast('error', 'Could not refresh patient queue'); }
         finally { if (showLoading) setLoading(false); }
-    }, [user, page, globalSearch]);
+    }, [user, page, localSearch]);
 
     const fetchDoctors = async () => {
         try {
@@ -409,7 +410,20 @@ const Doctor = () => {
         if (query.length < 2) { setMedResults([]); return; }
         try {
             const { data } = await api.get(`/pharmacy/stock/doctor-search/?search=${query}&_t=${Date.now()}`);
-            setMedResults(data.results || data);
+            
+            // Deduplicate by normalized name (trim and lowercase) in case of trailing spaces in DB
+            const results = data.results || data;
+            const uniqueMap = new Map();
+            results.forEach(item => {
+                const normalized = item.name.trim().toLowerCase();
+                if (!uniqueMap.has(normalized)) {
+                    uniqueMap.set(normalized, { ...item, name: item.name.trim() });
+                } else {
+                    const existing = uniqueMap.get(normalized);
+                    existing.qty_available += item.qty_available;
+                }
+            });
+            setMedResults(Array.from(uniqueMap.values()));
         } catch (e) { console.error(e); }
     };
 
@@ -426,7 +440,7 @@ const Doctor = () => {
         setServiceSearch(query);
         if (query.length < 2) { setServiceResults([]); return; }
         try {
-            const { data } = await api.get(`/casualty/services/?search=${query}`);
+            const { data } = await api.get(`/casualty/service-definitions/?search=${query}`);
             setServiceResults(data.results || data);
         } catch (e) { console.error(e); }
     };
@@ -437,8 +451,8 @@ const Doctor = () => {
             setServiceSearch(''); setServiceResults([]); return;
         }
         setSelectedServices(prev => [...prev, service]);
-        // Services go to Casualty / Services
-        if (referral !== 'CASUALTY') { setReferral('CASUALTY'); showToast('info', 'Referral auto-set to Services / Day Care'); }
+        // Services go to Billing directly now
+        if (referral !== 'BILLING') { setReferral('BILLING'); showToast('info', 'Referral auto-set to Billing (for Services)'); }
         showToast('success', `${service.name} added`);
         setServiceSearch(''); setServiceResults([]);
     };
@@ -446,11 +460,11 @@ const Doctor = () => {
     const removeService = (id) => {
         const rem = selectedServices.filter(s => s.id !== id);
         setSelectedServices(rem);
-        if (rem.length === 0 && referral === 'CASUALTY') setReferral('NONE');
+        if (rem.length === 0 && referral === 'BILLING') setReferral('NONE');
     };
 
     // Human-readable referral label
-    const referralLabel = { LAB: 'Lab', PHARMACY: 'Pharmacy', DOCTOR: 'Another Doctor', CASUALTY: 'Casualty', NONE: 'Discharge' };
+    const referralLabel = { LAB: 'Lab', PHARMACY: 'Pharmacy', DOCTOR: 'Another Doctor', BILLING: 'Billing', NONE: 'Discharge' };
 
     const handleSaveConsultation = async () => {
         if (!selectedVisit || saving) return;
@@ -465,13 +479,7 @@ const Doctor = () => {
         if (referral === 'LAB' && !hasNewTests) {
             showToast('error', 'Add at least one lab test before referring to Lab'); return;
         }
-        // Only block cross-referral if tests are newly ordered (not from a completed round)
-        if (hasNewTests && !labsAlreadyDone && referral !== 'LAB') {
-            showToast('error', 'You have lab tests added — set referral to Lab or remove them'); return;
-        }
-        if (selectedMeds.length > 0 && referral !== 'PHARMACY' && referral !== 'CASUALTY') {
-            showToast('error', 'You have medicines prescribed — set referral to Pharmacy'); return;
-        }
+        
         const oos = selectedMeds.filter(m => (parseInt(m.count) || 0) > (m.stock || 0) && m.stock > 0);
         if (oos.length) {
             showToast('error', `Insufficient stock for: ${oos.map(m => m.name).join(', ')}`); return;
@@ -480,8 +488,12 @@ const Doctor = () => {
         if (invQty.length) {
             showToast('error', `Set a valid quantity for: ${invQty.map(m => m.name).join(', ')}`); return;
         }
-        if (referral === 'NONE' && !notes.diagnosis?.trim() && !notes.notes?.trim()) {
-            showToast('error', 'Enter a clinical diagnosis or notes before discharging the patient'); return;
+        
+        if (!notes.complaints?.trim()) { showToast('error', 'Please enter patient complaints'); return; }
+        if (!notes.examination?.trim()) { showToast('error', 'Please enter examination findings'); return; }
+        if (!notes.diagnosis?.trim()) { showToast('error', 'Please enter a clinical diagnosis'); return; }
+        if (referral === 'NONE' && !notes.notes?.trim()) {
+            showToast('error', 'Please enter closing notes before discharging the patient'); return;
         }
 
         setSaving(true);
@@ -506,6 +518,8 @@ const Doctor = () => {
                 visit: selectedVisit.v_id || selectedVisit.id,
                 diagnosis: notes.diagnosis,
                 notes: notes.notes,
+                complaints: notes.complaints,
+                examination: notes.examination,
                 prescription: prescriptionObj,
                 lab_referral_details: labReferralText,
             };
@@ -521,9 +535,18 @@ const Doctor = () => {
             if (selectedServices.length > 0) {
                 vu.casualty_services = selectedServices.map(s => s.id || s.service_id);
             }
-            if (referral === 'LAB') vu = { ...vu, status: 'OPEN', assigned_role: 'LAB' };
-            else if (referral === 'DOCTOR') vu = { ...vu, status: 'OPEN', assigned_role: 'DOCTOR', doctor: referredDoctorId };
-            else if (referral !== 'NONE') vu = { ...vu, status: 'OPEN', assigned_role: referral };
+            
+            // Smart routing: if discharge is selected but they have pending services/meds
+            let finalReferral = referral;
+            if (referral === 'NONE') {
+                if (selectedServices.length > 0) finalReferral = 'BILLING';
+                else if (selectedMeds.length > 0) finalReferral = 'PHARMACY';
+                else if (hasNewTests && !labsAlreadyDone) finalReferral = 'LAB';
+            }
+
+            if (finalReferral === 'LAB') vu = { ...vu, status: 'OPEN', assigned_role: 'LAB' };
+            else if (finalReferral === 'DOCTOR') vu = { ...vu, status: 'OPEN', assigned_role: 'DOCTOR', doctor: referredDoctorId };
+            else if (finalReferral !== 'NONE') vu = { ...vu, status: 'OPEN', assigned_role: finalReferral };
             else vu = { ...vu, status: 'CLOSED' };
 
             await api.patch(`/reception/visits/${selectedVisit.v_id || selectedVisit.id}/`, vu);
@@ -554,7 +577,7 @@ const Doctor = () => {
     };
 
     // ── Effects ──────────────────────────────────────────────────────────────
-    useEffect(() => { if (user) { fetchQueue(); fetchDoctors(); } }, [user, page, globalSearch]);
+    useEffect(() => { if (user) { fetchQueue(); fetchDoctors(); } }, [user, page, localSearch]);
 
     useEffect(() => {
         if (!user) return;
@@ -666,7 +689,7 @@ const Doctor = () => {
                         <div className="relative">
                             <Search className="absolute left-2.5 top-2.5 text-slate-400" size={14} />
                             <input className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold outline-none focus:border-blue-500 transition-all shadow-sm"
-                                placeholder="Search patients..." value={globalSearch} onChange={e => setGlobalSearch(e.target.value)} />
+                                placeholder="Search queue..." value={localSearch} onChange={e => setLocalSearch(e.target.value)} />
                         </div>
                         <div className="flex bg-slate-100 p-1 rounded-xl">
                             {[{ id: 'waiting', l: 'Waiting Room' }, { id: 'in_clinic', l: 'In Clinic' }].map(tab => (
@@ -680,6 +703,7 @@ const Doctor = () => {
                     <div className="flex-1 overflow-y-auto custom-scrollbar">
                         {loading ? <QueueSkeleton /> : (() => {
                             const filtered = (visitsData.results || []).filter(v => {
+                                if (localSearch) return true; // Show all search results regardless of tab
                                 if (queueTab === 'waiting') {
                                     // Waiting: directly assigned to this doctor, not yet with lab/pharmacy
                                     return v.assigned_role === 'DOCTOR';
@@ -777,7 +801,7 @@ const Doctor = () => {
                                         <option value="NONE">No Referral (Discharge)</option>
                                         <option value="LAB">→ Lab</option>
                                         <option value="PHARMACY">→ Pharmacy</option>
-                                        <option value="CASUALTY">→ Casualty</option>
+                                        <option value="BILLING">→ Billing</option>
                                         <option value="DOCTOR">→ Another Doctor</option>
                                     </select>
                                     {referral === 'DOCTOR' && (
@@ -1001,7 +1025,7 @@ const Doctor = () => {
 
                                         {/* Assign Services */}
                                         <AnimatePresence>
-                                            {referral === 'CASUALTY' && (
+                                            {true && (
                                                 <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden mb-6">
                                                     <div className="bg-teal-50/50 rounded-[24px] border border-teal-100 p-6">
                                                         <div className="flex justify-between items-center mb-4">
@@ -1051,7 +1075,7 @@ const Doctor = () => {
                                                 <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
                                                     <div className="p-1.5 bg-emerald-100 rounded-lg text-emerald-600"><Pill size={16} /></div>
                                                     Prescription Pad
-                                                    {selectedMeds.length > 0 && referral !== 'PHARMACY' && referral !== 'CASUALTY' && (
+                                                    {selectedMeds.length > 0 && referral !== 'PHARMACY' && referral !== 'BILLING' && (
                                                         <span className="text-amber-500 text-[10px] ml-1">⚠ Set referral to Pharmacy</span>
                                                     )}
                                                 </label>

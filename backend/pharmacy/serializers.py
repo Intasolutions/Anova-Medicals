@@ -278,43 +278,64 @@ class PharmacySaleSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
-
         sale = PharmacySale.objects.create(total_amount=0, **validated_data)
-
         total = 0
-        for item in items_data:
-            med_stock = item['med_stock']
-            qty = item['qty']
 
-            if med_stock.is_deleted:
+        for item in items_data:
+            initial_med_stock = item['med_stock']
+            required_qty = item['qty']
+
+            if initial_med_stock.is_deleted:
                 raise serializers.ValidationError("Selected medicine stock is deleted.")
 
-            if med_stock.qty_available < qty:
+            unit_price_fallback = item.get('unit_price') or (initial_med_stock.selling_price / initial_med_stock.tablets_per_strip)
+            gst_percent = item.get('gst_percent', 0)
+
+            # Find all available batches for this medicine, ordered by expiry date (FIFO)
+            available_batches = list(PharmacyStock.objects.filter(
+                name=initial_med_stock.name,
+                is_deleted=False,
+                qty_available__gt=0
+            ).order_by('expiry_date'))
+
+            # Prioritize the explicitly requested batch by moving it to the front of the list
+            available_batches.sort(key=lambda x: 0 if x.id == initial_med_stock.id else 1)
+
+            total_available = sum(b.qty_available for b in available_batches)
+            if total_available < required_qty:
                 raise serializers.ValidationError(
-                    f"Not enough stock for {med_stock.name} ({med_stock.batch_no}). Available: {med_stock.qty_available}"
+                    f"Not enough total stock for {initial_med_stock.name}. Available across all batches: {total_available}"
                 )
 
-            unit_price = item.get('unit_price')
-            if not unit_price:
-                # Calculate per-tablet price from strip selling price
-                unit_price = med_stock.selling_price / med_stock.tablets_per_strip
-            
-            amount = float(unit_price) * qty
-            gst_percent = item.get('gst_percent', 0)
-            total += amount
+            remaining_qty = required_qty
+            for batch in available_batches:
+                if remaining_qty <= 0:
+                    break
+                
+                deduct_qty = min(remaining_qty, batch.qty_available)
+                
+                # Calculate per-tablet price for this specific batch if unit_price wasn't hardcoded
+                batch_unit_price = item.get('unit_price') or (batch.selling_price / batch.tablets_per_strip)
+                amount = float(batch_unit_price) * deduct_qty
+                
+                # reduce stock
+                batch.qty_available -= deduct_qty
+                batch.save()
+                
+                total += amount
+                remaining_qty -= deduct_qty
 
-            # reduce stock
-            med_stock.qty_available -= qty
-            med_stock.save()
-
-            PharmacySaleItem.objects.create(
-                sale=sale,
-                med_stock=med_stock,
-                qty=qty,
-                unit_price=unit_price,
-                amount=amount,
-                gst_percent=gst_percent
-            )
+                # Create sale item for this batch portion
+                PharmacySaleItem.objects.create(
+                    sale=sale,
+                    med_stock=batch,
+                    qty=deduct_qty,
+                    unit_price=batch_unit_price,
+                    amount=amount,
+                    gst_percent=gst_percent,
+                    dosage=item.get('dosage', ''),
+                    timing=item.get('timing', '')
+                )
 
         sale.total_amount = total
         sale.save()

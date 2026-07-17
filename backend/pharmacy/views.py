@@ -305,6 +305,14 @@ class PharmacyStockViewSet(viewsets.ModelViewSet):
         if category:
             qs = qs.filter(category=category)
             
+        stock_status = self.request.query_params.get('stock_status')
+        if stock_status == 'OOS':
+            qs = qs.filter(qty_available__lte=0)
+        elif stock_status == 'LOW':
+            qs = qs.filter(qty_available__gt=0, qty_available__lt=10)
+        elif stock_status == 'IN_STOCK':
+            qs = qs.filter(qty_available__gte=10)
+            
         return qs.order_by('expiry_date')
 
     @action(detail=False, methods=['get'], url_path='low-stock')
@@ -386,6 +394,44 @@ class PharmacyStockViewSet(viewsets.ModelViewSet):
             })
         
         return Response(results)
+
+    @action(detail=True, methods=['post'], url_path='archive')
+    def archive(self, request, pk=None):
+        """
+        Archive a stock batch (soft-delete via is_deleted=True).
+        Conditions:
+          1. qty_available must be 0.
+          2. At least one other active batch of the same medicine name must exist with qty > 0.
+        This preserves audit trail in historical sales records while cleaning up dead batches.
+        """
+        stock = self.get_object()
+
+        if stock.qty_available > 0:
+            return Response(
+                {"detail": f"Cannot archive — this batch still has {stock.qty_available} units in stock."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Check that another active batch of the same medicine exists with stock > 0
+        other_batches = PharmacyStock.objects.filter(
+            name=stock.name,
+            is_deleted=False,
+            qty_available__gt=0
+        ).exclude(pk=stock.pk)
+
+        if not other_batches.exists():
+            return Response(
+                {"detail": "Cannot archive — no other active batch of this medicine exists. Add a replacement batch first."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        stock.is_deleted = True
+        stock.save(update_fields=['is_deleted'])
+
+        return Response(
+            {"detail": f"Batch '{stock.batch_no}' of '{stock.name}' has been archived successfully."},
+            status=status.HTTP_200_OK
+        )
 
 
 class PurchaseInvoiceViewSet(viewsets.ModelViewSet):

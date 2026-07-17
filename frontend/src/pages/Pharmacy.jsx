@@ -98,6 +98,7 @@ const Pharmacy = () => {
     const [filterSupplier, setFilterSupplier] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
     const [filterExpiring, setFilterExpiring] = useState(false);
+    const [filterStockStatus, setFilterStockStatus] = useState('');
     const [inventorySearch, setInventorySearch] = useState(''); // New State
     const [editingStockItem, setEditingStockItem] = useState(null);
 
@@ -199,12 +200,13 @@ const Pharmacy = () => {
             }
             if (filterSupplier) url += `&supplier=${filterSupplier}`;
             if (filterCategory) url += `&category=${filterCategory}`;
+            if (filterStockStatus) url += `&stock_status=${filterStockStatus}`;
             if (inventorySearch) url += `&search=${inventorySearch}`; // Add search param
             const { data } = await api.get(url);
             setStockData(data.results ? data : { results: data || [], count: data.length || 0 });
         } catch (err) { setStockData({ results: [], count: 0 }); }
         finally { if (showLoading) setLoading(false); }
-    }, [page, rowsPerPage, filterSupplier, filterCategory, inventorySearch]); // Add dependency
+    }, [page, rowsPerPage, filterSupplier, filterCategory, filterStockStatus, inventorySearch]); // Add dependency
 
     const fetchSuppliers = useCallback(async () => {
         try {
@@ -329,7 +331,20 @@ const Pharmacy = () => {
     const searchMeds = async (q) => {
         setMedSearch(q);
         if (!q || q.length < 2) { setMedResults([]); return; }
-        try { const { data } = await api.get(`pharmacy/stock/?search=${q}`); setMedResults(data.results || data || []); } catch (err) { setMedResults([]); }
+        try { 
+            const { data } = await api.get(`pharmacy/stock/?search=${q}`); 
+            const results = data.results || data || [];
+            const uniqueMap = new Map();
+            results.forEach(item => {
+                const normalized = item.name.trim().toLowerCase();
+                if (!uniqueMap.has(normalized)) {
+                    uniqueMap.set(normalized, { ...item, name: item.name.trim() });
+                } else {
+                    uniqueMap.get(normalized).qty_available += item.qty_available;
+                }
+            });
+            setMedResults(Array.from(uniqueMap.values())); 
+        } catch (err) { setMedResults([]); }
     };
     const addToCart = (med) => {
         const existing = cart.find(item => item.med_id === med.med_id);
@@ -818,40 +833,46 @@ const Pharmacy = () => {
         <div className="p-6 md:p-8 max-w-[1600px] mx-auto min-h-screen bg-gray-50 font-sans text-slate-900 flex flex-col overflow-hidden">
 
             {/* --- Top Header & Navigation --- */}
-            <div className="flex justify-between items-center mb-8 shrink-0 no-print">
+            <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center mb-8 shrink-0 no-print gap-4 lg:gap-8">
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight text-slate-950 font-outfit uppercase">Pharmacy</h1>
-                    <div className="flex items-center gap-6 mt-2">
+                    <div className="flex flex-wrap items-center gap-2 md:gap-6 mt-2">
                         {['inventory', 'pos', 'patients', 'purchases', 'returns', 'history'].map(tab => (
-                            <button key={tab} onClick={() => setActiveTab(tab)} className={`pb-1 text-sm font-bold transition-all border-b-2 ${activeTab === tab ? 'text-gray-900 border-gray-900' : 'text-slate-400 border-transparent hover:text-slate-600'}`}>
+                            <button key={tab} onClick={() => setActiveTab(tab)} className={`pb-1 text-sm font-bold transition-all border-b-2 whitespace-nowrap ${activeTab === tab ? 'text-gray-900 border-gray-900' : 'text-slate-400 border-transparent hover:text-slate-600'}`}>
                                 {tab === 'pos' ? 'Billing Terminal (POS)' : (tab === 'patients' ? 'Active Patients' : tab.charAt(0).toUpperCase() + tab.slice(1))}
                             </button>
                         ))}
                     </div>
                 </div>
                 {activeTab === 'inventory' && (
-                    <div className="flex gap-3">
-                        <div className="relative group">
+                    <div className="flex flex-wrap items-center justify-start lg:justify-end gap-3 flex-1 lg:max-w-[70%]">
+                        <div className="relative group flex-shrink-0">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={16} />
                             <input
-                                className="pl-9 pr-4 py-2 bg-white border border-slate-200 text-slate-700 text-xs rounded-xl focus:ring-2 focus:ring-gray-900/20 focus:border-gray-900 outline-none font-bold shadow-sm w-64 transition-all"
+                                className="pl-9 pr-4 py-2 bg-white border border-slate-200 text-slate-700 text-xs rounded-xl focus:ring-2 focus:ring-gray-900/20 focus:border-gray-900 outline-none font-bold shadow-sm w-48 md:w-64 transition-all"
                                 placeholder="Search inventory..."
                                 value={inventorySearch}
                                 onChange={(e) => setInventorySearch(e.target.value)}
                             />
                         </div>
-                        <select className="bg-white border border-slate-200 text-slate-700 text-xs rounded-xl focus:ring-gray-900 focus:border-gray-900 block px-3 py-2 outline-none font-bold shadow-sm" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
+                        <select className="bg-white border border-slate-200 text-slate-700 text-xs rounded-xl focus:ring-gray-900 focus:border-gray-900 block px-3 py-2 outline-none font-bold shadow-sm flex-shrink-0" value={filterCategory} onChange={(e) => setFilterCategory(e.target.value)}>
                             <option value="">Filter: All Categories</option>
                             <option value="PHARMACY">Pharmacy</option>
                             <option value="CASUALTY">Casualty</option>
                         </select>
-                        <select className="bg-white border border-slate-200 text-slate-700 text-xs rounded-xl focus:ring-gray-900 focus:border-gray-900 block px-3 py-2 outline-none font-bold shadow-sm" value={filterSupplier} onChange={(e) => setFilterSupplier(e.target.value)}>
+                        <select className="bg-white border border-slate-200 text-slate-700 text-xs rounded-xl focus:ring-gray-900 focus:border-gray-900 block px-3 py-2 outline-none font-bold shadow-sm flex-shrink-0" value={filterSupplier} onChange={(e) => setFilterSupplier(e.target.value)}>
                             <option value="">Filter: All Suppliers</option>
                             {suppliers.map(s => <option key={s.id} value={s.id}>{s.supplier_name}</option>)}
                         </select>
+                        <select className="bg-white border border-slate-200 text-slate-700 text-xs rounded-xl focus:ring-gray-900 focus:border-gray-900 block px-3 py-2 outline-none font-bold shadow-sm flex-shrink-0" value={filterStockStatus} onChange={(e) => setFilterStockStatus(e.target.value)}>
+                            <option value="">Filter: All Stock Levels</option>
+                            <option value="IN_STOCK">In Stock (&ge; 10 Tabs)</option>
+                            <option value="LOW">Low Stock (&lt; 10 Tabs)</option>
+                            <option value="OOS">Out of Stock</option>
+                        </select>
                         <button 
                             onClick={() => setFilterExpiring(!filterExpiring)}
-                            className={`px-4 py-2 text-xs font-bold rounded-xl transition-all shadow-sm border ${filterExpiring ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                            className={`px-4 py-2 text-xs font-bold rounded-xl transition-all shadow-sm border whitespace-nowrap flex-shrink-0 flex items-center ${filterExpiring ? 'bg-amber-100 border-amber-300 text-amber-800' : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}
                         >
                             <AlertTriangle size={14} className="inline mr-2" />
                             {filterExpiring ? 'Showing Expiring Soon' : 'Alert: Expiring Soon (< 6 mo)'}
@@ -876,9 +897,12 @@ const Pharmacy = () => {
                                         const sixMonthsFromNow = new Date();
                                         sixMonthsFromNow.setMonth(sixMonthsFromNow.getMonth() + 6);
                                         return expiryDate <= sixMonthsFromNow;
-                                    }).map(s => (
-                                        <tr key={s.med_id} className="hover:bg-slate-50 transition-colors group">
-                                            <td className="px-6 py-4 border-b border-gray-200"><div className="flex items-center gap-3"><div className="w-8 h-8 rounded-lg border border-gray-300 text-gray-700 flex items-center justify-center font-bold"><Pill size={14} /></div><div><p className="font-bold text-slate-900 text-sm">{s.name}</p><p className="text-xs font-bold text-slate-400 uppercase">{s.manufacturer || 'Generic'}</p></div></div></td>
+                                    }).map(s => {
+                                        const isOutOfStock = s.qty_available <= 0;
+                                        return (
+                                        <tr key={s.med_id} className={`hover:bg-slate-50 transition-colors group ${isOutOfStock ? 'opacity-50' : ''}`}>
+                                            <td className="px-6 py-4 border-b border-gray-200"><div className="flex items-center gap-3"><div className={`w-8 h-8 rounded-lg border flex items-center justify-center font-bold ${isOutOfStock ? 'border-red-200 text-red-400 bg-red-50' : 'border-gray-300 text-gray-700'}`}><Pill size={14} /></div><div><p className="font-bold text-slate-900 text-sm">{s.name}</p><p className="text-xs font-bold text-slate-400 uppercase">{s.manufacturer || 'Generic'}</p>{isOutOfStock && <span className="text-[9px] font-black text-red-500 uppercase tracking-widest bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">Stock Out</span>}</div></div></td>
+
                                             <td className="px-6 py-4 border-b border-gray-200">
                                                 <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold uppercase ${s.category === 'CASUALTY' ? 'border border-gray-300 text-gray-700' : 'border border-gray-300 text-gray-700'}`}>
                                                     {s.category || 'PHARMACY'}
@@ -958,7 +982,8 @@ const Pharmacy = () => {
                                                 </div>
                                             </td>
                                         </tr>
-                                    ))}
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>
