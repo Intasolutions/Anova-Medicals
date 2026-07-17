@@ -1126,20 +1126,38 @@ const Laboratory = () => {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
-                                        {labTests.map(test => (
-                                            <tr key={test.id} className="hover:bg-slate-50 transition-colors group">
-                                                <td className="px-6 py-4 font-bold text-slate-900 text-sm">{test.name}</td>
-                                                <td className="px-6 py-4">
-                                                    <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 text-xs font-bold uppercase">{test.category_display || test.category}</span>
-                                                </td>
-                                                <td className="px-6 py-4 font-mono font-bold text-slate-700">₹{test.price}</td>
-                                                <td className="px-6 py-4 text-xs font-bold text-slate-500 whitespace-pre-wrap">{test.normal_range || '--'}</td>
-                                                <td className="px-6 py-4">
-                                                    <button onClick={() => handleEditTest(test)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="Edit Test">
-                                                        <Pencil size={16} />
-                                                    </button>
-                                                </td>
-                                            </tr>
+                                        {Object.entries(
+                                            labTests.reduce((acc, test) => {
+                                                const cat = test.category || 'UNCATEGORIZED';
+                                                if (!acc[cat]) acc[cat] = [];
+                                                acc[cat].push(test);
+                                                return acc;
+                                            }, {})
+                                        ).map(([categoryName, tests]) => (
+                                            <React.Fragment key={categoryName}>
+                                                <tr className="bg-slate-100/50">
+                                                    <td colSpan="5" className="px-6 py-2 text-[10px] font-black text-slate-500 uppercase tracking-widest">{categoryName}</td>
+                                                </tr>
+                                                {tests.map(test => (
+                                                    <tr key={test.id} className="hover:bg-slate-50 transition-colors group">
+                                                        <td className="px-6 py-4 font-bold text-slate-900 text-sm flex items-center gap-2">
+                                                            {test.name}
+                                                            {test.gender === 'M' && <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-[9px] font-bold">MALE</span>}
+                                                            {test.gender === 'F' && <span className="px-1.5 py-0.5 rounded bg-pink-50 text-pink-600 text-[9px] font-bold">FEMALE</span>}
+                                                        </td>
+                                                        <td className="px-6 py-4">
+                                                            <span className="px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 text-xs font-bold uppercase">{test.category}</span>
+                                                        </td>
+                                                        <td className="px-6 py-4 font-mono font-bold text-slate-700">₹{test.price}</td>
+                                                        <td className="px-6 py-4 text-xs font-bold text-slate-500 whitespace-pre-wrap">{test.normal_range || '--'}</td>
+                                                        <td className="px-6 py-4">
+                                                            <button onClick={() => handleEditTest(test)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all" title="Edit Test">
+                                                                <Pencil size={16} />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </React.Fragment>
                                         ))}
                                     </tbody>
                                 </table>
@@ -2093,24 +2111,48 @@ const Laboratory = () => {
                                 </div>
                             </div>
 
-                            {/* Patient Info */}
-                            <div className="bg-slate-50 rounded-xl p-4 mb-6 border border-slate-100">
-                                <div className="grid grid-cols-2 gap-y-3 gap-x-8">
+                            {/* Patient Info Header */}
+                            <div className="mb-6 border-b-2 border-slate-900 pb-4">
+                                <div className="grid grid-cols-3 gap-4">
+                                    {/* Examinee Details */}
                                     <div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Patient Name</p>
-                                        <p className="text-sm font-bold text-slate-900">{printCharge.patient_name}</p>
+                                        <p className="text-sm font-bold text-black underline mb-3">Examinee Details:</p>
+                                        <p className="text-base font-black text-black mb-3 uppercase">{printCharge.patient_name}</p>
+                                        <div className="grid grid-cols-[80px_1fr] gap-y-2 text-xs text-black">
+                                            <span>Age/Sex</span>
+                                            <span className="font-bold">: {printCharge.patient_age} Years / {printCharge.patient_sex}</span>
+                                            <span>Telephone</span>
+                                            <span className="font-bold">: {printCharge.patient_phone || '--'}</span>
+                                            <span>IP/OP</span>
+                                            <span className="font-bold">: OP</span>
+                                            <span>Address</span>
+                                            <span className="font-bold">: {printCharge.patient_address || '--'}</span>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Age / Sex</p>
-                                        <p className="text-sm font-bold text-slate-900">{printCharge.patient_age} Years / {printCharge.patient_sex}</p>
+                                    
+                                    {/* Referred by */}
+                                    <div className="border-l-2 border-slate-900 pl-4">
+                                        <p className="text-sm font-bold text-black underline mb-3">Referred by:</p>
+                                        <p className="text-sm font-black text-black mb-3 uppercase">Dr. {printCharge.doctor_name || 'CONSULTANT'}</p>
+                                        <div className="text-xs text-black mt-4">
+                                            <p className="mb-1">Sample Collected At :</p>
+                                            <p className="font-bold uppercase">Anova Medical Center</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Referred By</p>
-                                        <p className="text-sm font-bold text-slate-900">Dr. {printCharge.doctor_name || 'Consultant'}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">Specimen</p>
-                                        <p className="text-sm font-bold text-slate-900">{printCharge.specimen || 'Blood'}</p>
+
+                                    {/* Sample Details */}
+                                    <div className="border-l-2 border-slate-900 pl-4">
+                                        <p className="text-sm font-bold text-black underline mb-3">Sample Details:</p>
+                                        <div className="grid grid-cols-[90px_1fr] gap-y-2 text-xs text-black">
+                                            <span>SID</span>
+                                            <span className="font-bold">: {printCharge.registration_number || '--'}</span>
+                                            <span>Registered On</span>
+                                            <span className="font-bold">: {new Date(printCharge.created_at || Date.now()).toLocaleString('en-IN', {day:'2-digit', month:'short', year:'numeric', hour:'numeric', minute:'2-digit', hour12:true}).replace(',', '')}</span>
+                                            <span>Reported On</span>
+                                            <span className="font-bold">: {printCharge.report_date ? new Date(printCharge.report_date).toLocaleString('en-IN', {day:'2-digit', month:'short', year:'numeric', hour:'numeric', minute:'2-digit', hour12:true}).replace(',', '') : '--'}</span>
+                                            <span>Printed On</span>
+                                            <span className="font-bold">: {new Date().toLocaleString('en-IN', {day:'2-digit', month:'short', year:'numeric'}).replace(',', '')}</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

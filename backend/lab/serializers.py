@@ -44,7 +44,7 @@ class LabTestSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = LabTest
-        fields = ['id', 'name', 'sub_name', 'category', 'price', 'normal_range', 'parameters', 'required_items']
+        fields = ['id', 'name', 'sub_name', 'category', 'price', 'gender', 'normal_range', 'parameters', 'required_items']
 
     def create(self, validated_data):
         parameters_data = validated_data.pop('parameters', [])
@@ -253,11 +253,14 @@ class LabChargeSerializer(serializers.ModelSerializer):
     registration_number = serializers.CharField(source='visit.patient.registration_number', read_only=True)
     patient_age = serializers.CharField(source='visit.patient.age', read_only=True)
     patient_sex = serializers.CharField(source='visit.patient.gender', read_only=True)
+    patient_phone = serializers.CharField(source='visit.patient.phone', read_only=True)
+    patient_address = serializers.CharField(source='visit.patient.address', read_only=True)
 
     class Meta:
         model = LabCharge
         fields = [
             'lc_id', 'visit', 'visit_id', 'patient_name', 'registration_number', 'patient_age', 'patient_sex',
+            'patient_phone', 'patient_address',
             'test_name', 'sub_name', 'amount', 'status', 'results', 'report_date', 'technician_name',
             'specimen', 'created_at', 'updated_at'
         ]

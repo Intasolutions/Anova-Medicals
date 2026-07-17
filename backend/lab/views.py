@@ -167,8 +167,33 @@ class LabChargeViewSet(viewsets.ModelViewSet):
     permission_classes = [IsLabOrAdmin]
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    search_fields = ['test_name', 'visit__patient__full_name', 'visit__patient__phone']
+    search_fields = ['test_name', 'visit__patient__full_name', 'visit__patient__phone', 'visit__patient__registration_number']
     filterset_fields = ['visit', 'status']
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        
+        # Calculate global status counts (can be optimized later to filter by date if needed)
+        from django.db.models import Count
+        base_qs = LabCharge.objects.all()
+        counts = base_qs.values('status').annotate(count=Count('id'))
+        
+        status_dict = {
+            'ALL': base_qs.count(),
+            'PENDING': 0,
+            'VERIFICATION': 0,
+            'COMPLETED': 0,
+            'CANCELLED': 0
+        }
+        for item in counts:
+            if item['status'] in status_dict:
+                status_dict[item['status']] = item['count']
+                
+        # Inject into paginated response
+        if isinstance(response.data, dict):
+            response.data['status_counts'] = status_dict
+            
+        return response
 
     def perform_update(self, serializer):
         # Capture old status from the instance before it is updated
