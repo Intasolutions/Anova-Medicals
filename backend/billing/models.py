@@ -15,7 +15,7 @@ class Invoice(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.invoice_number:
-            last_invoice = Invoice.objects.all().order_by('created_at').last()
+            last_invoice = Invoice.objects.exclude(invoice_number__isnull=True).exclude(invoice_number="").order_by('created_at').last()
             if not last_invoice or not last_invoice.invoice_number:
                 self.invoice_number = "INV-1000"
             else:

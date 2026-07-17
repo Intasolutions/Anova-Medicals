@@ -258,7 +258,11 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         
         collection_today = PaymentTransaction.objects.filter(created_at__date=today).aggregate(Sum('amount'))['amount__sum'] or 0
 
-        total_pending = pending_query.aggregate(Sum('balance_due'))['balance_due__sum'] or 0
+        # total_pending needs to be calculated in python because balance_due is not a DB field
+        total_pending = 0
+        for inv in pending_query.prefetch_related('payments'):
+            paid = sum(p.amount for p in inv.payments.all())
+            total_pending += (inv.total_amount - paid - inv.refund_amount)
         
         count = Invoice.objects.filter(created_at__date=today).count()
 
