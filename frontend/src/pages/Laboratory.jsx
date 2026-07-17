@@ -836,9 +836,14 @@ const Laboratory = () => {
                                     <button
                                         key={s}
                                         onClick={() => { setStatusFilter(s); setPage(1); }}
-                                        className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${statusFilter === s ? 'bg-slate-900 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'}`}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${statusFilter === s ? 'bg-slate-900 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-100'}`}
                                     >
                                         {s}
+                                        {chargesData?.status_counts && (
+                                            <span className={`px-2 py-0.5 rounded-full text-[10px] ${statusFilter === s ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
+                                                {chargesData.status_counts[s] || 0}
+                                            </span>
+                                        )}
                                     </button>
                                 ))}
                             </div>
