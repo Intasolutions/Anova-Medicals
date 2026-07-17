@@ -464,6 +464,28 @@ const Reports = () => {
                                     </div>
 
                                     <div className="space-y-6">
+                                        {selectedNote.complaints && (
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <div className="w-1.5 h-4 bg-indigo-500 rounded-full"></div>
+                                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Complaints</span>
+                                                </div>
+                                                <p className="text-slate-800 font-medium leading-relaxed bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                                    {selectedNote.complaints}
+                                                </p>
+                                            </div>
+                                        )}
+                                        {selectedNote.examination && (
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <div className="w-1.5 h-4 bg-indigo-500 rounded-full"></div>
+                                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Examination</span>
+                                                </div>
+                                                <p className="text-slate-800 font-medium leading-relaxed bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                                                    {selectedNote.examination}
+                                                </p>
+                                            </div>
+                                        )}
                                         <div>
                                             <div className="flex items-center gap-2 mb-2">
                                                 <div className="w-1.5 h-4 bg-blue-500 rounded-full"></div>

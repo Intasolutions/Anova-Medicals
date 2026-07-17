@@ -86,6 +86,24 @@ const HistoryModal = ({ history, onClose }) => {
                             </div>
                         </div>
                     )}
+                    {/* Complaints & Examination */}
+                    {(history.complaints || history.examination) && (
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                                <div className="p-1.5 bg-indigo-100 rounded-lg text-indigo-600"><AlertCircle size={16} /></div> Chief Complaints & Examination
+                            </div>
+                            {history.complaints && (
+                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-slate-800 font-medium leading-relaxed">
+                                    <span className="font-bold block mb-1 text-slate-400 uppercase text-[10px]">Complaints</span>{history.complaints}
+                                </div>
+                            )}
+                            {history.examination && (
+                                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 text-slate-800 font-medium leading-relaxed">
+                                    <span className="font-bold block mb-1 text-slate-400 uppercase text-[10px]">Examination</span>{history.examination}
+                                </div>
+                            )}
+                        </div>
+                    )}
                     {/* Diagnosis */}
                     <div className="space-y-3">
                         <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
@@ -200,7 +218,7 @@ const Doctor = () => {
     const [doctorsList, setDoctorsList] = useState([]);
     const [saving, setSaving] = useState(false);
 
-    const [notes, setNotes] = useState({ diagnosis: '', notes: '' });
+    const [notes, setNotes] = useState({ complaints: '', examination: '', diagnosis: '', notes: '' });
     const [vitals, setVitals] = useState({ bp: '', temp: '', pulse: '', spo2: '', weight: '' });
     const [medicalHistory, setMedicalHistory] = useState('');
     const [medSearch, setMedSearch] = useState('');
@@ -333,15 +351,17 @@ const Doctor = () => {
         finally { setHistoryLoading(false); }
     };
 
-    const fetchExistingNote = async (visit) => {
+    const fetchExistingNote = async (visit, draftLoaded = false) => {
         try {
             const vId = visit.v_id || visit.id;
             const { data } = await api.get(`/medical/doctor-notes/?visit=${vId}`);
             const existing = (data.results || data)[0];
             if (!existing) return;
             setExistingNoteId(existing.note_id || existing.id);
-            setNotes({ diagnosis: existing.diagnosis || '', notes: existing.notes || '' });
-            if (existing.prescription && typeof existing.prescription === 'object') {
+            if (!draftLoaded) {
+                setNotes({ complaints: existing.complaints || '', examination: existing.examination || '', diagnosis: existing.diagnosis || '', notes: existing.notes || '' });
+            }
+            if (existing.prescription && typeof existing.prescription === 'object' && !draftLoaded) {
                 const medPromises = Object.entries(existing.prescription).map(async ([name, details]) => {
                     let dosage = '1-0-1', duration = '5 Days', count = '15';
                     try {
@@ -475,6 +495,9 @@ const Doctor = () => {
 
             await api.patch(`/reception/visits/${selectedVisit.v_id || selectedVisit.id}/`, vu);
 
+            // Clear draft autosave on successful save
+            localStorage.removeItem(`doctor_draft_visit_${selectedVisit.v_id || selectedVisit.id}`);
+
             const label = referralLabel[referral] || referral;
             showToast('success', referral !== 'NONE' ? `Patient referred to ${label}` : 'Patient discharged successfully');
             setSelectedVisit(null);
@@ -537,15 +560,47 @@ const Doctor = () => {
 
     useEffect(() => {
         if (!selectedVisit) { setPatientHistory([]); return; }
-        setNotes({ diagnosis: '', notes: '' });
+        setNotes({ complaints: '', examination: '', diagnosis: '', notes: '' });
         setVitals(selectedVisit.vitals && Object.values(selectedVisit.vitals).some(Boolean)
             ? selectedVisit.vitals : { bp: '', temp: '', pulse: '', spo2: '', weight: '' });
         setMedicalHistory(selectedVisit.patient_medical_history || '');
         setSelectedMeds([]); setSelectedTests([]); setReferral('NONE'); setReferredDoctorId('');
         setExistingNoteId(null); setMedSearch(''); setMedResults([]); setLabSearch(''); setLabResults([]);
-        fetchExistingNote(selectedVisit);
+
+        // Try restoring draft first
+        const draftKey = `doctor_draft_visit_${selectedVisit.v_id || selectedVisit.id}`;
+        const draftJson = localStorage.getItem(draftKey);
+        let draftLoaded = false;
+        if (draftJson) {
+            try {
+                const draft = JSON.parse(draftJson);
+                if (draft.notes) setNotes(draft.notes);
+                if (draft.vitals) setVitals(draft.vitals);
+                if (draft.selectedMeds) setSelectedMeds(draft.selectedMeds);
+                if (draft.selectedTests) setSelectedTests(draft.selectedTests);
+                if (draft.referral) setReferral(draft.referral);
+                if (draft.referredDoctorId) setReferredDoctorId(draft.referredDoctorId);
+                draftLoaded = true;
+            } catch (e) { console.error('Error parsing draft', e); }
+        }
+
+        fetchExistingNote(selectedVisit, draftLoaded);
         fetchPatientHistory(selectedVisit.patient_id || selectedVisit.patient);
     }, [selectedVisit?.v_id, selectedVisit?.id]);
+
+    // ── Autosave Draft Effect ──
+    useEffect(() => {
+        if (!selectedVisit) return;
+        const vId = selectedVisit.v_id || selectedVisit.id;
+        const draftKey = `doctor_draft_visit_${vId}`;
+        const dataToSave = { notes, vitals, selectedMeds, selectedTests, referral, referredDoctorId };
+        
+        const timer = setTimeout(() => {
+            localStorage.setItem(draftKey, JSON.stringify(dataToSave));
+        }, 1000); // 1s debounce
+        
+        return () => clearTimeout(timer);
+    }, [notes, vitals, selectedMeds, selectedTests, referral, referredDoctorId, selectedVisit]);
 
     const totalPages = Math.ceil((visitsData.count || 0) / 10);
 
@@ -716,8 +771,8 @@ const Doctor = () => {
 
                             {/* Workspace */}
                             <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-                                <div className="grid grid-cols-3 gap-8">
-                                    <div className="col-span-2 space-y-8">
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                                    <div className="lg:col-span-2 space-y-8">
                                         {/* Vitals */}
                                         <div>
                                             <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-3">
@@ -761,6 +816,17 @@ const Doctor = () => {
                                             </div>
                                             <textarea className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-medium text-slate-800 focus:bg-white focus:border-rose-400 outline-none transition-all resize-none placeholder:text-slate-400"
                                                 rows="2" placeholder="Update known conditions..." value={medicalHistory} onChange={e => setMedicalHistory(e.target.value)} />
+                                        </div>
+
+                                        {/* Complaints & Examination */}
+                                        <div>
+                                            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-3">
+                                                <div className="p-1.5 bg-indigo-100 rounded-lg text-indigo-600"><AlertCircle size={16} /></div> Chief Complaints & Examination
+                                            </label>
+                                            <textarea className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-medium text-slate-800 focus:bg-white focus:border-indigo-400 outline-none transition-all resize-none placeholder:text-slate-400"
+                                                rows="3" placeholder="Chief complaints (e.g., Headache for 3 days)..." value={notes.complaints || ''} onChange={e => setNotes({ ...notes, complaints: e.target.value })} />
+                                            <textarea className="w-full mt-2 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-medium text-slate-800 focus:bg-white focus:border-indigo-400 outline-none transition-all resize-none placeholder:text-slate-400"
+                                                rows="3" placeholder="Clinical examination findings..." value={notes.examination || ''} onChange={e => setNotes({ ...notes, examination: e.target.value })} />
                                         </div>
 
                                         {/* Diagnosis */}

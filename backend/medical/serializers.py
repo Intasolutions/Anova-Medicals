@@ -11,7 +11,7 @@ class DoctorNoteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DoctorNote
-        fields = ['note_id', 'visit', 'visit_id', 'diagnosis', 'prescription', 'notes', 'lab_referral_details', 'lab_results', 'created_by', 'created_by_name', 'created_at', 'updated_at']
+        fields = ['note_id', 'visit', 'visit_id', 'complaints', 'examination', 'diagnosis', 'prescription', 'notes', 'lab_referral_details', 'lab_results', 'created_by', 'created_by_name', 'created_at', 'updated_at']
         read_only_fields = ['note_id', 'created_at', 'updated_at']
 
     lab_results = serializers.SerializerMethodField()

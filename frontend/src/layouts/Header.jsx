@@ -206,6 +206,15 @@ const Header = () => {
                     <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
                     <span className="text-[10px] font-bold text-green-700 uppercase tracking-wider">System Live</span>
                 </div>
+
+                {/* Logout Button (Important for roles without a sidebar) */}
+                <button 
+                    onClick={logout}
+                    className="ml-2 p-2 rounded-xl bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white transition-colors border border-rose-100 flex items-center justify-center"
+                    title="Logout"
+                >
+                    <LogOut size={16} />
+                </button>
             </div>
         </header>
     );
