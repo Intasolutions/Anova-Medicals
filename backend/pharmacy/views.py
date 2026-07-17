@@ -425,7 +425,8 @@ class PharmacySaleViewSet(viewsets.ModelViewSet):
             qs = qs.filter(
                 models.Q(id__icontains=search) | 
                 models.Q(patient__full_name__icontains=search) |
-                models.Q(patient__phone__icontains=search)
+                models.Q(patient__phone__icontains=search) |
+                models.Q(patient__registration_number__icontains=search)
             )
             
         start_date = self.request.query_params.get('start_date')
