@@ -25,14 +25,15 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Invoice
-        fields = ['id', 'invoice_number', 'visit', 'patient_name', 'total_amount', 'refund_amount', 'payment_status', 'payment_mode', 'remarks', 'items', 'payments', 'amount_paid', 'balance_due', 'patient_display', 'patient_id', 'registration_number', 'created_at']
+        fields = ['id', 'invoice_number', 'visit', 'patient', 'patient_name', 'total_amount', 'discount_amount', 'refund_amount', 'payment_status', 'payment_mode', 'remarks', 'items', 'payments', 'amount_paid', 'balance_due', 'patient_display', 'patient_id', 'registration_number', 'created_at']
 
     def get_amount_paid(self, obj):
         return sum(p.amount for p in obj.payments.all())
 
     def get_balance_due(self, obj):
         paid = sum(p.amount for p in obj.payments.all())
-        return max(0, obj.total_amount - paid)
+        discount = obj.discount_amount or 0
+        return max(0, obj.total_amount - discount - paid)
 
     def get_patient_display(self, obj):
         if obj.visit and obj.visit.patient:

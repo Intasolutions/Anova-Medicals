@@ -1062,6 +1062,8 @@ const Reception = () => {
                                                 >
                                                     <option value="DOCTOR">Doctor (Consultation)</option>
                                                     <option value="LAB">Laboratory</option>
+                                                    <option value="CASUALTY">Day Care / Services</option>
+                                                    <option value="PHARMACY">Pharmacy</option>
                                                 </select>
                                             </div>
 
@@ -1096,6 +1098,11 @@ const Reception = () => {
                                                         </div>
                                                     ))}
                                                 </div>
+                                            ) : visitForm.assigned_role === 'PHARMACY' ? (
+                                                <div className="flex-1 flex flex-col justify-center items-center text-slate-400">
+                                                    <Pill size={48} className="mb-4 opacity-20" />
+                                                    <p className="text-sm font-bold text-center">Patient will be sent to the Pharmacy queue.</p>
+                                                </div>
                                             ) : (
                                                 <div className="flex-1 overflow-hidden flex flex-col pt-2">
                                                     <div className="mb-4">
@@ -1109,55 +1116,96 @@ const Reception = () => {
                                                         />
                                                     </div>
                                                     <div className="flex justify-between items-center mb-2">
-                                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Select Lab Tests (Optional)</label>
+                                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+                                                            {visitForm.assigned_role === 'CASUALTY' ? 'Select Services (Optional)' : 'Select Lab Tests (Optional)'}
+                                                        </label>
                                                     </div>
                                                     <div className="relative mb-3 flex-shrink-0">
                                                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                                                         <input
                                                             type="text"
-                                                            placeholder="Search lab tests..."
+                                                            placeholder={visitForm.assigned_role === 'CASUALTY' ? 'Search services...' : 'Search lab tests...'}
                                                             className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                                                            value={labTestSearchQ}
-                                                            onChange={(e) => setLabTestSearchQ(e.target.value)}
+                                                            value={visitForm.assigned_role === 'CASUALTY' ? serviceSearchQ : labTestSearchQ}
+                                                            onChange={(e) => visitForm.assigned_role === 'CASUALTY' ? setServiceSearchQ(e.target.value) : setLabTestSearchQ(e.target.value)}
                                                         />
                                                     </div>
-                                                    {availableLabTests.filter(t => t.name.toLowerCase().includes(labTestSearchQ.toLowerCase())).length === 0 ? (
-                                                        <p className="text-sm text-slate-400 text-center py-4">No lab tests match your search.</p>
+                                                    
+                                                    {visitForm.assigned_role === 'CASUALTY' ? (
+                                                        serviceDefinitions.filter(t => t.name.toLowerCase().includes(serviceSearchQ.toLowerCase())).length === 0 ? (
+                                                            <p className="text-sm text-slate-400 text-center py-4">No services match your search.</p>
+                                                        ) : (
+                                                            <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                                                                {serviceDefinitions.filter(t => t.name.toLowerCase().includes(serviceSearchQ.toLowerCase())).map(test => {
+                                                                    const isSelected = selectedStartServices.includes(test.id);
+                                                                    return (
+                                                                        <div
+                                                                            key={test.id}
+                                                                            onClick={() => {
+                                                                                if (isSelected) {
+                                                                                    setSelectedStartServices(selectedStartServices.filter(id => id !== test.id));
+                                                                                } else {
+                                                                                    setSelectedStartServices([...selectedStartServices, test.id]);
+                                                                                }
+                                                                            }}
+                                                                            className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                                                                                isSelected ? 'border-teal-500 bg-teal-50/50' : 'border-slate-100 hover:border-slate-200'
+                                                                            }`}
+                                                                        >
+                                                                            <div>
+                                                                                <p className="text-sm font-bold text-slate-900">{test.name}</p>
+                                                                                <p className="text-xs text-slate-500 font-medium">₹{test.price || test.base_charge}</p>
+                                                                            </div>
+                                                                            <div className={`w-5 h-5 rounded flex items-center justify-center border ${
+                                                                                isSelected ? 'bg-teal-600 border-teal-600 text-white' : 'border-slate-300'
+                                                                            }`}>
+                                                                                {isSelected && <CheckCircle2 size={14} />}
+                                                                            </div>
+                                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )
                                                     ) : (
-                                                        <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                                                            {availableLabTests.filter(t => t.name.toLowerCase().includes(labTestSearchQ.toLowerCase())).map(test => {
-                                                                const isSelected = selectedLabTests.includes(test.id);
-                                                                return (
-                                                                    <div
-                                                                        key={test.id}
-                                                                        onClick={() => {
-                                                                            if (isSelected) {
-                                                                                setSelectedLabTests(selectedLabTests.filter(id => id !== test.id));
-                                                                            } else {
-                                                                                setSelectedLabTests([...selectedLabTests, test.id]);
-                                                                            }
-                                                                        }}
-                                                                        className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
-                                                                            isSelected ? 'border-blue-500 bg-blue-50/50' : 'border-slate-100 hover:border-slate-200'
-                                                                        }`}
-                                                                    >
-                                                                        <div>
-                                                                            <p className="text-sm font-bold text-slate-900">{test.name}</p>
-                                                                            <p className="text-xs text-slate-500 font-medium">₹{test.price}</p>
+                                                        availableLabTests.filter(t => t.name.toLowerCase().includes(labTestSearchQ.toLowerCase())).length === 0 ? (
+                                                            <p className="text-sm text-slate-400 text-center py-4">No lab tests match your search.</p>
+                                                        ) : (
+                                                            <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                                                                {availableLabTests.filter(t => t.name.toLowerCase().includes(labTestSearchQ.toLowerCase())).map(test => {
+                                                                    const isSelected = selectedLabTests.includes(test.id);
+                                                                    return (
+                                                                        <div
+                                                                            key={test.id}
+                                                                            onClick={() => {
+                                                                                if (isSelected) {
+                                                                                    setSelectedLabTests(selectedLabTests.filter(id => id !== test.id));
+                                                                                } else {
+                                                                                    setSelectedLabTests([...selectedLabTests, test.id]);
+                                                                                }
+                                                                            }}
+                                                                            className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                                                                                isSelected ? 'border-blue-500 bg-blue-50/50' : 'border-slate-100 hover:border-slate-200'
+                                                                            }`}
+                                                                        >
+                                                                            <div>
+                                                                                <p className="text-sm font-bold text-slate-900">{test.name}</p>
+                                                                                <p className="text-xs text-slate-500 font-medium">₹{test.price}</p>
+                                                                            </div>
+                                                                            <div className={`w-5 h-5 rounded flex items-center justify-center border ${
+                                                                                isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'
+                                                                            }`}>
+                                                                                {isSelected && <CheckCircle2 size={14} />}
+                                                                            </div>
                                                                         </div>
-                                                                        <div className={`w-5 h-5 rounded flex items-center justify-center border ${
-                                                                            isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'
-                                                                        }`}>
-                                                                            {isSelected && <CheckCircle2 size={14} />}
-                                                                        </div>
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
+                                                                    );
+                                                                })}
+                                                            </div>
+                                                        )
                                                     )}
+                                                    
                                                     <div className="mt-4 p-4 bg-blue-50/50 rounded-xl border border-blue-100 text-xs font-medium text-blue-800 flex gap-2 flex-shrink-0">
                                                         <AlertCircle size={16} className="text-blue-500 shrink-0" />
-                                                        <p>Patient will be sent to the billing queue for these tests before proceeding to the laboratory.</p>
+                                                        <p>Patient will be sent to the billing queue for these tests/services before proceeding.</p>
                                                     </div>
                                                 </div>
                                             )}

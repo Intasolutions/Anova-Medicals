@@ -91,6 +91,10 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
 
+        # Save header fields FIRST before calculating distribution 
+        # so that refresh_from_db doesn't overwrite them
+        instance.save()
+
         if items_data is not None:
              # Logic for updating items
              # IF status was already COMPLETED, we must reverse the old stock contribution before replacing items
@@ -106,7 +110,9 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
              instance.calculate_distribution()
              instance.refresh_from_db()
 
-        instance.save()
+        # We already saved instance, but calculate_distribution also saves it inside model.
+        # Ensure latest values are returned
+
 
         # IF transitioning to COMPLETED (from Draft) OR staying COMPLETED (after edit)
         # Apply the new stock contribution
@@ -141,6 +147,7 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
             
             # TOTAL QTY in Units (Tablets)
             qty_in = (qty_strips + free_strips) * tps
+            print(f"DEBUG: Processing stock for item {item.product_name}. qty_in: {qty_in}")
 
             # Effective Purchase Rate Calculation
             # Logic: (Total Net Cost of Line) / (Total Strips including Free)

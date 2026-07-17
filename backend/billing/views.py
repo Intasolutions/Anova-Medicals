@@ -148,7 +148,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         if proposed_total <= 0:
             return Response({'error': 'Payment amount must be greater than zero.'}, status=400)
             
-        if (current_paid + Decimal(str(proposed_total))) > invoice.total_amount + Decimal('0.5'):
+        if (current_paid + Decimal(str(proposed_total))) > invoice.total_amount - getattr(invoice, 'discount_amount', Decimal('0')) + Decimal('0.5'):
             return Response({'error': 'Total payment exceeds invoice balance due.'}, status=400)
         
         with transaction.atomic():
@@ -179,7 +179,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         
         # Update Invoice Status
         # Allow small buffer for float errors (converted to Decimal)
-        if total_paid >= invoice.total_amount - Decimal('0.5'):
+        discount = getattr(invoice, 'discount_amount', Decimal('0'))
+        if total_paid >= invoice.total_amount - discount - Decimal('0.5'):
             invoice.payment_status = 'PAID'
             if invoice.visit and invoice.visit.lab_charges.filter(status='PENDING').exists():
                 invoice.visit.assigned_role = 'LAB'

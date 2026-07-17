@@ -313,7 +313,7 @@ const Laboratory = () => {
     const fetchPendingVisits = async (showLoading = false) => {
         if (showLoading) setLoading(true); // Usually not needed for secondary fetches but keeping for flexibility
         try {
-            const { data } = await api.get(`reception/visits/?assigned_role=LAB&status=OPEN`);
+            const { data } = await api.get(`/reception/visits/?lab_queue=true`);
             setPendingVisits(data.results || data || []);
         } catch (err) { console.error(err); }
         finally { if (showLoading) setLoading(false); }
@@ -867,7 +867,7 @@ const Laboratory = () => {
                                     <tbody className="divide-y divide-slate-50">
                                         {/* Pending Visits (Assigned to Lab) */}
                                         {pendingVisits.length > 0 && statusFilter === 'ALL' && page === 1 && (
-                                            pendingVisits.map(v => (
+                                            pendingVisits.filter(v => !groupedCharges.some(g => g.visitId === (v.id || v.v_id))).map(v => (
                                                 <tr key={v.id} className="bg-blue-50/30 hover:bg-blue-50 transition-colors group">
                                                     <td className="px-6 py-4">
                                                         <div className="flex items-center gap-3">
@@ -1002,7 +1002,7 @@ const Laboratory = () => {
                                                                                 Mark Received
                                                                             </button>
                                                                         )}
-                                                                        {['PENDING', 'DRAWN', 'RECEIVED', 'VERIFICATION'].includes(t.status) && (
+                                                                        {['RECEIVED', 'VERIFICATION'].includes(t.status) && (
                                                                             <button
                                                                                 onClick={() => handleOpenResultEntry(t)}
                                                                                 className={`px-2 py-1 text-[10px] font-bold rounded transition-all border ${t.status === 'VERIFICATION' ? 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'}`}

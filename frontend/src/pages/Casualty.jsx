@@ -19,11 +19,14 @@ const TriageModal = ({ visit, onClose, onSave, doctors = [], pharmacyStock = [],
         doctor: '',
         medicines: [],
         services: [],
+        lab_tests: [], // Track lab tests selected in Casualty
         observation: { planned_duration_minutes: 60, observation_notes: '', is_active: false }
     });
 
     const [stockSearch, setStockSearch] = useState("");
     const [serviceSearch, setServiceSearch] = useState("");
+    const [labSearch, setLabSearch] = useState("");
+    const [labResults, setLabResults] = useState([]);
     const [error, setError] = useState(null);
 
     useEffect(() => {
@@ -58,15 +61,31 @@ const TriageModal = ({ visit, onClose, onSave, doctors = [], pharmacyStock = [],
                 api.get(`/casualty/observations/?visit=${visitId}`)
             ]);
             const allObs = obs.data.results || obs.data || [];
-            const activeOb = allObs.find(o => o.is_active) || allObs[0] || { planned_duration_minutes: 60, observation_notes: '', is_active: false };
+            const activeObs = allObs.find(o => o.is_active);
+
+            // Fetch pending lab charges for this visit to display if any
+            const labsRes = await api.get(`/lab/charges/?visit=${visitId}&status=PENDING`);
+            const pendingLabs = labsRes.data.results || labsRes.data || [];
 
             setFormData(prev => ({
                 ...prev,
-                medicines: meds.data.results || meds.data,
-                services: svcs.data.results || svcs.data,
-                observation: activeOb
+                medicines: meds.data.results || meds.data || [],
+                services: svcs.data.results || svcs.data || [],
+                lab_tests: pendingLabs.map(l => ({ id: l.id, name: l.test_name, price: l.amount, existing: true })),
+                observation: activeObs || prev.observation
             }));
-        } catch (e) { console.error("Error fetching casualty data:", e); }
+        } catch (e) {
+            console.error("Failed to fetch triage details", e);
+        }
+    };
+
+    const searchLabTests = async (query) => {
+        setLabSearch(query);
+        if (query.length < 2) { setLabResults([]); return; }
+        try {
+            const { data } = await api.get(`/lab/tests/?search=${query}`);
+            setLabResults(data.results || data);
+        } catch (e) { console.error(e); }
     };
 
     const addMedicine = (stock) => {
@@ -121,8 +140,26 @@ const TriageModal = ({ visit, onClose, onSave, doctors = [], pharmacyStock = [],
         }
 
         setError(null);
-        const success = await onSave(visit.id || visit.v_id, formData);
+        // Force is_active to false if we are transferring/discharging
+        const payload = formData.transfer_path ? {
+            ...formData,
+            observation: { ...formData.observation, is_active: false }
+        } : formData;
+
+        const success = await onSave(visit.id || visit.v_id, payload);
         if (success) onClose();
+    };
+
+    const handleKeepActive = async () => {
+        setError(null);
+        // Force is_active to true and clear transfer_path
+        const payload = {
+            ...formData,
+            transfer_path: '',
+            observation: { ...formData.observation, is_active: true }
+        };
+        const success = await onSave(visit.id || visit.v_id, payload);
+        if (success) onClose(); // Optionally close, but the patient remains active
     };
 
     const filteredStock = stockSearch.length >= 2
@@ -397,6 +434,57 @@ const TriageModal = ({ visit, onClose, onSave, doctors = [], pharmacyStock = [],
                                     <textarea disabled={readOnly} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs disabled:bg-slate-50" rows="3" placeholder="Condition monitoring notes..." value={formData.observation.observation_notes} onChange={e => setFormData({ ...formData, observation: { ...formData.observation, observation_notes: e.target.value } })} />
                                 </div>
                             </motion.div>
+
+                            {/* Lab Tests Section */}
+                            <div className="mt-8">
+                                <h3 className="text-xs font-black text-slate-800 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                    <Activity size={16} className="text-blue-500" /> Lab Investigations
+                                </h3>
+                                <div className="bg-white p-6 rounded-2xl border-2 border-slate-100 shadow-sm">
+                                    <div className="relative mb-4">
+                                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                                        <input
+                                            className="w-full bg-slate-50 border-2 border-slate-100 pl-12 pr-4 py-3 rounded-xl font-bold text-sm focus:border-blue-500 outline-none transition-colors"
+                                            placeholder="Search lab tests to assign..." value={labSearch} onChange={e => searchLabTests(e.target.value)} />
+                                        {labResults.length > 0 && (
+                                            <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden z-50">
+                                                {labResults.map(test => (
+                                                    <button key={test.id}
+                                                        onClick={() => {
+                                                            if (!formData.lab_tests.some(t => t.id === test.id || t.test_id === test.id)) {
+                                                                setFormData({ ...formData, lab_tests: [...formData.lab_tests, { test_id: test.id, name: test.name, price: test.price, existing: false }] });
+                                                            }
+                                                            setLabSearch(''); setLabResults([]);
+                                                        }}
+                                                        className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-50 flex items-center justify-between"
+                                                    >
+                                                        <span className="font-bold text-sm">{test.name} {test.sub_name && <span className="text-slate-400 font-normal">({test.sub_name})</span>}</span>
+                                                        <span className="text-xs font-black text-slate-400">₹{test.price}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {formData.lab_tests.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 mt-4">
+                                            {formData.lab_tests.map((test, idx) => (
+                                                <div key={idx} className={`px-3 py-1.5 rounded-lg border flex items-center gap-2 ${test.existing ? 'bg-slate-50 border-slate-200 text-slate-600' : 'bg-blue-50 border-blue-200 text-blue-700'}`}>
+                                                    <span className="text-xs font-bold">{test.name}</span>
+                                                    {!test.existing && (
+                                                        <button onClick={() => setFormData({ ...formData, lab_tests: formData.lab_tests.filter((_, i) => i !== idx) })} className="hover:text-rose-500 transition-colors">
+                                                            <X size={14} />
+                                                        </button>
+                                                    )}
+                                                    {test.existing && (
+                                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">PENDING</span>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
                         </div>
                     )}
                 </div>
@@ -410,9 +498,14 @@ const TriageModal = ({ visit, onClose, onSave, doctors = [], pharmacyStock = [],
                     <div className="flex justify-end gap-3">
                         <button onClick={onClose} className="px-6 py-3 rounded-xl text-slate-500 font-bold hover:text-slate-700 text-[10px] uppercase tracking-widest">Close</button>
                         {!readOnly && (
-                            <button onClick={handleSubmit} className="px-8 py-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-blue-600 shadow-xl shadow-slate-900/10 transition-all text-[10px] uppercase tracking-widest flex items-center gap-2">
-                                Update Treatment <ArrowRight size={14} />
-                            </button>
+                            <>
+                                <button onClick={handleKeepActive} className="px-8 py-3 rounded-xl bg-amber-500 text-white font-bold hover:bg-amber-600 shadow-xl shadow-amber-500/20 transition-all text-[10px] uppercase tracking-widest flex items-center gap-2">
+                                    <Clock size={14} /> Update & Keep Active
+                                </button>
+                                <button onClick={handleSubmit} className="px-8 py-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-blue-600 shadow-xl shadow-slate-900/10 transition-all text-[10px] uppercase tracking-widest flex items-center gap-2">
+                                    Save & Transfer <ArrowRight size={14} />
+                                </button>
+                            </>
                         )}
                     </div>
                 </div>
@@ -850,6 +943,19 @@ const CasualtyPage = () => {
                 }
             }
 
+            // 3.5 Persist Lab Tests
+            if (data.lab_tests && data.lab_tests.length > 0) {
+                const newTests = data.lab_tests.filter(t => !t.existing);
+                for (const test of newTests) {
+                    await api.post('/lab/charges/', {
+                        visit: visitId,
+                        test_name: test.name,
+                        amount: test.price,
+                        status: 'PENDING'
+                    });
+                }
+            }
+
             // 3. Persist Services
             if (data.services.length > 0) {
                 for (const svc of data.services) {
@@ -1204,4 +1310,5 @@ const CasualtyPage = () => {
     );
 };
 
+export { TriageModal };
 export default CasualtyPage;

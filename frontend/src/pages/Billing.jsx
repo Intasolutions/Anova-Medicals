@@ -34,6 +34,7 @@ const Billing = () => {
     const [patients, setPatients] = useState([]);
     const [pharmacyStock, setPharmacyStock] = useState([]);
     const [serviceDefinitions, setServiceDefinitions] = useState([]); // New state for services
+    const [availableLabTests, setAvailableLabTests] = useState([]); // New state for lab tests
     const [selectedPatientId, setSelectedPatientId] = useState(null);
     const [stockSearch, setStockSearch] = useState({ index: -1, term: "" });
 
@@ -43,6 +44,8 @@ const Billing = () => {
         visit: null,
         doctor: "",
         payment_status: "PENDING",
+        discount_amount: 0,
+        patient: null,
         items: [{ dept: "PHARMACY", description: "", qty: 1, unit_price: 0, amount: 0, hsn: "", batch: "", gst_percent: 0, expiry: "", dosage: "", duration: "", mfr: "" }]
     });
 
@@ -127,48 +130,122 @@ const Billing = () => {
 
     const fetchMetadata = async () => {
         try {
-            const [docRes, patRes, stockRes, svcRes] = await Promise.all([
+            const [docRes, patRes, stockRes, svcRes, labRes] = await Promise.all([
                 api.get(`users/management/doctors/`),
                 api.get(`reception/patients/`),
                 api.get(`pharmacy/stock/`),
-                api.get(`casualty/service-definitions/`)
+                api.get(`casualty/service-definitions/`),
+                api.get(`lab/tests/`)
             ]);
             setDoctors(Array.isArray(docRes.data) ? docRes.data : docRes.data.results);
             setPatients(Array.isArray(patRes.data) ? patRes.data : patRes.data.results);
             setPharmacyStock(Array.isArray(stockRes.data) ? stockRes.data : stockRes.data.results);
             setServiceDefinitions(Array.isArray(svcRes.data) ? svcRes.data : svcRes.data.results);
+            setAvailableLabTests(Array.isArray(labRes.data) ? labRes.data : labRes.data.results);
         } catch (err) { console.error(err); }
     };
 
-    // --- Stock Search Logic ---
-    const handleSelectStock = (stock, index) => {
-        const newItems = [...formData.items];
-        // Calculate unit price from selling_price / tablets_per_strip
-        const tps = stock.tablets_per_strip || 1;
-        const unitPrice = parseFloat(stock.selling_price) / tps;
-        const qty = parseFloat(newItems[index].qty) || 1;
+    // --- Stock / Service Search Logic ---
+    const handleStockSearch = (term, index) => {
+        if (!term || term.length < 2) {
+            setStockSearch({ index: -1, term: "", results: [] });
+            return;
+        }
 
-        newItems[index] = {
-            ...newItems[index],
-            description: stock.name,
-            batch: stock.batch_no,
-            unit_price: unitPrice.toFixed(2),
-            qty: qty, // Ensure qty is preserved/set
-            amount: (qty * unitPrice).toFixed(2),
-            hsn: stock.hsn || "",
-            gst_percent: stock.gst_percent || 0,
-            expiry: stock.expiry_date || "",
-            stock_deducted: false,
-            deducted_qty: 0,
-            mfr: stock.manufacturer || ""
-        };
-        setFormData({ ...formData, items: newItems });
-        setStockSearch({ index: -1, term: "" });
+        const lowerTerm = term.toLowerCase();
+
+        // Search Service Definitions
+        const matchedServices = serviceDefinitions
+            .filter(s => s.name.toLowerCase().includes(lowerTerm))
+            .map(s => ({ ...s, type: 'SERVICE' }))
+            .slice(0, 5);
+
+        // Search Lab Tests
+        const matchedLabs = availableLabTests
+            .filter(s => s.name.toLowerCase().includes(lowerTerm))
+            .map(s => ({ ...s, type: 'LAB' }))
+            .slice(0, 5);
+
+        const combined = [...matchedLabs, ...matchedServices];
+        
+        setStockSearch({ index, term, results: combined });
     };
 
-    const filteredStock = stockSearch.term.length >= 2
-        ? pharmacyStock.filter(s => s.name.toLowerCase().includes(stockSearch.term.toLowerCase())).slice(0, 10)
-        : [];
+    const handleSelectStock = (itemData, index) => {
+        // Prevent duplication
+        const existing = formData.items.findIndex((i, idx) => i.description === itemData.name && idx !== index);
+        if (existing !== -1) {
+            showToast('error', 'Item already added to invoice!');
+            setStockSearch({ index: -1, term: "", results: [] });
+            return;
+        }
+
+        const newItems = [...formData.items];
+        const qty = parseFloat(newItems[index].qty) || 1;
+
+        if (itemData.type === 'SERVICE') {
+            const unitPrice = parseFloat(itemData.base_charge) || 0;
+            newItems[index] = {
+                ...newItems[index],
+                dept: "CASUALTY",
+                description: itemData.name,
+                batch: "",
+                unit_price: unitPrice.toFixed(2),
+                qty: qty,
+                amount: (qty * unitPrice).toFixed(2),
+                hsn: "",
+                gst_percent: 0,
+                expiry: "",
+                stock_deducted: false,
+                deducted_qty: 0,
+                mfr: "",
+                ref_id: itemData.id // Save the service definition ID for syncing later
+            };
+        } else if (itemData.type === 'LAB') {
+            const unitPrice = parseFloat(itemData.price) || 0;
+            newItems[index] = {
+                ...newItems[index],
+                dept: "LAB",
+                description: itemData.name,
+                batch: "",
+                unit_price: unitPrice.toFixed(2),
+                qty: qty,
+                amount: (qty * unitPrice).toFixed(2),
+                hsn: "",
+                gst_percent: 0,
+                expiry: "",
+                stock_deducted: false,
+                deducted_qty: 0,
+                mfr: "",
+                ref_id: itemData.id // Save the lab test ID for syncing later
+            };
+        } else {
+            // STOCK
+            const tps = itemData.tablets_per_strip || 1;
+            const unitPrice = parseFloat(itemData.selling_price) / tps;
+            newItems[index] = {
+                ...newItems[index],
+                dept: "PHARMACY",
+                description: itemData.name,
+                batch: itemData.batch_no,
+                unit_price: unitPrice.toFixed(2),
+                qty: qty,
+                amount: (qty * unitPrice).toFixed(2),
+                hsn: itemData.hsn || "",
+                gst_percent: itemData.gst_percent || 0,
+                expiry: itemData.expiry_date || "",
+                stock_deducted: false,
+                deducted_qty: 0,
+                mfr: itemData.manufacturer || ""
+            };
+        }
+
+        // Auto append empty row for next search
+        newItems.push({ dept: "", description: "", qty: 1, unit_price: 0, amount: 0, hsn: "", batch: "", gst_percent: 0, expiry: "", dosage: "", duration: "" });
+        
+        setFormData({ ...formData, items: newItems });
+        setStockSearch({ index: -1, term: "", results: [] });
+    };
 
     // --- Logic ---
     const handleBillNow = async (visit) => {
@@ -182,15 +259,28 @@ const Billing = () => {
             if (foundDoctor) doctorToSet = foundDoctor.id;
         }
 
-        // Note: visits in 'Ready for Billing' section don't have invoices yet (enforced by backend query)
-        // If we ever need to support re-billing, we would search for an existing invoice here.
+        // --- Check for existing DRAFT invoice ---
+        try {
+            const existingInvoiceRes = await api.get(`/billing/invoices/?visit=${visit.id || visit.v_id}`);
+            const existingInvoices = existingInvoiceRes.data.results || existingInvoiceRes.data;
+            const draftInvoice = existingInvoices.find(inv => inv.payment_status === 'DRAFT');
+            
+            if (draftInvoice) {
+                handleEditInvoice(draftInvoice);
+                return; // Stop here, we loaded the draft!
+            }
+        } catch (err) {
+            console.warn("Could not check for existing drafts:", err);
+        }
 
         const newFormData = {
             patient_name: patientName,
+            patient: patId || null,
             doctor_display_name: visit.doctor_name || "Not Assigned",
             visit: visit.id || visit.v_id,
             doctor: doctorToSet,
             payment_status: "PENDING",
+            discount_amount: 0,
             registration_number: (visit.patient && visit.patient.registration_number) || (patientObj && patientObj.registration_number) || "N/A",
             items: []
         }
@@ -432,7 +522,7 @@ const Billing = () => {
 
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleCreateInvoice = async () => {
+    const handleCreateInvoice = async (status = 'PENDING') => {
         if (isSubmitting) return; // Prevent double clicks
 
         // --- Client Side Stock Validation ---
@@ -449,9 +539,6 @@ const Billing = () => {
                         return showToast('error', `Insufficient stock for ${item.description}. Available: ${stock.qty_available}, Requested: ${item.qty}`);
                     }
                 } else if (item.qty > 0) {
-                    // If no stock record found at all but user typed a name manually
-                    // We should still allow it but maybe warn? 
-                    // Given the user's request, let's be strict.
                     return showToast('error', `No stock record found for ${item.description}. Please select from the dropdown.`);
                 }
             }
@@ -459,12 +546,15 @@ const Billing = () => {
 
         setIsSubmitting(true);
         const subtotal = calculateSubtotal(formData.items);
+        const discount = parseFloat(formData.discount_amount) || 0;
         const invoiceData = {
             patient_name: formData.patient_name,
-            payment_status: formData.payment_status,
+            patient: formData.patient || selectedPatientId || null,
+            payment_status: status,
             total_amount: subtotal.toFixed(2),
+            discount_amount: discount.toFixed(2),
             items: formData.items.map(({ id, created_at, updated_at, ...rest }) => ({ ...rest, id })),
-            visit: formData.visit
+            visit: (typeof formData.visit === 'object' && formData.visit) ? formData.visit.id : formData.visit
         };
 
         try {
@@ -476,17 +566,53 @@ const Billing = () => {
                 const res = await api.post(`billing/invoices/`, invoiceData);
                 savedInvoice = res.data;
             }
-            setShowModal(false);
-            setFormData({ patient_name: "", visit: null, doctor: "", payment_status: "PENDING", items: [] });
+
+            // --- Sync Labs and Services to the Visit! ---
+            if (formData.visit) {
+                const visitId = typeof formData.visit === 'object' ? formData.visit.id : formData.visit;
+                if (visitId) {
+                    const newLabTests = formData.items.filter(i => i.dept === 'LAB' && i.ref_id).map(i => i.ref_id);
+                    const newServices = formData.items.filter(i => i.dept === 'CASUALTY' && i.ref_id).map(i => i.ref_id);
+                    
+                    if (newLabTests.length > 0 || newServices.length > 0) {
+                        try {
+                            const visitRes = await api.get(`/reception/visits/${visitId}/`);
+                            const visitData = visitRes.data;
+                            
+                            const existingLabs = (visitData.lab_tests || []).map(t => t.id || t);
+                            const existingServices = (visitData.casualty_services || []).map(s => s.id || s);
+
+                            const mergedLabs = Array.from(new Set([...existingLabs, ...newLabTests]));
+                            const mergedServices = Array.from(new Set([...existingServices, ...newServices]));
+
+                            await api.patch(`/reception/visits/${visitId}/`, {
+                                lab_tests: mergedLabs,
+                                casualty_services: mergedServices
+                            });
+                        } catch (err) {
+                            console.error("Failed to sync labs/services to visit", err);
+                        }
+                    }
+                }
+            }
+
             fetchInvoices(false); fetchStats(false); fetchPendingVisits(false);
             
-            // Highlight payment by automatically opening the payment modal
-            if (savedInvoice && savedInvoice.payment_status === 'PENDING') {
-                setPaymentData({ invoice: savedInvoice, payments: { CASH: '', UPI: '', CARD: '' }, remarks: '' });
-                setShowPaymentModal(true);
-                showToast('success', "Invoice generated! Please collect payment.");
+            if (status === 'DRAFT') {
+                showToast('success', "Invoice saved as Draft!");
+                // Update formData with the ID from the backend so subsequent saves are PATCHes
+                setFormData(prev => ({ ...prev, id: savedInvoice.id }));
             } else {
-                showToast('success', "Invoice saved successfully!");
+                setShowModal(false);
+                setFormData({ patient_name: "", patient: null, visit: null, doctor: "", payment_status: "PENDING", discount_amount: 0, items: [] });
+                
+                if (savedInvoice && savedInvoice.payment_status === 'PENDING') {
+                    setPaymentData({ invoice: savedInvoice, payments: { CASH: '', UPI: '', CARD: '' }, remarks: '' });
+                    setShowPaymentModal(true);
+                    showToast('success', "Invoice generated! Please collect payment.");
+                } else {
+                    showToast('success', "Invoice saved successfully!");
+                }
             }
         } catch (err) {
             console.error("Invoice save error:", err);
@@ -589,10 +715,12 @@ const Billing = () => {
             setFormData({
                 id: invoice.id,
                 patient_name: invoice.patient_name,
+                patient: invoice.patient_id || null,
                 visit: invoice.visit,
                 doctor: invoice.doctor || (visitData ? visitData.doctor : ""),
                 doctor_display_name: invoice.doctor_display_name || (visitData ? visitData.doctor_name : "") || "Not Assigned",
                 payment_status: invoice.payment_status,
+                discount_amount: invoice.discount_amount || 0,
                 registration_number: invoice.registration_number || (visitData && visitData.patient ? visitData.patient.registration_number : "") || "N/A",
                 items: [
                     ...baseItems.map(i => ({ ...i, stock_deducted: true })),
@@ -852,8 +980,12 @@ const Billing = () => {
                                     <td className="px-6 py-4 font-bold text-slate-700">₹{invoice.total_amount}</td>
                                     <td className="px-6 py-4">
                                         <div className="flex flex-col items-start gap-1">
-                                            <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wide border ${invoice.payment_status === 'PAID' ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-amber-50 text-amber-700 border-amber-100"
-                                                }`}>
+                                            <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wide border ${
+                                                invoice.payment_status === 'PAID' ? "bg-emerald-50 text-emerald-700 border-emerald-100" : 
+                                                invoice.payment_status === 'PARTIAL' ? "bg-blue-50 text-blue-700 border-blue-100" :
+                                                invoice.payment_status === 'CANCELLED' ? "bg-slate-50 text-slate-500 border-slate-200" :
+                                                "bg-amber-50 text-amber-700 border-amber-100"
+                                            }`}>
                                                 {invoice.payment_status}
                                             </span>
                                             {invoice.payment_status === 'PARTIAL' && (
@@ -1002,9 +1134,6 @@ const Billing = () => {
                                             <tr>
                                                 <th className="py-3 text-[10px] font-black text-slate-900 uppercase tracking-widest w-12">#</th>
                                                 <th className="py-3 text-[10px] font-black text-slate-900 uppercase tracking-widest min-w-[250px]">Description</th>
-                                                <th className="py-3 text-[10px] font-black text-slate-900 uppercase tracking-widest w-20 text-center">HSN</th>
-                                                <th className="py-3 text-[10px] font-black text-slate-900 uppercase tracking-widest w-24 text-center">Batch</th>
-                                                <th className="py-3 text-[10px] font-black text-slate-900 uppercase tracking-widest w-24 text-center">Exp</th>
                                                 <th className="py-3 text-[10px] font-black text-slate-900 uppercase tracking-widest w-16 text-center">Qty</th>
                                                 <th className="py-3 text-[10px] font-black text-slate-900 uppercase tracking-widest w-16 text-center">GST%</th>
                                                 <th className="py-3 text-[10px] font-black text-slate-900 uppercase tracking-widest w-24 text-right">Price</th>
@@ -1036,43 +1165,45 @@ const Billing = () => {
                                                             }}
                                                         />
                                                         {stockSearch.index === idx && stockSearch.results.length > 0 && (
-                                                            <div className="absolute top-full left-0 z-[100] w-[400px] bg-white border border-slate-200 rounded-xl shadow-2xl py-2 mt-2">
-                                                                {stockSearch.results.map(stock => (
-                                                                    <button
-                                                                        key={stock.med_id || stock.id}
-                                                                        disabled={stock.qty_available <= 0}
-                                                                        onClick={() => handleSelectStock(stock, idx)}
-                                                                        className={`w-full text-left px-4 py-2 flex items-center justify-between group transition-colors ${stock.qty_available <= 0 ? 'opacity-50 cursor-not-allowed bg-slate-50' : 'hover:bg-blue-50'}`}
-                                                                    >
-                                                                        <div>
-                                                                            <p className={`text-sm font-bold ${stock.qty_available <= 0 ? 'text-slate-400' : 'text-slate-800'}`}>{stock.name}</p>
-                                                                            <div className="flex items-center gap-2 mt-0.5">
-                                                                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Batch: {stock.batch_no}</span>
-                                                                                <span className={`text-[10px] font-bold ${stock.qty_available <= 0 ? 'text-rose-500' : 'text-emerald-500'}`}>
-                                                                                    {stock.qty_available <= 0 ? 'Out of Stock' : `${stock.qty_available} in stock`}
-                                                                                </span>
+                                                            <div className="absolute top-full left-0 z-[100] w-[400px] bg-white border border-slate-200 rounded-xl shadow-2xl py-2 mt-2 max-h-[300px] overflow-y-auto">
+                                                                {stockSearch.results.map(item => {
+                                                                    const isService = item.type === 'SERVICE';
+                                                                    const outOfStock = !isService && item.qty_available <= 0;
+                                                                    const itemPrice = isService ? item.base_charge : (item.selling_price / (item.tablets_per_strip || 1));
+                                                                    
+                                                                    return (
+                                                                        <button
+                                                                            key={`${item.type}-${item.id}`}
+                                                                            disabled={outOfStock}
+                                                                            onClick={() => handleSelectStock(item, idx)}
+                                                                            className={`w-full text-left px-4 py-2 flex items-center justify-between group transition-colors ${outOfStock ? 'opacity-50 cursor-not-allowed bg-slate-50' : 'hover:bg-blue-50'}`}
+                                                                        >
+                                                                            <div>
+                                                                                <p className={`text-sm font-bold flex items-center gap-2 ${outOfStock ? 'text-slate-400' : 'text-slate-800'}`}>
+                                                                                    {item.name}
+                                                                                    {isService && <span className="text-[8px] px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 uppercase tracking-widest">Service</span>}
+                                                                                </p>
+                                                                                {!isService && (
+                                                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Batch: {item.batch_no}</span>
+                                                                                        <span className={`text-[10px] font-bold ${outOfStock ? 'text-rose-500' : 'text-emerald-500'}`}>
+                                                                                            {outOfStock ? 'Out of Stock' : `${item.qty_available} in stock`}
+                                                                                        </span>
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
-                                                                        </div>
-                                                                        <div className="text-right">
-                                                                            <p className={`text-xs font-black ${stock.qty_available <= 0 ? 'text-slate-400' : 'text-slate-900 group-hover:text-blue-600'} transition-colors`}>₹{(stock.selling_price / (stock.tablets_per_strip || 1)).toFixed(2)}</p>
-                                                                            <p className="text-[8px] font-bold text-slate-400">per unit</p>
-                                                                        </div>
-                                                                    </button>
-                                                                ))}
+                                                                            <div className="text-right">
+                                                                                <p className={`text-xs font-black ${outOfStock ? 'text-slate-400' : 'text-slate-900 group-hover:text-blue-600'} transition-colors`}>₹{parseFloat(itemPrice).toFixed(2)}</p>
+                                                                                <p className="text-[8px] font-bold text-slate-400">per unit</p>
+                                                                            </div>
+                                                                        </button>
+                                                                    );
+                                                                })}
                                                             </div>
                                                         )}
                                                         {stockSearch.index === idx && (
                                                             <div className="fixed inset-0 z-[50] pointer-events-auto" onClick={() => setStockSearch({ index: -1, term: "", results: [] })} />
                                                         )}
-                                                    </td>
-                                                    <td className="py-4 text-center">
-                                                        <span className="text-[10px] font-bold text-slate-600">{item.hsn}</span>
-                                                    </td>
-                                                    <td className="py-4 text-center">
-                                                        <span className="text-[10px] font-bold text-slate-600">{item.batch}</span>
-                                                    </td>
-                                                    <td className="py-4 text-center">
-                                                        <span className="text-[10px] font-bold text-slate-600">{item.expiry}</span>
                                                     </td>
                                                     <td className="py-4 text-center">
                                                         <input
@@ -1135,12 +1266,7 @@ const Billing = () => {
                                             ))}
                                         </tbody>
                                     </table>
-                                    <button
-                                        onClick={() => setFormData(prev => ({ ...prev, items: [...prev.items, { dept: "PHARMACY", description: "", qty: 1, unit_price: 0, amount: 0, dosage: "", duration: "", hsn: "", mfr: "", batch: "", expiry: "" }] }))}
-                                        className="mt-4 text-xs font-bold text-blue-600 hover:underline uppercase tracking-wide flex items-center gap-1"
-                                    >
-                                        <Plus size={12} /> Add Item Line
-                                    </button>
+                                    {/* Add Item Line buttons removed */}
                                 </div>
 
                                 <div className="flex justify-end">
@@ -1149,9 +1275,18 @@ const Billing = () => {
                                             <span>Subtotal</span>
                                             <span>₹{calculateSubtotal(formData.items).toFixed(2)}</span>
                                         </div>
+                                        <div className="flex justify-between items-center text-sm font-medium text-rose-500">
+                                            <span>Discount (₹)</span>
+                                            <input 
+                                                type="number" 
+                                                className="w-24 text-right bg-rose-50 border border-rose-200 rounded p-1 outline-none text-rose-700 font-bold focus:border-rose-400"
+                                                value={formData.discount_amount}
+                                                onChange={e => setFormData({ ...formData, discount_amount: parseFloat(e.target.value) || 0 })}
+                                            />
+                                        </div>
                                         <div className="border-t-2 border-slate-900 pt-3 flex justify-between items-end">
-                                            <span className="text-xs font-black text-slate-900 uppercase tracking-widest">Total</span>
-                                            <span className="text-2xl font-black text-slate-900 leading-none">₹{Math.ceil(calculateSubtotal(formData.items)).toFixed(2)}</span>
+                                            <span className="text-xs font-black text-slate-900 uppercase tracking-widest">Net Total</span>
+                                            <span className="text-2xl font-black text-slate-900 leading-none">₹{Math.ceil(Math.max(0, calculateSubtotal(formData.items) - (parseFloat(formData.discount_amount) || 0))).toFixed(2)}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -1166,8 +1301,11 @@ const Billing = () => {
                                 </div>
                                 <div className="flex gap-3">
                                     <button onClick={() => setShowModal(false)} className="px-6 py-3 rounded-xl font-bold text-slate-600 hover:bg-white border border-transparent hover:border-slate-200 transition-all">Cancel</button>
-                                    <button onClick={handleCreateInvoice} disabled={isSubmitting} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold shadow-xl shadow-slate-900/20 hover:bg-blue-600 transition-all flex items-center gap-2 disabled:bg-slate-400 disabled:cursor-not-allowed">
-                                        <CheckCircle2 size={18} /> {isSubmitting ? 'Saving...' : (formData.id ? 'Update Invoice' : 'Generate Invoice')}
+                                    <button onClick={() => handleCreateInvoice('DRAFT')} disabled={isSubmitting} className="px-6 py-3 rounded-xl font-bold text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-all">
+                                        Save as Draft
+                                    </button>
+                                    <button onClick={() => handleCreateInvoice('PENDING')} disabled={isSubmitting} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold shadow-xl shadow-slate-900/20 hover:bg-blue-600 transition-all flex items-center gap-2 disabled:bg-slate-400 disabled:cursor-not-allowed">
+                                        <CheckCircle2 size={18} /> {isSubmitting ? 'Saving...' : (formData.id && formData.payment_status !== 'DRAFT' ? 'Update Invoice' : 'Generate Invoice')}
                                     </button>
                                 </div>
                             </div>
@@ -1221,10 +1359,7 @@ const Billing = () => {
                             <thead>
                                 <tr className="bg-slate-100">
                                     <th className="py-2 px-2 border-b border-r border-slate-900 text-[9px] font-black text-slate-900 uppercase tracking-widest w-[5%] text-center">#</th>
-                                    <th className="py-2 px-2 border-b border-r border-slate-900 text-[9px] font-black text-slate-900 uppercase tracking-widest w-[35%]">Description</th>
-                                    <th className="py-2 px-2 border-b border-r border-slate-900 text-[9px] font-black text-slate-900 uppercase tracking-widest w-[10%] text-center">HSN</th>
-                                    <th className="py-2 px-2 border-b border-r border-slate-900 text-[9px] font-black text-slate-900 uppercase tracking-widest w-[10%] text-center">Batch</th>
-                                    <th className="py-2 px-2 border-b border-r border-slate-900 text-[9px] font-black text-slate-900 uppercase tracking-widest w-[8%] text-center">Exp</th>
+                                    <th className="py-2 px-2 border-b border-r border-slate-900 text-[9px] font-black text-slate-900 uppercase tracking-widest w-[63%]">Description</th>
                                     <th className="py-2 px-2 border-b border-r border-slate-900 text-[9px] font-black text-slate-900 uppercase tracking-widest w-[7%] text-center">Qty</th>
                                     <th className="py-2 px-2 border-b border-r border-slate-900 text-[9px] font-black text-slate-900 uppercase tracking-widest w-[7%] text-center">GST%</th>
                                     <th className="py-2 px-2 border-b border-r border-slate-900 text-[9px] font-black text-slate-900 uppercase tracking-widest w-[9%] text-right">Price</th>
@@ -1236,9 +1371,6 @@ const Billing = () => {
                                     <tr key={idx} className="border-b border-slate-300">
                                         <td className="py-2 px-2 border-r border-slate-300 text-[10px] font-medium text-slate-600 text-center">{idx + 1}</td>
                                         <td className="py-2 px-2 border-r border-slate-300 text-[10px] font-bold text-slate-800 leading-tight">{item.description}</td>
-                                        <td className="py-2 px-2 border-r border-slate-300 text-[10px] text-slate-600 text-center">{item.hsn}</td>
-                                        <td className="py-2 px-2 border-r border-slate-300 text-[10px] text-slate-600 text-center">{item.batch}</td>
-                                        <td className="py-2 px-2 border-r border-slate-300 text-[10px] text-slate-600 text-center">{item.expiry}</td>
                                         <td className="py-2 px-2 border-r border-slate-300 text-[10px] font-bold text-slate-800 text-center">{item.qty}</td>
                                         <td className="py-2 px-2 border-r border-slate-300 text-[10px] text-slate-600 text-center">{item.gst_percent}</td>
                                         <td className="py-2 px-2 border-r border-slate-300 text-[10px] text-slate-800 text-right">{parseFloat(item.unit_price).toFixed(2)}</td>
@@ -1247,8 +1379,18 @@ const Billing = () => {
                                 ))}
                                 {/* Empty rows to maintain height if needed, or just a footer row */}
                                 <tr className="bg-slate-50 border-t-2 border-slate-900">
-                                    <td colSpan={8} className="py-3 px-2 text-right text-[10px] font-bold text-slate-600 border-r border-slate-900 uppercase tracking-wide">Total Amount</td>
-                                    <td className="py-3 px-2 text-right text-sm font-black text-slate-900">₹{Math.ceil(calculateSubtotal(formData.items)).toFixed(2)}</td>
+                                    <td colSpan={5} className="py-2 px-2 text-right text-[10px] font-bold text-slate-500 border-r border-slate-900 uppercase tracking-wide">Subtotal</td>
+                                    <td className="py-2 px-2 text-right text-sm font-bold text-slate-600">₹{calculateSubtotal(formData.items).toFixed(2)}</td>
+                                </tr>
+                                {(parseFloat(formData.discount_amount) > 0) && (
+                                    <tr className="bg-rose-50 border-t border-slate-300">
+                                        <td colSpan={5} className="py-2 px-2 text-right text-[10px] font-bold text-rose-600 border-r border-slate-900 uppercase tracking-wide">Discount</td>
+                                        <td className="py-2 px-2 text-right text-sm font-bold text-rose-600">-₹{parseFloat(formData.discount_amount).toFixed(2)}</td>
+                                    </tr>
+                                )}
+                                <tr className="bg-slate-100 border-t-2 border-slate-900">
+                                    <td colSpan={5} className="py-3 px-2 text-right text-[10px] font-black text-slate-900 border-r border-slate-900 uppercase tracking-wide">Net Amount</td>
+                                    <td className="py-3 px-2 text-right text-sm font-black text-slate-900">₹{Math.ceil(Math.max(0, calculateSubtotal(formData.items) - (parseFloat(formData.discount_amount) || 0))).toFixed(2)}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -1305,8 +1447,8 @@ const Billing = () => {
                             </div>
                             <div className="p-6 space-y-6">
                                 <div className="text-center">
-                                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wide">Total Amount</p>
-                                    <p className="text-4xl font-black text-slate-900 mt-1">₹{parseFloat(paymentData.invoice.total_amount).toFixed(2)}</p>
+                                    <p className="text-sm font-bold text-slate-400 uppercase tracking-wide">Net Amount</p>
+                                    <p className="text-4xl font-black text-slate-900 mt-1">₹{Math.max(0, parseFloat(paymentData.invoice.total_amount) - (parseFloat(paymentData.invoice.discount_amount) || 0)).toFixed(2)}</p>
                                     {(paymentData.invoice.amount_paid > 0) && (
                                         <p className="text-xs font-bold text-emerald-600 mt-1">Paid: ₹{paymentData.invoice.amount_paid} • Due: ₹{paymentData.invoice.balance_due}</p>
                                     )}

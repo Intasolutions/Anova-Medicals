@@ -16,7 +16,7 @@ const Sidebar = () => {
     const menuItems = [
         { name: 'Dashboard', icon: LayoutDashboard, path: '/', roles: ['ADMIN'] },
         { name: 'Reception', icon: Users, path: '/reception', roles: ['ADMIN', 'RECEPTION', 'LAB'] },
-        { name: 'Casualty', icon: Activity, path: '/casualty', roles: ['ADMIN', 'CASUALTY'] },
+        { name: 'Casualty', icon: Activity, path: '/casualty', roles: ['ADMIN', 'CASUALTY'], hidden: true },
         { name: 'Doctor', icon: Stethoscope, path: '/doctor', roles: ['ADMIN', 'DOCTOR'] },
         { name: 'Pharmacy', icon: Pill, path: '/pharmacy', roles: ['ADMIN', 'PHARMACY'] },
         { name: 'Laboratory', icon: FlaskConical, path: '/lab', roles: ['ADMIN', 'LAB'] },
@@ -55,7 +55,7 @@ const Sidebar = () => {
 
             {/* --- Navigation Section --- */}
             <nav className="flex-1 px-3 py-6 space-y-2 overflow-y-auto overflow-x-hidden custom-scrollbar">
-                {menuItems.map((item) => {
+                {menuItems.filter(item => !item.hidden).map((item) => {
                     const isActive = location.pathname === item.path;
 
                     return (

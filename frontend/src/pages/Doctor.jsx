@@ -229,6 +229,9 @@ const Doctor = () => {
     const [labSearch, setLabSearch] = useState('');
     const [labResults, setLabResults] = useState([]);
     const [selectedTests, setSelectedTests] = useState([]);
+    const [serviceSearch, setServiceSearch] = useState('');
+    const [serviceResults, setServiceResults] = useState([]);
+    const [selectedServices, setSelectedServices] = useState([]);
     const [existingNoteId, setExistingNoteId] = useState(null);
 
     // ── Qty Calculator ────────────────────────────────────────────────────────
@@ -419,6 +422,33 @@ const Doctor = () => {
         } catch (e) { console.error(e); }
     };
 
+    const searchServices = async (query) => {
+        setServiceSearch(query);
+        if (query.length < 2) { setServiceResults([]); return; }
+        try {
+            const { data } = await api.get(`/casualty/services/?search=${query}`);
+            setServiceResults(data.results || data);
+        } catch (e) { console.error(e); }
+    };
+
+    const addService = (service) => {
+        if (selectedServices.find(s => s.name === service.name)) {
+            showToast('info', `${service.name} already added`);
+            setServiceSearch(''); setServiceResults([]); return;
+        }
+        setSelectedServices(prev => [...prev, service]);
+        // Services go to Casualty / Services
+        if (referral !== 'CASUALTY') { setReferral('CASUALTY'); showToast('info', 'Referral auto-set to Services / Day Care'); }
+        showToast('success', `${service.name} added`);
+        setServiceSearch(''); setServiceResults([]);
+    };
+
+    const removeService = (id) => {
+        const rem = selectedServices.filter(s => s.id !== id);
+        setSelectedServices(rem);
+        if (rem.length === 0 && referral === 'CASUALTY') setReferral('NONE');
+    };
+
     // Human-readable referral label
     const referralLabel = { LAB: 'Lab', PHARMACY: 'Pharmacy', DOCTOR: 'Another Doctor', CASUALTY: 'Casualty', NONE: 'Discharge' };
 
@@ -488,6 +518,9 @@ const Doctor = () => {
 
             // Update visit routing
             let vu = { vitals };
+            if (selectedServices.length > 0) {
+                vu.casualty_services = selectedServices.map(s => s.id || s.service_id);
+            }
             if (referral === 'LAB') vu = { ...vu, status: 'OPEN', assigned_role: 'LAB' };
             else if (referral === 'DOCTOR') vu = { ...vu, status: 'OPEN', assigned_role: 'DOCTOR', doctor: referredDoctorId };
             else if (referral !== 'NONE') vu = { ...vu, status: 'OPEN', assigned_role: referral };
@@ -957,6 +990,52 @@ const Doctor = () => {
                                                                         className="flex items-center gap-2 pl-3 pr-2 py-1.5 bg-white border border-purple-200 rounded-lg shadow-sm">
                                                                         <span className="text-xs font-bold text-slate-700">{test.name}</span>
                                                                         <button onClick={() => removeTest(test.id)} className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"><X size={12} /></button>
+                                                                    </motion.div>
+                                                                ))}
+                                                            </AnimatePresence>
+                                                        </div>
+                                                    </div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+
+                                        {/* Assign Services */}
+                                        <AnimatePresence>
+                                            {referral === 'CASUALTY' && (
+                                                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden mb-6">
+                                                    <div className="bg-teal-50/50 rounded-[24px] border border-teal-100 p-6">
+                                                        <div className="flex justify-between items-center mb-4">
+                                                            <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                                                                <div className="p-1.5 bg-teal-100 rounded-lg text-teal-600"><Activity size={16} /></div>
+                                                                Assign Services
+                                                            </label>
+                                                            <div className="relative w-64 z-20">
+                                                                <Search className="absolute left-3 top-2.5 text-slate-400" size={14} />
+                                                                <input className="w-full pl-9 pr-4 py-2 bg-white border border-teal-200 rounded-xl text-xs font-bold outline-none focus:border-teal-500 transition-all shadow-sm"
+                                                                    placeholder="Search services..." value={serviceSearch} onChange={e => searchServices(e.target.value)} />
+                                                                <AnimatePresence>
+                                                                    {serviceResults.length > 0 && (
+                                                                        <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                                                                            className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-100 rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-50 z-30">
+                                                                            {serviceResults.map(srv => (
+                                                                                <div key={srv.id} onClick={() => addService(srv)} className="px-4 py-3 hover:bg-teal-50 cursor-pointer flex justify-between items-center">
+                                                                                    <span className="text-sm font-bold text-slate-700">{srv.name}</span>
+                                                                                </div>
+                                                                            ))}
+                                                                        </motion.div>
+                                                                    )}
+                                                                </AnimatePresence>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-2 min-h-[48px]">
+                                                            {selectedServices.length === 0 && <p className="text-xs text-slate-400 italic w-full text-center py-2">Search and assign services (e.g. ECG)</p>}
+                                                            <AnimatePresence>
+                                                                {selectedServices.map(srv => (
+                                                                    <motion.div key={srv.id}
+                                                                        initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+                                                                        className="flex items-center gap-2 pl-3 pr-2 py-1.5 bg-white border border-teal-200 rounded-lg shadow-sm">
+                                                                        <span className="text-xs font-bold text-slate-700">{srv.name}</span>
+                                                                        <button onClick={() => removeService(srv.id)} className="p-1 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"><X size={12} /></button>
                                                                     </motion.div>
                                                                 ))}
                                                             </AnimatePresence>

@@ -234,6 +234,16 @@ const Pharmacy = () => {
         finally { if (showLoading) setLoading(false); }
     }, [posQueueSearch]);
 
+    const [activePatientsList, setActivePatientsList] = useState([]);
+    const fetchActivePatients = useCallback(async () => {
+        try {
+            const { data } = await api.get('/reception/visits/?status=OPEN');
+            setActivePatientsList(data.results || data || []);
+        } catch (err) {
+            console.error('Failed to load active patients', err);
+        }
+    }, []);
+
     const fetchSalesHistory = useCallback(async () => {
         try {
             let url = 'pharmacy/sales/?page_size=10';
@@ -278,24 +288,25 @@ const Pharmacy = () => {
     }, [selectedPatient, fetchPatientHistory]);
 
     useEffect(() => {
-        fetchStock(true); fetchSuppliers(); fetchPendingVisits(false); fetchRecentImports();
+        fetchStock(true); fetchSuppliers(); fetchPendingVisits(false); fetchRecentImports(); fetchActivePatients();
         // Global socket listener for prescriptions
         const onDoctorUpdate = (data) => { if (data.has_prescription) { fetchPendingVisits(false); showToast('info', 'New prescription received'); } };
         socket.on('doctor_notes_update', onDoctorUpdate);
         return () => { socket.off('doctor_notes_update', onDoctorUpdate); };
     }, []);
 
-    // Auto-Refresh: Only on POS tab to avoid resetting filters in Inventory
+    // Auto-Refresh: Only on POS tab or Patients tab
     useEffect(() => {
         let interval;
-        if (activeTab === 'pos') {
+        if (activeTab === 'pos' || activeTab === 'patients') {
             interval = setInterval(() => {
                 fetchPendingVisits(false);
                 fetchSalesHistory();
+                fetchActivePatients();
             }, 4000); // 4 second reload as requested
         }
         return () => { if (interval) clearInterval(interval); };
-    }, [activeTab, fetchPendingVisits, fetchSalesHistory]);
+    }, [activeTab, fetchPendingVisits, fetchSalesHistory, fetchActivePatients]);
 
     useEffect(() => {
         if (activeTab === 'inventory') fetchStock();
@@ -811,9 +822,9 @@ const Pharmacy = () => {
                 <div>
                     <h1 className="text-3xl font-bold tracking-tight text-slate-950 font-outfit uppercase">Pharmacy</h1>
                     <div className="flex items-center gap-6 mt-2">
-                        {['inventory', 'pos', 'purchases', 'returns', 'history'].map(tab => (
+                        {['inventory', 'pos', 'patients', 'purchases', 'returns', 'history'].map(tab => (
                             <button key={tab} onClick={() => setActiveTab(tab)} className={`pb-1 text-sm font-bold transition-all border-b-2 ${activeTab === tab ? 'text-gray-900 border-gray-900' : 'text-slate-400 border-transparent hover:text-slate-600'}`}>
-                                {tab === 'pos' ? 'Billing Terminal (POS)' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                {tab === 'pos' ? 'Billing Terminal (POS)' : (tab === 'patients' ? 'Active Patients' : tab.charAt(0).toUpperCase() + tab.slice(1))}
                             </button>
                         ))}
                     </div>
@@ -956,6 +967,59 @@ const Pharmacy = () => {
                             <Pagination current={page} total={Math.ceil(stockData.count / (rowsPerPage === 'all' ? (stockData.count || 1) : rowsPerPage))} onPageChange={setPage} loading={loading} compact />
                         </div>
                     </>
+                )}
+
+                {/* 1.5 ACTIVE PATIENTS TAB */}
+                {activeTab === 'patients' && (
+                    <div className="flex h-full divide-x divide-slate-200">
+                        {/* LEFT: Patients List */}
+                        <div className="w-1/3 flex flex-col bg-white h-full border-r border-slate-200">
+                            <div className="p-4 border-b border-slate-200 bg-slate-50 flex justify-between items-center">
+                                <h3 className="font-black text-gray-900 uppercase tracking-widest text-xs flex items-center gap-2">
+                                    <User size={14} className="text-blue-500" /> Active Patients
+                                </h3>
+                                <span className="bg-blue-100 text-blue-700 font-bold px-2 py-0.5 rounded text-[10px]">{activePatientsList.length}</span>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                                {activePatientsList.length === 0 ? (
+                                    <div className="p-8 text-center"><p className="text-sm font-bold text-slate-400">No active patients.</p></div>
+                                ) : (
+                                    activePatientsList.map(visit => (
+                                        <button
+                                            key={visit.id}
+                                            onClick={() => {
+                                                setSelectedPatient({ id: visit.patient, p_id: visit.patient, full_name: visit.patient_name, v_id: visit.id, diagnosis: visit.diagnosis });
+                                                if (visit.doctor_name) setSelectedDoctor({ username: visit.doctor_name, u_id: visit.doctor }); 
+                                                else setSelectedDoctor({ username: 'N/A', u_id: null });
+                                                setActiveTab('pos');
+                                            }}
+                                            className="w-full text-left p-4 rounded-xl border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-all flex flex-col"
+                                        >
+                                            <div className="flex justify-between items-start mb-1">
+                                                <span className="font-bold text-gray-900">{visit.patient_name}</span>
+                                                <span className="text-[10px] font-bold text-slate-400 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                                    {visit.patient?.registration_number || 'N/A'}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs font-medium text-slate-500 line-clamp-1">
+                                                {visit.assigned_role} • {visit.doctor_name || 'No Doctor'}
+                                            </p>
+                                        </button>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                        {/* RIGHT: Info */}
+                        <div className="w-2/3 flex flex-col items-center justify-center bg-slate-50 text-center p-8">
+                            <div className="w-16 h-16 bg-blue-100 text-blue-500 rounded-full flex items-center justify-center mb-4">
+                                <User size={32} />
+                            </div>
+                            <h3 className="text-xl font-black text-gray-900 mb-2">Select a Patient</h3>
+                            <p className="text-sm font-medium text-slate-500 max-w-sm">
+                                Click on any active patient from the list to add pharmacy items or consumables directly to their account. They will be directed to Billing for payment.
+                            </p>
+                        </div>
+                    </div>
                 )}
 
                 {/* 2. POS TAB */}

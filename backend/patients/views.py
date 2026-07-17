@@ -99,6 +99,20 @@ class VisitViewSet(viewsets.ModelViewSet):
     search_fields = ['patient__full_name', 'patient__phone', 'patient__registration_number']
     ordering_fields = ['created_at', 'updated_at']
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        
+        # Support for Lab Queue (Patients assigned to lab OR patients in any queue with pending lab charges)
+        lab_queue = self.request.query_params.get('lab_queue')
+        if lab_queue == 'true':
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(assigned_role='LAB', status='OPEN') | 
+                Q(lab_charges__status='PENDING')
+            ).distinct()
+            
+        return qs
+
     @action(detail=False, methods=['get'])
     def casualty_history(self, request):
         """
@@ -203,7 +217,51 @@ class VisitViewSet(viewsets.ModelViewSet):
         
         print(f"After save - visit.doctor: {visit.doctor}")
         print(f"=========================\n")
-        
+
+        # --- Sync Lab Tests on Update ---
+        lab_tests = self.request.data.get('lab_tests')
+        if lab_tests is not None and isinstance(lab_tests, list):
+            from lab.models import LabCharge, LabTest
+            # Find existing tests for this visit
+            existing_charges = LabCharge.objects.filter(visit=visit).values_list('test_name', flat=True)
+            
+            for test_id in lab_tests:
+                try:
+                    test_obj = LabTest.objects.get(id=test_id)
+                    # Create only if it doesn't exist
+                    if test_obj.name not in existing_charges:
+                        LabCharge.objects.create(
+                            visit=visit,
+                            test_name=test_obj.name,
+                            sub_name=test_obj.sub_name,
+                            amount=test_obj.price,
+                            status='PENDING'
+                        )
+                except Exception as e:
+                    print(f"Error assigning lab test {test_id} to visit {visit.id}: {e}")
+
+        # --- Sync Casualty Services on Update ---
+        casualty_services = self.request.data.get('casualty_services')
+        if casualty_services is not None and isinstance(casualty_services, list):
+            from casualty.models import CasualtyService, CasualtyServiceDefinition
+            # Find existing services for this visit
+            existing_services = CasualtyService.objects.filter(visit=visit).values_list('service_definition_id', flat=True)
+            
+            for srv_id in casualty_services:
+                try:
+                    # Create only if it doesn't exist
+                    if srv_id not in existing_services:
+                        srv_obj = CasualtyServiceDefinition.objects.get(id=srv_id)
+                        CasualtyService.objects.create(
+                            visit=visit,
+                            service_definition=srv_obj,
+                            qty=1,
+                            unit_charge=srv_obj.base_charge,
+                            total_charge=srv_obj.base_charge
+                        )
+                except Exception as e:
+                    print(f"Error assigning casualty service {srv_id} to visit {visit.id}: {e}")
+                    
         # Check for Doctor change
         if visit.doctor and visit.doctor != old_doctor:
             from core.models import Notification

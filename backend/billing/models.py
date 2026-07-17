@@ -3,10 +3,12 @@ from core.models import BaseModel
 from patients.models import Visit
 
 class Invoice(BaseModel):
-    PAYMENT_STATUS = (('PAID', 'Paid'), ('PENDING', 'Pending'))
+    PAYMENT_STATUS = (('DRAFT', 'Draft'), ('PAID', 'Paid'), ('PARTIAL', 'Partial'), ('PENDING', 'Pending'), ('CANCELLED', 'Cancelled'))
     visit = models.ForeignKey(Visit, on_delete=models.SET_NULL, null=True, related_name='invoices')
+    patient = models.ForeignKey('patients.Patient', on_delete=models.SET_NULL, null=True, blank=True, related_name='direct_invoices')
     patient_name = models.CharField(max_length=255, null=True, blank=True)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     refund_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     payment_status = models.CharField(max_length=20, default='PENDING', choices=PAYMENT_STATUS)
     payment_mode = models.CharField(max_length=20, null=True, blank=True, choices=(('CASH', 'Cash'), ('UPI', 'Google Pay / UPI'), ('CARD', 'Card')))
