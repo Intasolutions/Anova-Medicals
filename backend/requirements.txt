@@ -10,3 +10,6 @@ Pillow
 python-dateutil
 requests
 gunicorn
+psycopg2-binary
+whitenoise
+dj-database-url
