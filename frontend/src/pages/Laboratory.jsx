@@ -100,14 +100,21 @@ const Laboratory = () => {
 
         function buildGroup(items) {
             const first = items[0];
+            const allCancelled = items.every(i => i.status === 'CANCELLED');
             const allCompleted = items.every(i => i.status === 'COMPLETED' || i.status === 'CANCELLED');
+            
             const anyPending = items.some(i => i.status === 'PENDING');
+            const anyDrawn = items.some(i => i.status === 'DRAWN');
+            const anyReceived = items.some(i => i.status === 'RECEIVED');
             const anyVerification = items.some(i => i.status === 'VERIFICATION');
 
             let status = 'CANCELLED';
-            if (allCompleted) status = 'COMPLETED';
+            if (allCancelled) status = 'CANCELLED';
             else if (anyPending) status = 'PENDING';
+            else if (anyDrawn) status = 'DRAWN';
+            else if (anyReceived) status = 'RECEIVED';
             else if (anyVerification) status = 'VERIFICATION';
+            else if (allCompleted) status = 'COMPLETED';
 
             // Unique Key: VisitID + Time of first item (ensures uniqueness for separate batches)
             const uniqueKey = `${first.visit?.id || first.visit}_${new Date(first.created_at).getTime()}`;
