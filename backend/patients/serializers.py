@@ -61,7 +61,7 @@ class VisitSerializer(serializers.ModelSerializer):
             'id', 'v_id', 'patient', 'patient_name', 'doctor', 'doctor_name', 'consultation_fee', 'assigned_role',
             'status', 'vitals', 'prescription', 'diagnosis', 'lab_referral_details', 'pharmacy_items', 'lab_results', 'lab_charges_data',
             'casualty_medicines', 'casualty_services', 'casualty_observations',
-            'patient_age', 'patient_age_months', 'patient_gender', 'patient_registration_number', 'patient_medical_history', 'created_at', 'updated_at'
+            'patient_age', 'patient_age_months', 'patient_gender', 'patient_registration_number', 'patient_medical_history', 'referred_by', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'v_id', 'created_at', 'updated_at']
 

@@ -2137,7 +2137,12 @@ const Laboratory = () => {
                                     {/* Referred by */}
                                     <div className="border-l-2 border-slate-900 pl-4">
                                         <p className="text-sm font-bold text-black underline mb-3">Referred by:</p>
-                                        <p className="text-sm font-black text-black mb-3 uppercase">Dr. {printCharge.doctor_name || 'CONSULTANT'}</p>
+                                        <p className="text-sm font-black text-black mb-3 uppercase">
+                                            {printCharge.doctor_name && printCharge.doctor_name.toLowerCase() === 'self' 
+                                                ? 'SELF' 
+                                                : `Dr. ${printCharge.doctor_name || 'CONSULTANT'}`
+                                            }
+                                        </p>
                                         <div className="text-xs text-black mt-4">
                                             <p className="mb-1">Sample Collected At :</p>
                                             <p className="font-bold uppercase">Anova Medical Center</p>

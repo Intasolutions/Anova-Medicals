@@ -46,6 +46,7 @@ class Visit(BaseModel):
         blank=True,
         related_name='assigned_visits'
     )
+    referred_by = models.CharField(max_length=255, blank=True, null=True, default='Self', help_text="Referring doctor if external or lab direct")
     assigned_role = models.CharField(
         max_length=20, 
         choices=(

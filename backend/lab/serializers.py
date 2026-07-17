@@ -255,16 +255,24 @@ class LabChargeSerializer(serializers.ModelSerializer):
     patient_sex = serializers.CharField(source='visit.patient.gender', read_only=True)
     patient_phone = serializers.CharField(source='visit.patient.phone', read_only=True)
     patient_address = serializers.CharField(source='visit.patient.address', read_only=True)
+    doctor_name = serializers.SerializerMethodField()
 
     class Meta:
         model = LabCharge
         fields = [
             'lc_id', 'visit', 'visit_id', 'patient_name', 'registration_number', 'patient_age', 'patient_sex',
-            'patient_phone', 'patient_address',
-            'test_name', 'sub_name', 'amount', 'status', 'results', 'report_date', 'technician_name',
+            'patient_phone', 'patient_address', 'doctor_name',
+            'test_name', 'sub_name', 'amount', 'status', 'results', 'report_date', 'drawn_date', 'received_date', 'technician_name',
             'specimen', 'created_at', 'updated_at'
         ]
         read_only_fields = ['lc_id', 'created_at', 'updated_at']
+
+    def get_doctor_name(self, obj):
+        if obj.visit.doctor:
+            return obj.visit.doctor.username
+        if obj.visit.referred_by and obj.visit.referred_by.lower() != 'self':
+            return obj.visit.referred_by
+        return 'Self'
 
     def update(self, instance, validated_data):
         instance = super().update(instance, validated_data)

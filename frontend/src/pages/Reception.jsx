@@ -98,6 +98,7 @@ const Reception = () => {
     const [visitForm, setVisitForm] = useState({
         assigned_role: 'DOCTOR',
         doctor: '',
+        referred_by: 'Self',
         vitals: { temp: '', bp: '', pulse: '', weight: '' }
     });
 
@@ -405,6 +406,7 @@ const Reception = () => {
                 assigned_role: visitForm.assigned_role,
                 status: 'OPEN',
                 vitals: visitForm.vitals,
+                referred_by: visitForm.assigned_role === 'LAB' ? (visitForm.referred_by || 'Self') : 'Self',
                 lab_tests: visitForm.assigned_role === 'LAB' ? selectedLabTests : []
             });
             setShowVisitModal(false);
@@ -416,7 +418,7 @@ const Reception = () => {
                 showToast('success', `Visit token generated for ${selectedPatient.full_name}`);
             }
 
-            setVisitForm({ assigned_role: 'DOCTOR', doctor: '', vitals: { temp: '', bp: '', pulse: '', weight: '' } });
+            setVisitForm({ assigned_role: 'DOCTOR', doctor: '', referred_by: 'Self', vitals: { temp: '', bp: '', pulse: '', weight: '' } });
             setSelectedLabTests([]);
         } catch (err) {
             showToast('error', 'Failed to create visit record.');
@@ -1096,6 +1098,16 @@ const Reception = () => {
                                                 </div>
                                             ) : (
                                                 <div className="flex-1 overflow-hidden flex flex-col pt-2">
+                                                    <div className="mb-4">
+                                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Referred By (Doctor Name)</label>
+                                                        <input 
+                                                            type="text" 
+                                                            value={visitForm.referred_by} 
+                                                            onChange={e => setVisitForm({ ...visitForm, referred_by: e.target.value })} 
+                                                            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 transition-all"
+                                                            placeholder="e.g. Dr. Smith or Self"
+                                                        />
+                                                    </div>
                                                     <div className="flex justify-between items-center mb-2">
                                                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Select Lab Tests (Optional)</label>
                                                     </div>
