@@ -21,6 +21,10 @@ class CasualtyServiceDefinitionSerializer(serializers.ModelSerializer):
 class CasualtyServiceSerializer(serializers.ModelSerializer):
     name = serializers.ReadOnlyField(source='service_definition.name')
     total_charge = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    patient_name = serializers.ReadOnlyField(source='visit.patient.full_name')
+    patient_age = serializers.ReadOnlyField(source='visit.patient.age')
+    patient_gender = serializers.ReadOnlyField(source='visit.patient.gender')
+    patient_reg_no = serializers.ReadOnlyField(source='visit.patient.registration_number')
 
     class Meta:
         model = CasualtyService

@@ -15,7 +15,7 @@ class IsCasualtyOrAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
         if not (request.user and request.user.is_authenticated):
             return False
-        return getattr(request.user, "role", None) in ["CASUALTY", "ADMIN", "DOCTOR"] or request.user.is_superuser
+        return getattr(request.user, "role", None) in ["CASUALTY", "ADMIN", "DOCTOR", "RECEPTION", "PHARMACY"] or request.user.is_superuser
 
 class CasualtyLogViewSet(viewsets.ModelViewSet):
     serializer_class = CasualtyLogSerializer
@@ -39,7 +39,7 @@ class CasualtyServiceViewSet(viewsets.ModelViewSet):
     serializer_class = CasualtyServiceSerializer
     permission_classes = [IsCasualtyOrAdmin]
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['visit']
+    filterset_fields = ['visit', 'status']
 
     def get_queryset(self):
         return CasualtyService.objects.all().order_by('-created_at')

@@ -10,6 +10,7 @@ import {
 import { useSearch } from '../context/SearchContext';
 import { useAuth } from '../context/AuthContext';
 import { useDialog } from '../context/DialogContext';
+import CasualtyServicesQueue from '../components/CasualtyServicesQueue';
 import Pagination from '../components/Pagination';
 import api from '../api/axios';
 import Billing from './Billing'; // Integrated Billing Module
@@ -563,10 +564,20 @@ const Reception = () => {
                                 : 'border-transparent text-slate-500 hover:text-slate-800'
                                 }`}
                         >
-                            <Activity size={18} />
+                            <FileText size={18} />
                             BILLING & INVOICES
                         </button>
                     )}
+                    <button
+                        onClick={() => setActiveTab('services')}
+                        className={`h-full flex items-center gap-2 border-b-2 text-sm font-bold tracking-wide transition-all ${activeTab === 'services'
+                            ? 'border-emerald-600 text-emerald-700'
+                            : 'border-transparent text-slate-500 hover:text-slate-800'
+                            }`}
+                    >
+                        <Activity size={18} />
+                        SERVICES
+                    </button>
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -583,7 +594,12 @@ const Reception = () => {
             {/* --- Main Content Area --- */}
             <div className="flex-1 overflow-hidden relative bg-slate-50/50">
 
-                {activeTab === 'billing' ? (
+                {activeTab === 'services' ? (
+                    /* --- SERVICES TAB --- */
+                    <div className="h-full p-6">
+                        <CasualtyServicesQueue />
+                    </div>
+                ) : activeTab === 'billing' ? (
                     /* --- BILLING TAB --- */
                     <div className="h-full overflow-y-auto custom-scrollbar p-6">
                         <Billing />

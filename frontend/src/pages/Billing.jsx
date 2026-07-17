@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "../context/ToastContext";
 import { useDialog } from "../context/DialogContext";
 import { socket } from "../socket";
-
+import Pagination from "../components/Pagination";
 
 const Billing = () => {
     const { showToast } = useToast();
@@ -24,6 +24,7 @@ const Billing = () => {
     const [showModal, setShowModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
     const [page, setPage] = useState(1);
+    const [totalInvoices, setTotalInvoices] = useState(0);
     const globalSearch = searchTerm; // Map searchTerm to globalSearch for compatibility with the copied logic
 
     // --- Date Filter State ---
@@ -94,6 +95,7 @@ const Billing = () => {
         try {
             const { data } = await api.get(`/billing/invoices/?page=${page}${globalSearch ? `&search=${encodeURIComponent(globalSearch)}` : ''}${selectedDate ? `&date=${selectedDate}` : ''}`);
             setInvoices(data.results || (Array.isArray(data) ? data : []));
+            setTotalInvoices(data.count || (Array.isArray(data) ? data.length : 0));
         } catch (err) {
             showToast('error', 'Failed to load invoices.');
         } finally {
@@ -1047,6 +1049,17 @@ const Billing = () => {
                     </table>
                 </div>
 
+                <div className="p-3 border-t border-slate-100 bg-white flex flex-col md:flex-row items-center justify-between gap-4 shrink-0">
+                    <div className="flex items-center gap-2"></div>
+                    <Pagination 
+                        current={page} 
+                        total={Math.ceil(totalInvoices / 10) || 1} 
+                        onPageChange={setPage} 
+                        loading={loading} 
+                        compact 
+                    />
+                </div>
+
                 {/* --- Footer Summary --- */}
                 <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center bg-gray-50/50">
                     <div className="flex items-center gap-6">
@@ -1277,7 +1290,32 @@ const Billing = () => {
                                             ))}
                                         </tbody>
                                     </table>
-                                    {/* Add Item Line buttons removed */}
+                                    {(!formData.id || formData.payment_status === 'DRAFT') && (
+                                        <div className="mt-3 flex gap-2">
+                                            <button 
+                                                onClick={() => {
+                                                    setFormData({
+                                                        ...formData,
+                                                        items: [...formData.items, { dept: 'CASUALTY', description: '', qty: 1, unit_price: 0, amount: 0 }]
+                                                    });
+                                                }}
+                                                className="px-3 py-1.5 text-xs font-bold bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors"
+                                            >
+                                                + Add Service
+                                            </button>
+                                            <button 
+                                                onClick={() => {
+                                                    setFormData({
+                                                        ...formData,
+                                                        items: [...formData.items, { dept: 'LAB', description: '', qty: 1, unit_price: 0, amount: 0 }]
+                                                    });
+                                                }}
+                                                className="px-3 py-1.5 text-xs font-bold bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors"
+                                            >
+                                                + Add Lab Test
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="flex justify-end">

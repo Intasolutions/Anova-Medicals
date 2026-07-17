@@ -55,6 +55,14 @@ class InvoiceSerializer(serializers.ModelSerializer):
         invoice = Invoice.objects.create(**validated_data)
         for item_data in items_data:
             InvoiceItem.objects.create(invoice=invoice, **item_data)
+            
+        if invoice.payment_status == 'PAID' and invoice.total_amount > 0:
+            PaymentTransaction.objects.create(
+                invoice=invoice,
+                amount=invoice.total_amount,
+                mode=getattr(invoice, 'payment_mode', 'CASH') or 'CASH',
+                remarks='Auto-generated from direct paid invoice'
+            )
         
         # Emit Socket Event
         try:
