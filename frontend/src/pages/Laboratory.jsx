@@ -1872,7 +1872,7 @@ const Laboratory = () => {
 
                             <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
                                 <Button variant="secondary" className="rounded-xl px-6 font-bold" onClick={() => setShowResultModal(false)}>Cancel</Button>
-                                {selectedCharge.status === 'PENDING' && (
+                                {['PENDING', 'DRAWN', 'RECEIVED'].includes(selectedCharge.status) && (
                                     <Button type="button" onClick={(e) => handleSubmitResults(e, 'VERIFICATION')} className="rounded-xl px-6 font-bold bg-indigo-600 shadow-lg shadow-indigo-500/30">Submit for Verification</Button>
                                 )}
                                 {selectedCharge.status === 'VERIFICATION' && (
