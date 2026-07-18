@@ -2318,8 +2318,8 @@ const Laboratory = () => {
                                                                     {val.note && <span className="block font-medium text-slate-500 text-[10px] mt-0.5 whitespace-pre-wrap">{val.note}</span>}
                                                                 </td>
                                                                 <td className="px-2 py-1.5 font-black text-slate-900 text-xs">{val.value}</td>
-                                                                <td className="px-2 py-1.5 font-bold text-slate-500 text-[10px]">{val.unit}</td>
-                                                                <td className="px-2 py-1.5 font-bold text-slate-500 text-[10px] text-right whitespace-pre-wrap">{val.normal}</td>
+                                                                <td className="px-2 py-1.5 font-bold text-slate-900 text-xs">{val.unit}</td>
+                                                                <td className="px-2 py-1.5 font-bold text-slate-900 text-xs text-right whitespace-pre-wrap">{val.normal}</td>
                                                             </tr>
                                                         )
                                                     ))}
