@@ -641,6 +641,15 @@ const Laboratory = () => {
 
     const handleSubmitResults = async (e, finalStatus = 'COMPLETED') => {
         e?.preventDefault();
+        
+        if (finalStatus === 'VERIFICATION' || finalStatus === 'COMPLETED') {
+            const hasEmptyValues = resultData.results.some(r => !r.is_heading && (!r.value || r.value.trim() === ''));
+            if (hasEmptyValues) {
+                showToast('error', 'Please enter all parameter values before submitting');
+                return;
+            }
+        }
+        
         try {
             await api.patch(`/lab/charges/${selectedCharge.lc_id}/`, {
                 results: resultData.results,
@@ -1031,10 +1040,12 @@ const Laboratory = () => {
                                                         )}
 
                                                         {/* Consolidated Print Action */}
-                                                        <button onClick={() => handleOpenPrintModal(group)} className="flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-700 shadow-md transition-all mt-1">
-                                                            <Printer size={14} />
-                                                            {['COMPLETED'].includes(group.status) ? 'Print Report' : 'Print Receipt'}
-                                                        </button>
+                                                        {group.status === 'COMPLETED' && (
+                                                            <button onClick={() => handleOpenPrintModal(group)} className="flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-700 shadow-md transition-all mt-1">
+                                                                <Printer size={14} />
+                                                                Print Report
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 </td>
                                             </tr>
