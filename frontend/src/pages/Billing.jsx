@@ -527,8 +527,15 @@ const Billing = () => {
     const handleCreateInvoice = async (status = 'PENDING') => {
         if (isSubmitting) return; // Prevent double clicks
 
+        // Filter out empty items (no description or empty description)
+        const validItems = formData.items.filter(item => item.description && item.description.trim() !== '');
+
+        if (validItems.length === 0) {
+            return showToast('error', 'Please add at least one item to generate an invoice.');
+        }
+
         // --- Client Side Stock Validation ---
-        for (const item of formData.items) {
+        for (const item of validItems) {
             if (item.dept === 'PHARMACY' && !item.stock_deducted) {
                 // Find current stock in our local list
                 const stock = pharmacyStock.find(s =>
@@ -547,7 +554,7 @@ const Billing = () => {
         }
 
         setIsSubmitting(true);
-        const subtotal = calculateSubtotal(formData.items);
+        const subtotal = calculateSubtotal(validItems);
         const discount = parseFloat(formData.discount_amount) || 0;
         const invoiceData = {
             patient_name: formData.patient_name,
@@ -555,7 +562,7 @@ const Billing = () => {
             payment_status: status,
             total_amount: subtotal.toFixed(2),
             discount_amount: discount.toFixed(2),
-            items: formData.items.map(({ id, created_at, updated_at, ...rest }) => ({ ...rest, id })),
+            items: validItems.map(({ id, created_at, updated_at, ...rest }) => ({ ...rest, id })),
             visit: (typeof formData.visit === 'object' && formData.visit) ? formData.visit.id : formData.visit
         };
 
@@ -573,8 +580,8 @@ const Billing = () => {
             if (formData.visit) {
                 const visitId = typeof formData.visit === 'object' ? formData.visit.id : formData.visit;
                 if (visitId) {
-                    const newLabTests = formData.items.filter(i => i.dept === 'LAB' && i.ref_id).map(i => i.ref_id);
-                    const newServices = formData.items.filter(i => i.dept === 'CASUALTY' && i.ref_id).map(i => i.ref_id);
+                    const newLabTests = validItems.filter(i => i.dept === 'LAB' && i.ref_id).map(i => i.ref_id);
+                    const newServices = validItems.filter(i => i.dept === 'CASUALTY' && i.ref_id).map(i => i.ref_id);
                     
                     if (newLabTests.length > 0 || newServices.length > 0) {
                         try {
