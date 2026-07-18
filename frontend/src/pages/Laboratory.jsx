@@ -1333,15 +1333,6 @@ const Laboratory = () => {
                                         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Price (₹)</label>
                                         <Input type="number" value={testCatalogForm.price} onChange={e => setTestCatalogForm({ ...testCatalogForm, price: e.target.value })} required className="bg-slate-50 border-2 border-slate-100 rounded-xl font-bold" />
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Normal Range (Optional)</label>
-                                        <textarea
-                                            value={testCatalogForm.normal_range}
-                                            onChange={e => setTestCatalogForm({ ...testCatalogForm, normal_range: e.target.value })}
-                                            className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-slate-800 focus:border-blue-500 outline-none transition-all min-h-[80px]"
-                                            placeholder="e.g. 13.0 - 17.0 g/dL"
-                                        />
-                                    </div>
 
                                     {/* Parameters Section */}
                                     <div className="space-y-3 pt-2 border-t border-slate-100">
@@ -1357,7 +1348,7 @@ const Laboratory = () => {
                                         </div>
 
                                         {testCatalogForm.parameters.length > 0 && (
-                                            <div className="grid grid-cols-[1fr,60px,60px,100px,30px] gap-2 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                            <div className="grid grid-cols-[1fr,60px,60px,192px,30px] gap-2 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
                                                 <span>Parameter Name</span>
                                                 <span className="text-center">Heading?</span>
                                                 <span>Unit</span>
@@ -1412,7 +1403,7 @@ const Laboratory = () => {
                                                                 }}
                                                                 className="w-16 bg-slate-50 border-slate-200 text-xs h-9"
                                                             />
-                                                            <Input
+                                                            <textarea
                                                                 placeholder="e.g. 12-16"
                                                                 value={param.normal_range || ''}
                                                                 onChange={e => {
@@ -1420,11 +1411,11 @@ const Laboratory = () => {
                                                                     newParams[idx].normal_range = e.target.value;
                                                                     setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
                                                                 }}
-                                                                className="w-24 bg-slate-50 border-slate-200 text-xs h-9"
+                                                                className="w-48 bg-slate-50 border-2 border-slate-100 rounded min-h-[36px] px-2 py-1 text-xs outline-none focus:border-blue-500 transition-all font-bold text-slate-700"
                                                             />
                                                         </>
                                                     ) : (
-                                                        <div className="w-[172px]"></div>
+                                                        <div className="w-[264px]"></div>
                                                     )}
                                                     <button
                                                         type="button"
@@ -1845,12 +1836,9 @@ const Laboratory = () => {
                                                             />
                                                         </div>
                                                         <div className="col-span-2 relative">
-                                                            <input
-                                                                className="w-full bg-slate-100 border-b border-transparent text-xs font-bold text-slate-400 text-right outline-none p-2 rounded cursor-not-allowed opacity-70"
-                                                                placeholder="Ref Range"
-                                                                value={field.normal}
-                                                                readOnly
-                                                            />
+                                                            <div className="w-full bg-slate-100 border-b border-transparent text-xs font-bold text-slate-400 text-right p-2 rounded cursor-not-allowed opacity-70 whitespace-pre-wrap min-h-[32px] break-words">
+                                                                {field.normal || "Ref Range"}
+                                                            </div>
                                                             <button
                                                                 type="button"
                                                                 onClick={() => {
