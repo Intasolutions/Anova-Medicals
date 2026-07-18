@@ -29,7 +29,7 @@ class Invoice(BaseModel):
 
 class InvoiceItem(BaseModel):
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='items')
-    item_id = models.UUIDField(null=True, blank=True) # Generic reference to source (lab, pharmacy op)
+    item_id = models.BigIntegerField(null=True, blank=True) # Generic reference to source (lab, pharmacy op)
     dept = models.CharField(max_length=50) # 'PHARMACY', 'LAB', 'CONSULTATION', 'CASUALTY'
     description = models.CharField(max_length=255)
     
