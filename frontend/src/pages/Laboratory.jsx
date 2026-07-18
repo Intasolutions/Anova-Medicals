@@ -1348,12 +1348,12 @@ const Laboratory = () => {
                                         </div>
 
                                         {testCatalogForm.parameters.length > 0 && (
-                                            <div className="grid grid-cols-[1fr,60px,60px,192px,30px] gap-2 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                                                <span>Parameter Name</span>
-                                                <span className="text-center">Heading?</span>
-                                                <span>Unit</span>
-                                                <span>Normal Range</span>
-                                                <span></span>
+                                            <div className="flex gap-2 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest items-center">
+                                                <span className="flex-1">Parameter Name</span>
+                                                <span className="w-[60px] text-center">Heading?</span>
+                                                <span className="w-16">Unit</span>
+                                                <span className="w-48">Normal Range</span>
+                                                <span className="w-[30px]"></span>
                                             </div>
                                         )}
 
