@@ -1,5 +1,11 @@
 from rest_framework import serializers
-from .models import Patient, Visit
+from .models import Patient, Visit, ReferringDoctor
+
+
+class ReferringDoctorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReferringDoctor
+        fields = '__all__'
 
 
 class PatientSerializer(serializers.ModelSerializer):
@@ -64,6 +70,16 @@ class VisitSerializer(serializers.ModelSerializer):
             'patient_age', 'patient_age_months', 'patient_gender', 'patient_registration_number', 'patient_medical_history', 'referred_by', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'v_id', 'created_at', 'updated_at']
+
+    def create(self, validated_data):
+        referred_by = validated_data.get('referred_by')
+        if referred_by and referred_by.strip().lower() != 'self':
+            # Auto-save referring doctor if they don't exist
+            name = referred_by.strip()
+            # Try case-insensitive lookup
+            if not ReferringDoctor.objects.filter(name__iexact=name).exists():
+                ReferringDoctor.objects.create(name=name)
+        return super().create(validated_data)
 
     prescription = serializers.SerializerMethodField()
     diagnosis = serializers.SerializerMethodField()

@@ -587,7 +587,9 @@ const Laboratory = () => {
             setResultData({
                 results: initialResults,
                 technician_name: charge.technician_name || 'MUHAMMED NIYAS',
-                specimen: charge.specimen || 'BLOOD'
+                specimen: charge.specimen || 'BLOOD',
+                consumed_items: charge.consumed_items || [],
+                notes: charge.notes || ''
             });
             setShowResultModal(true);
             return;
@@ -597,17 +599,15 @@ const Laboratory = () => {
         const normalize = str => str?.toLowerCase().replace(/[^a-z0-9]/g, '');
         const catalogTest = labTests.find(t => normalize(t.name) === normalize(charge.test_name));
 
-        let initialResults = [];
+        let initialResults = charge.results || catalogTest?.parameters?.map(p => ({
+            name: p.name,
+            value: '',
+            unit: p.unit || '',
+            normal: p.normal_range || '',
+            is_heading: p.is_heading || false
+        })) || [];
 
-        if (catalogTest && catalogTest.parameters && catalogTest.parameters.length > 0) {
-            // Use DB Parameters
-            initialResults = catalogTest.parameters.map(p => ({
-                name: p.name,
-                unit: p.unit || '',
-                normal: p.normal_range || '',
-                value: ''
-            }));
-        } else {
+        if (initialResults.length === 0) {
             // Fallback to Templates or Default
             const template = TEST_TEMPLATES[charge.test_name?.toUpperCase()];
             if (template) {
@@ -633,7 +633,8 @@ const Laboratory = () => {
             results: initialResults,
             technician_name: charge.technician_name || 'MUHAMMED NIYAS',
             specimen: charge.specimen || 'BLOOD',
-            consumed_items: defaultConsumption
+            consumed_items: defaultConsumption,
+            notes: charge.notes || ''
         });
         setShowResultModal(true);
     };
@@ -641,9 +642,10 @@ const Laboratory = () => {
     const handleSubmitResults = async (e, finalStatus = 'COMPLETED') => {
         e?.preventDefault();
         try {
-            await api.patch(`lab/charges/${selectedCharge.lc_id}/`, {
-                status: finalStatus,
+            await api.patch(`/lab/charges/${selectedCharge.lc_id}/`, {
                 results: resultData.results,
+                notes: resultData.notes,
+                status: finalStatus,
                 technician_name: resultData.technician_name,
                 specimen: resultData.specimen,
                 consumed_items: resultData.consumed_items,
@@ -651,7 +653,12 @@ const Laboratory = () => {
             });
             setShowResultModal(false);
             fetchCharges();
-            showToast('success', finalStatus === 'VERIFICATION' ? 'Results submitted for verification' : 'Results verified and published');
+            
+            let successMessage = 'Results verified and published';
+            if (finalStatus === 'VERIFICATION') successMessage = 'Results submitted for verification';
+            else if (['PENDING', 'DRAWN', 'RECEIVED'].includes(finalStatus)) successMessage = 'Draft saved successfully';
+            
+            showToast('success', successMessage);
         } catch (err) { showToast('error', "Failed to save results"); }
     };
 
@@ -1350,8 +1357,9 @@ const Laboratory = () => {
                                         </div>
 
                                         {testCatalogForm.parameters.length > 0 && (
-                                            <div className="grid grid-cols-[1fr,60px,100px,30px] gap-2 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                            <div className="grid grid-cols-[1fr,60px,60px,100px,30px] gap-2 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
                                                 <span>Parameter Name</span>
+                                                <span className="text-center">Heading?</span>
                                                 <span>Unit</span>
                                                 <span>Normal Range</span>
                                                 <span></span>
@@ -1376,26 +1384,48 @@ const Laboratory = () => {
                                                         }}
                                                         className="flex-1 bg-slate-50 border-slate-200 text-xs h-9"
                                                     />
-                                                    <Input
-                                                        placeholder="mg/dL"
-                                                        value={param.unit}
-                                                        onChange={e => {
-                                                            const newParams = [...testCatalogForm.parameters];
-                                                            newParams[idx].unit = e.target.value;
-                                                            setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
-                                                        }}
-                                                        className="w-16 bg-slate-50 border-slate-200 text-xs h-9"
-                                                    />
-                                                    <Input
-                                                        placeholder="e.g. 12-16"
-                                                        value={param.normal_range}
-                                                        onChange={e => {
-                                                            const newParams = [...testCatalogForm.parameters];
-                                                            newParams[idx].normal_range = e.target.value;
-                                                            setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
-                                                        }}
-                                                        className="w-24 bg-slate-50 border-slate-200 text-xs h-9"
-                                                    />
+                                                    <div className="w-[60px] flex justify-center items-center h-9">
+                                                        <input 
+                                                            type="checkbox"
+                                                            checked={param.is_heading || false}
+                                                            onChange={e => {
+                                                                const newParams = [...testCatalogForm.parameters];
+                                                                newParams[idx].is_heading = e.target.checked;
+                                                                if (e.target.checked) {
+                                                                    newParams[idx].unit = '';
+                                                                    newParams[idx].normal_range = '';
+                                                                }
+                                                                setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
+                                                            }}
+                                                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                        />
+                                                    </div>
+                                                    {!param.is_heading ? (
+                                                        <>
+                                                            <Input
+                                                                placeholder="mg/dL"
+                                                                value={param.unit || ''}
+                                                                onChange={e => {
+                                                                    const newParams = [...testCatalogForm.parameters];
+                                                                    newParams[idx].unit = e.target.value;
+                                                                    setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
+                                                                }}
+                                                                className="w-16 bg-slate-50 border-slate-200 text-xs h-9"
+                                                            />
+                                                            <Input
+                                                                placeholder="e.g. 12-16"
+                                                                value={param.normal_range || ''}
+                                                                onChange={e => {
+                                                                    const newParams = [...testCatalogForm.parameters];
+                                                                    newParams[idx].normal_range = e.target.value;
+                                                                    setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
+                                                                }}
+                                                                className="w-24 bg-slate-50 border-slate-200 text-xs h-9"
+                                                            />
+                                                        </>
+                                                    ) : (
+                                                        <div className="w-[172px]"></div>
+                                                    )}
                                                     <button
                                                         type="button"
                                                         onClick={() => {
@@ -1761,65 +1791,92 @@ const Laboratory = () => {
 
                                 <div className="space-y-3">
                                     {resultData.results.map((field, index) => (
-                                        <div key={index} className="grid grid-cols-12 gap-4 items-center bg-slate-50 p-4 rounded-xl border border-slate-100 hover:border-blue-200 transition-colors group">
-                                            <div className="col-span-4">
-                                                <input
-                                                    className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 font-bold text-slate-700 text-sm outline-none transition-all placeholder:text-slate-300"
-                                                    placeholder="Parameter Name"
-                                                    value={field.name}
-                                                    onChange={e => {
-                                                        const newResults = [...resultData.results];
-                                                        newResults[index].name = e.target.value;
-                                                        setResultData({ ...resultData, results: newResults });
-                                                    }}
-                                                />
-                                            </div>
-                                            <div className="col-span-4">
-                                                <input
-                                                    className="w-full bg-white border-2 border-slate-200 rounded-lg px-3 py-2 text-sm font-bold text-slate-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
-                                                    placeholder="Value"
-                                                    value={field.value}
-                                                    onChange={e => {
-                                                        const newResults = [...resultData.results];
-                                                        newResults[index].value = e.target.value;
-                                                        setResultData({ ...resultData, results: newResults });
-                                                    }}
-                                                />
-                                            </div>
-                                            <div className="col-span-2">
-                                                <input
-                                                    className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 text-xs font-bold text-slate-500 outline-none transition-all"
-                                                    placeholder="Unit"
-                                                    value={field.unit}
-                                                    onChange={e => {
-                                                        const newResults = [...resultData.results];
-                                                        newResults[index].unit = e.target.value;
-                                                        setResultData({ ...resultData, results: newResults });
-                                                    }}
-                                                />
-                                            </div>
-                                            <div className="col-span-2 relative">
-                                                <input
-                                                    className="w-full bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-500 text-xs font-bold text-slate-400 text-right outline-none transition-all"
-                                                    placeholder="Ref Range"
-                                                    value={field.normal}
-                                                    onChange={e => {
-                                                        const newResults = [...resultData.results];
-                                                        newResults[index].normal = e.target.value;
-                                                        setResultData({ ...resultData, results: newResults });
-                                                    }}
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        const newResults = resultData.results.filter((_, i) => i !== index);
-                                                        setResultData({ ...resultData, results: newResults });
-                                                    }}
-                                                    className="absolute -right-8 top-1/2 -translate-y-1/2 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-                                                >
-                                                    <X size={14} />
-                                                </button>
-                                            </div>
+                                        <div key={index} className="flex flex-col gap-3 bg-slate-50 p-4 rounded-xl border border-slate-100 hover:border-blue-200 transition-colors group">
+                                            {field.is_heading ? (
+                                                <div className="font-black text-slate-800 uppercase tracking-widest text-center relative py-2">
+                                                    {field.name}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const newResults = resultData.results.filter((_, i) => i !== index);
+                                                            setResultData({ ...resultData, results: newResults });
+                                                        }}
+                                                        className="absolute -right-2 top-1/2 -translate-y-1/2 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                                    >
+                                                        <X size={14} />
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <div className="grid grid-cols-12 gap-4 items-center">
+                                                        <div className="col-span-4 flex items-center px-2">
+                                                            <span className="font-bold text-slate-700 text-sm truncate" title={field.name}>{field.name}</span>
+                                                        </div>
+                                                        <div className="col-span-4">
+                                                            <input
+                                                                id={`result-input-${index}`}
+                                                                className="w-full bg-white border-2 border-slate-200 rounded-lg px-3 py-2 text-sm font-bold text-slate-900 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
+                                                                placeholder="Value"
+                                                                value={field.value}
+                                                                onChange={e => {
+                                                                    const newResults = [...resultData.results];
+                                                                    newResults[index].value = e.target.value;
+                                                                    setResultData({ ...resultData, results: newResults });
+                                                                }}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === 'ArrowDown') {
+                                                                        e.preventDefault();
+                                                                        const nextInput = document.getElementById(`result-input-${index + 1}`);
+                                                                        if (nextInput) nextInput.focus();
+                                                                    } else if (e.key === 'ArrowUp') {
+                                                                        e.preventDefault();
+                                                                        const prevInput = document.getElementById(`result-input-${index - 1}`);
+                                                                        if (prevInput) prevInput.focus();
+                                                                    }
+                                                                }}
+                                                            />
+                                                        </div>
+                                                        <div className="col-span-2">
+                                                            <input
+                                                                className="w-full bg-slate-100 border-b border-transparent text-xs font-bold text-slate-400 outline-none p-2 rounded cursor-not-allowed opacity-70"
+                                                                placeholder="Unit"
+                                                                value={field.unit}
+                                                                readOnly
+                                                            />
+                                                        </div>
+                                                        <div className="col-span-2 relative">
+                                                            <input
+                                                                className="w-full bg-slate-100 border-b border-transparent text-xs font-bold text-slate-400 text-right outline-none p-2 rounded cursor-not-allowed opacity-70"
+                                                                placeholder="Ref Range"
+                                                                value={field.normal}
+                                                                readOnly
+                                                            />
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    const newResults = resultData.results.filter((_, i) => i !== index);
+                                                                    setResultData({ ...resultData, results: newResults });
+                                                                }}
+                                                                className="absolute -right-8 top-1/2 -translate-y-1/2 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                                            >
+                                                                <X size={14} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="px-2">
+                                                        <input
+                                                            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-xs font-medium text-slate-600 focus:border-blue-500 outline-none transition-all placeholder:text-slate-300"
+                                                            placeholder="Add note for this parameter (optional)"
+                                                            value={field.note || ''}
+                                                            onChange={e => {
+                                                                const newResults = [...resultData.results];
+                                                                newResults[index].note = e.target.value;
+                                                                setResultData({ ...resultData, results: newResults });
+                                                            }}
+                                                        />
+                                                    </div>
+                                                </>
+                                            )}
                                         </div>
                                     ))}
 
@@ -1868,12 +1925,27 @@ const Laboratory = () => {
                                         <Input value={resultData.specimen} onChange={(e) => setResultData({ ...resultData, specimen: e.target.value })} className="bg-white border-2 border-slate-100 rounded-xl font-bold" />
                                     </div>
                                 </div>
+
+                                <div className="pt-6 border-t border-slate-100">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Lab Test Notes (Optional)</label>
+                                        <textarea
+                                            value={resultData.notes || ''}
+                                            onChange={(e) => setResultData({ ...resultData, notes: e.target.value })}
+                                            className="w-full bg-white border-2 border-slate-100 rounded-xl p-4 font-bold text-slate-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all min-h-[100px]"
+                                            placeholder="Enter any general notes or remarks for this report..."
+                                        />
+                                    </div>
+                                </div>
                             </form>
 
                             <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
                                 <Button variant="secondary" className="rounded-xl px-6 font-bold" onClick={() => setShowResultModal(false)}>Cancel</Button>
                                 {['PENDING', 'DRAWN', 'RECEIVED'].includes(selectedCharge.status) && (
-                                    <Button type="button" onClick={(e) => handleSubmitResults(e, 'VERIFICATION')} className="rounded-xl px-6 font-bold bg-indigo-600 shadow-lg shadow-indigo-500/30">Submit for Verification</Button>
+                                    <>
+                                        <Button type="button" onClick={(e) => handleSubmitResults(e, selectedCharge.status)} className="rounded-xl px-6 font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-lg shadow-amber-500/30">Save as Draft</Button>
+                                        <Button type="button" onClick={(e) => handleSubmitResults(e, 'VERIFICATION')} className="rounded-xl px-6 font-bold bg-indigo-600 shadow-lg shadow-indigo-500/30">Submit for Verification</Button>
+                                    </>
                                 )}
                                 {selectedCharge.status === 'VERIFICATION' && (
                                     <Button type="button" onClick={(e) => handleSubmitResults(e, 'COMPLETED')} className="rounded-xl px-8 font-bold bg-emerald-600 shadow-lg shadow-emerald-500/30">Verify & Complete</Button>
@@ -1977,7 +2049,7 @@ const Laboratory = () => {
                                         {(printCharge.tests || [printCharge]).map((testItem, testIdx) => (
                                             <div key={testIdx} className={testIdx > 0 ? "pt-8 border-t-2 border-slate-100" : ""}>
                                                 <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest border-b border-slate-200 pb-2 mb-4">
-                                                    {testItem.test_name} Analysis
+                                                    {testItem.test_name}
                                                     {testItem.sub_name && <span className="block text-xs font-bold text-slate-500 mt-1">{testItem.sub_name}</span>}
                                                 </h3>
                                                 <table className="w-full text-left">
@@ -1994,12 +2066,21 @@ const Laboratory = () => {
                                                             ? testItem.results
                                                             : Object.entries(testItem.results || {}).map(([key, val]) => ({ name: key, ...val }))
                                                         ).map((val, idx) => (
-                                                            <tr key={idx}>
-                                                                <td className="py-4 font-bold text-slate-700 text-sm">{val.name}</td>
-                                                                <td className="py-4 font-black text-slate-900 text-sm">{val.value}</td>
-                                                                <td className="py-4 font-bold text-slate-500 text-xs">{val.unit}</td>
-                                                                <td className="py-4 font-bold text-slate-500 text-xs text-right whitespace-pre-wrap">{val.normal}</td>
-                                                            </tr>
+                                                            val.is_heading ? (
+                                                                <tr key={idx}>
+                                                                    <td colSpan="4" className="py-4 font-black text-slate-900 text-sm uppercase tracking-wider bg-slate-50 border-y border-slate-100 text-center">{val.name}</td>
+                                                                </tr>
+                                                            ) : (
+                                                                <tr key={idx}>
+                                                                    <td className="py-4 font-bold text-slate-700 text-sm">
+                                                                        {val.name}
+                                                                        {val.note && <span className="block font-medium text-slate-500 text-xs mt-1 whitespace-pre-wrap">{val.note}</span>}
+                                                                    </td>
+                                                                    <td className="py-4 font-black text-slate-900 text-sm">{val.value}</td>
+                                                                    <td className="py-4 font-bold text-slate-500 text-xs">{val.unit}</td>
+                                                                    <td className="py-4 font-bold text-slate-500 text-xs text-right whitespace-pre-wrap">{val.normal}</td>
+                                                                </tr>
+                                                            )
                                                         ))}
                                                     </tbody>
                                                 </table>
@@ -2113,8 +2194,6 @@ const Laboratory = () => {
                                     </div>
                                 </div>
                                 <div className="text-right space-y-0.5">
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Reg No</p>
-                                    <p className="text-lg font-black text-slate-900">#{printCharge.registration_number || 'N/A'}</p>
                                     <p className="text-xs font-medium text-slate-500">{(() => {
                                         const d = new Date();
                                         return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
@@ -2161,7 +2240,7 @@ const Laboratory = () => {
                                         <p className="text-sm font-bold text-black underline mb-3">Sample Details:</p>
                                         <div className="grid grid-cols-[90px_1fr] gap-y-2 text-xs text-black">
                                             <span>SID</span>
-                                            <span className="font-bold">: {printCharge.uniqueKey ? String(printCharge.uniqueKey).padStart(6, '0') : '--'}</span>
+                                            <span className="font-bold">: {printCharge.registration_number || '--'}</span>
                                             <span>Registered On</span>
                                             <span className="font-bold">: {new Date(printCharge.created_at || Date.now()).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}).replace(/ /g, '-')}</span>
                                             <span>Drawn On</span>
@@ -2208,8 +2287,8 @@ const Laboratory = () => {
                                 ) : (
                                     (printCharge.tests || [printCharge]).map((testItem, testIdx) => (
                                         <div key={testIdx} className="break-inside-avoid">
-                                            <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest border-b border-slate-200 pb-1 mb-2 mt-4">
-                                                {testItem.test_name} Analysis
+                                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest border-b border-slate-200 pb-2 mb-3 mt-4 text-center">
+                                                {testItem.test_name}
                                                 {testItem.sub_name && <span className="block text-[10px] font-bold text-slate-500 mt-0.5">{testItem.sub_name}</span>}
                                             </h3>
                                             <table className="w-full text-left">
@@ -2226,17 +2305,32 @@ const Laboratory = () => {
                                                         ? testItem.results
                                                         : Object.entries(testItem.results || {}).map(([key, val]) => ({ name: key, ...val }))
                                                     ).map((val, idx) => (
-                                                        <tr key={idx}>
-                                                            <td className="px-2 py-1.5 font-bold text-slate-700 text-xs">{val.name}</td>
-                                                            <td className="px-2 py-1.5 font-black text-slate-900 text-xs">{val.value}</td>
-                                                            <td className="px-2 py-1.5 font-bold text-slate-500 text-[10px]">{val.unit}</td>
-                                                            <td className="px-2 py-1.5 font-bold text-slate-500 text-[10px] text-right whitespace-pre-wrap">{val.normal}</td>
-                                                        </tr>
+                                                        val.is_heading ? (
+                                                            <tr key={idx}>
+                                                                <td colSpan="4" className="px-2 py-3 font-black text-slate-900 text-sm uppercase tracking-wider bg-slate-50/50 border-y border-slate-100 text-center">{val.name}</td>
+                                                            </tr>
+                                                        ) : (
+                                                            <tr key={idx}>
+                                                                <td className="px-2 py-1.5 font-bold text-slate-700 text-xs">
+                                                                    {val.name}
+                                                                    {val.note && <span className="block font-medium text-slate-500 text-[10px] mt-0.5 whitespace-pre-wrap">{val.note}</span>}
+                                                                </td>
+                                                                <td className="px-2 py-1.5 font-black text-slate-900 text-xs">{val.value}</td>
+                                                                <td className="px-2 py-1.5 font-bold text-slate-500 text-[10px]">{val.unit}</td>
+                                                                <td className="px-2 py-1.5 font-bold text-slate-500 text-[10px] text-right whitespace-pre-wrap">{val.normal}</td>
+                                                            </tr>
+                                                        )
                                                     ))}
                                                 </tbody>
                                             </table>
                                         </div>
                                     ))
+                                )}
+                                {printCharge.notes && (
+                                    <div className="mt-8 pt-4 border-t border-slate-200">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Remarks / Notes</p>
+                                        <p className="text-xs font-bold text-slate-700 whitespace-pre-wrap">{printCharge.notes}</p>
+                                    </div>
                                 )}
                             </div>
 

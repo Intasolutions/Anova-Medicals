@@ -1391,7 +1391,7 @@ const Billing = () => {
                             </div>
                             <div className="text-right">
                                 <div className="text-4xl font-black text-slate-300">INVOICE</div>
-                                <p className="text-sm font-bold text-slate-900 mt-2">#{formData.id ? formData.id.toUpperCase() : 'DRAFT'}</p>
+                                <p className="text-sm font-bold text-slate-900 mt-2">#{formData.id ? String(formData.id).toUpperCase() : 'DRAFT'}</p>
                                 <p className="text-xs text-slate-500">{(() => { const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`; })()}</p>
                             </div>
                         </div>

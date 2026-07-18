@@ -1093,7 +1093,7 @@ const CasualtyPage = () => {
 
     const filteredQueue = (viewMode === 'QUEUE' ? queue : viewMode === 'OBSERVATION' ? queue.filter(v => v.casualty_observations?.some(o => o.is_active)) : history).filter(v =>
         v.patient_name?.toLowerCase().includes(search.toLowerCase()) ||
-        v.v_id?.toLowerCase().includes(search.toLowerCase())
+        String(v.v_id || '').toLowerCase().includes(search.toLowerCase())
     );
 
     return (

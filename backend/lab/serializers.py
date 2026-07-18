@@ -27,7 +27,7 @@ class LabCategorySerializer(serializers.ModelSerializer):
 class LabTestParameterSerializer(serializers.ModelSerializer):
     class Meta:
         model = LabTestParameter
-        fields = ['id', 'name', 'unit', 'normal_range']
+        fields = ['id', 'name', 'is_heading', 'unit', 'normal_range']
 
 
 class LabTestRequiredItemSerializer(serializers.ModelSerializer):

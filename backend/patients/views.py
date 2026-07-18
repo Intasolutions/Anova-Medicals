@@ -5,18 +5,25 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Exists, OuterRef
 from revive_cms.utils import export_to_csv
 
-from .models import Patient, Visit
-from .serializers import PatientSerializer, VisitSerializer
-
-
+from .models import Patient, Visit, ReferringDoctor
+from .serializers import PatientSerializer, VisitSerializer, ReferringDoctorSerializer
 from core.permissions import IsHospitalStaff
-
 from rest_framework.pagination import PageNumberPagination
+
 
 class StandardResultsSetPagination(PageNumberPagination):
     page_size = 10
     page_size_query_param = 'page_size'
     max_page_size = 10000
+
+
+class ReferringDoctorViewSet(viewsets.ModelViewSet):
+    queryset = ReferringDoctor.objects.all().order_by('-created_at')
+    serializer_class = ReferringDoctorSerializer
+    permission_classes = [permissions.IsAuthenticated, IsHospitalStaff]
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name', 'phone', 'specialization']
+    pagination_class = StandardResultsSetPagination
 
 class PatientViewSet(viewsets.ModelViewSet):
     queryset = Patient.objects.all().order_by('-created_at')

@@ -34,6 +34,15 @@ class Patient(BaseModel):
         return f"{self.full_name} ({self.phone})"
 
 
+class ReferringDoctor(BaseModel):
+    name = models.CharField(max_length=255, unique=True, help_text="Name of the referring doctor")
+    phone = models.CharField(max_length=20, blank=True, null=True)
+    specialization = models.CharField(max_length=100, blank=True, null=True)
+
+    def __str__(self):
+        return self.name
+
+
 class Visit(BaseModel):
     STATUS_CHOICES = (
         ('OPEN', 'Open'),

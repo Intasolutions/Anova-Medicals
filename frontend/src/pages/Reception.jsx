@@ -87,6 +87,7 @@ const Reception = () => {
     const [patientLabResults, setPatientLabResults] = useState([]); // New state for lab results
     const [historyTab, setHistoryTab] = useState('visits'); // 'visits' | 'billing' | 'lab'
     const [doctors, setDoctors] = useState([]);
+    const [referringDoctors, setReferringDoctors] = useState([]);
     const [availableLabTests, setAvailableLabTests] = useState([]);
     const [selectedLabTests, setSelectedLabTests] = useState([]);
     const [labTestSearchQ, setLabTestSearchQ] = useState('');
@@ -245,14 +246,16 @@ const Reception = () => {
 
     const fetchDoctorsAndTests = async () => {
         try {
-            const [docsRes, testsRes, svcsRes] = await Promise.all([
+            const [docsRes, testsRes, svcsRes, refDocsRes] = await Promise.all([
                 api.get('/users/management/doctors/'),
                 api.get('/lab/tests/'),
-                api.get('/casualty/service-definitions/')
+                api.get('/casualty/service-definitions/'),
+                api.get('/reception/referring-doctors/')
             ]);
-            setDoctors(docsRes.data);
+            setDoctors(docsRes.data.results || docsRes.data);
             setAvailableLabTests(testsRes.data.results || testsRes.data);
             setServiceDefinitions(svcsRes.data.results || svcsRes.data);
+            setReferringDoctors(refDocsRes.data.results || refDocsRes.data);
         } catch (err) {
             console.error(err);
             showToast('error', 'Could not fetch required data.');
@@ -556,18 +559,16 @@ const Reception = () => {
                         <UserPlus size={18} />
                         FRONT DESK
                     </button>
-                    {user?.role !== 'LAB' && (
-                        <button
-                            onClick={() => setActiveTab('billing')}
-                            className={`h-full flex items-center gap-2 border-b-2 text-sm font-bold tracking-wide transition-all ${activeTab === 'billing'
-                                ? 'border-indigo-600 text-indigo-700'
-                                : 'border-transparent text-slate-500 hover:text-slate-800'
-                                }`}
-                        >
-                            <FileText size={18} />
-                            BILLING & INVOICES
-                        </button>
-                    )}
+                    <button
+                        onClick={() => setActiveTab('billing')}
+                        className={`h-full flex items-center gap-2 border-b-2 text-sm font-bold tracking-wide transition-all ${activeTab === 'billing'
+                            ? 'border-indigo-600 text-indigo-700'
+                            : 'border-transparent text-slate-500 hover:text-slate-800'
+                            }`}
+                    >
+                        <FileText size={18} />
+                        BILLING & INVOICES
+                    </button>
                     <button
                         onClick={() => setActiveTab('services')}
                         className={`h-full flex items-center gap-2 border-b-2 text-sm font-bold tracking-wide transition-all ${activeTab === 'services'
@@ -1224,11 +1225,18 @@ const Reception = () => {
                                                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Referred By (Doctor Name)</label>
                                                         <input 
                                                             type="text" 
+                                                            list="referring-doctors-list"
                                                             value={visitForm.referred_by} 
                                                             onChange={e => setVisitForm({ ...visitForm, referred_by: e.target.value })} 
                                                             className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-blue-500 transition-all"
                                                             placeholder="e.g. Dr. Smith or Self"
                                                         />
+                                                        <datalist id="referring-doctors-list">
+                                                            <option value="Self" />
+                                                            {referringDoctors.map((doc, i) => (
+                                                                <option key={i} value={doc.name} />
+                                                            ))}
+                                                        </datalist>
                                                     </div>
                                                     <div className="flex justify-between items-center mb-2">
                                                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">

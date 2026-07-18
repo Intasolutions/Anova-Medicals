@@ -143,6 +143,7 @@ class LabCharge(BaseModel):
     
     # Store dynamic test results (e.g. {"Cholesterol": {"value": "142", "unit": "mg/dl", "normal": "Up to 200 mg/dl"}})
     results = models.JSONField(null=True, blank=True)
+    notes = models.TextField(blank=True, null=True, help_text="Overall notes for the lab test")
     report_date = models.DateTimeField(null=True, blank=True)
     drawn_date = models.DateTimeField(null=True, blank=True)
     received_date = models.DateTimeField(null=True, blank=True)
@@ -176,6 +177,7 @@ class LabTest(BaseModel):
 class LabTestParameter(BaseModel):
     test = models.ForeignKey(LabTest, on_delete=models.CASCADE, related_name='parameters')
     name = models.CharField(max_length=255)
+    is_heading = models.BooleanField(default=False, help_text="If True, this acts as a subheading (unit/range ignored)")
     unit = models.CharField(max_length=50, blank=True, null=True)
     normal_range = models.TextField(blank=True, null=True)
 
