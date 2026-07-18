@@ -2325,15 +2325,16 @@ const Laboratory = () => {
                                                     ))}
                                                 </tbody>
                                             </table>
+                                            {testItem.notes && (
+                                                <div className="mt-4 border-t border-slate-200 pt-3">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Test Remarks / Notes</p>
+                                                    <p className="text-xs font-bold text-slate-700 whitespace-pre-wrap">{testItem.notes}</p>
+                                                </div>
+                                            )}
                                         </div>
                                     ))
                                 )}
-                                {printCharge.notes && (
-                                    <div className="mt-8 pt-4 border-t border-slate-200">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Remarks / Notes</p>
-                                        <p className="text-xs font-bold text-slate-700 whitespace-pre-wrap">{printCharge.notes}</p>
-                                    </div>
-                                )}
+
                             </div>
 
                             {/* Footer */}

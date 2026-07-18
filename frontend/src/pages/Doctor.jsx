@@ -171,7 +171,14 @@ const HistoryModal = ({ history, onClose }) => {
                                                 <tbody className="divide-y divide-slate-100">
                                                     {report.results.map((res, rIdx) => (
                                                         <tr key={rIdx}>
-                                                            <td className="px-3 py-2 font-medium text-slate-700">{typeof res === 'object' ? res.name : String(res)}</td>
+                                                            <td className="px-3 py-2 font-medium text-slate-700">
+                                                                {typeof res === 'object' ? (
+                                                                    <>
+                                                                        {res.name}
+                                                                        {res.note && <span className="block font-medium text-slate-500 text-[10px] mt-0.5 whitespace-pre-wrap">{res.note}</span>}
+                                                                    </>
+                                                                ) : String(res)}
+                                                            </td>
                                                             <td className="px-3 py-2 font-bold text-slate-900">{typeof res === 'object' ? res.value : '--'}</td>
                                                             <td className="px-3 py-2 text-slate-500">{typeof res === 'object' ? res.unit : '--'}</td>
                                                             <td className="px-3 py-2 text-slate-400 text-xs">{typeof res === 'object' ? res.normal : '--'}</td>
@@ -181,6 +188,12 @@ const HistoryModal = ({ history, onClose }) => {
                                             </table>
                                         ) : (
                                             <pre className="text-xs font-mono text-slate-700 bg-slate-50 p-3 rounded-lg overflow-auto">{JSON.stringify(report.results, null, 2)}</pre>
+                                        )}
+                                        {report.notes && (
+                                            <div className="mt-4 border-t border-slate-100 pt-3">
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Test Remarks / Notes</p>
+                                                <p className="text-xs font-bold text-slate-700 whitespace-pre-wrap">{report.notes}</p>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
