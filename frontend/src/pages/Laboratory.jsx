@@ -1376,7 +1376,7 @@ const Laboratory = () => {
                                             )}
                                             {testCatalogForm.parameters.map((param, idx) => (
                                                 <div key={idx} className="flex gap-2 items-start animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                                    <Input
+                                                    <input
                                                         placeholder="e.g. Hemoglobin"
                                                         value={param.name}
                                                         onChange={e => {
@@ -1384,7 +1384,7 @@ const Laboratory = () => {
                                                             newParams[idx].name = e.target.value;
                                                             setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
                                                         }}
-                                                        className="flex-1 bg-slate-50 border-slate-200 text-xs h-9"
+                                                        className="flex-1 w-full px-3 py-1.5 bg-slate-50 border-2 border-slate-100 rounded-lg outline-none focus:border-blue-500 transition-all text-xs font-bold text-slate-700 h-9"
                                                     />
                                                     <div className="w-[60px] flex justify-center items-center h-9">
                                                         <input 
@@ -1404,7 +1404,7 @@ const Laboratory = () => {
                                                     </div>
                                                     {!param.is_heading ? (
                                                         <>
-                                                            <Input
+                                                            <input
                                                                 placeholder="mg/dL"
                                                                 value={param.unit || ''}
                                                                 onChange={e => {
@@ -1412,7 +1412,7 @@ const Laboratory = () => {
                                                                     newParams[idx].unit = e.target.value;
                                                                     setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
                                                                 }}
-                                                                className="w-16 bg-slate-50 border-slate-200 text-xs h-9"
+                                                                className="w-16 px-2 py-1.5 bg-slate-50 border-2 border-slate-100 rounded-lg outline-none focus:border-blue-500 transition-all text-xs font-bold text-slate-700 h-9"
                                                             />
                                                             <textarea
                                                                 placeholder="e.g. 12-16"
