@@ -10,7 +10,11 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterField(
+        migrations.RemoveField(
+            model_name='invoiceitem',
+            name='item_id',
+        ),
+        migrations.AddField(
             model_name='invoiceitem',
             name='item_id',
             field=models.BigIntegerField(blank=True, null=True),
