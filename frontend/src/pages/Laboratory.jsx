@@ -1292,7 +1292,7 @@ const Laboratory = () => {
             <AnimatePresence>
                 {showTestModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-950/40 backdrop-blur-sm no-print">
-                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-2xl rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-4xl rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                                 <h3 className="text-lg font-black text-emerald-900 uppercase tracking-tight">{editingTestId ? 'Edit Test' : 'Add New Test'}</h3>
                                 <button onClick={() => setShowTestModal(false)} className="p-2 rounded-full hover:bg-slate-200 transition-colors"><X size={20} className="text-slate-500" /></button>
@@ -1363,7 +1363,7 @@ const Laboratory = () => {
                                                 <span className="flex-1">Parameter Name</span>
                                                 <span className="w-[60px] text-center">Heading?</span>
                                                 <span className="w-16">Unit</span>
-                                                <span className="w-48">Normal Range</span>
+                                                <span className="flex-1">Normal Range</span>
                                                 <span className="w-[30px]"></span>
                                             </div>
                                         )}
@@ -1422,11 +1422,14 @@ const Laboratory = () => {
                                                                     newParams[idx].normal_range = e.target.value;
                                                                     setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
                                                                 }}
-                                                                className="w-48 bg-slate-50 border-2 border-slate-100 rounded min-h-[36px] px-2 py-1 text-xs outline-none focus:border-blue-500 transition-all font-bold text-slate-700"
+                                                                className="flex-1 bg-slate-50 border-2 border-slate-100 rounded min-h-[36px] px-2 py-1 text-xs outline-none focus:border-blue-500 transition-all font-bold text-slate-700"
                                                             />
                                                         </>
                                                     ) : (
-                                                        <div className="w-[264px]"></div>
+                                                        <>
+                                                            <div className="w-16"></div>
+                                                            <div className="flex-1"></div>
+                                                        </>
                                                     )}
                                                     <button
                                                         type="button"
