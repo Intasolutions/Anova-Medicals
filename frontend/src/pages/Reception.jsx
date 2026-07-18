@@ -1264,22 +1264,24 @@ const Reception = () => {
                                                                     return (
                                                                         <div
                                                                             key={test.id}
-                                                                            onClick={() => {
+                                                                            onClick={(e) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
                                                                                 if (isSelected) {
                                                                                     setSelectedStartServices(selectedStartServices.filter(id => id !== test.id));
                                                                                 } else {
                                                                                     setSelectedStartServices([...selectedStartServices, test.id]);
                                                                                 }
                                                                             }}
-                                                                            className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                                                                            className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between select-none ${
                                                                                 isSelected ? 'border-teal-500 bg-teal-50/50' : 'border-slate-100 hover:border-slate-200'
                                                                             }`}
                                                                         >
-                                                                            <div>
+                                                                            <div className="pointer-events-none">
                                                                                 <p className="text-sm font-bold text-slate-900">{test.name}</p>
                                                                                 <p className="text-xs text-slate-500 font-medium">₹{test.price || test.base_charge}</p>
                                                                             </div>
-                                                                            <div className={`w-5 h-5 rounded flex items-center justify-center border ${
+                                                                            <div className={`w-5 h-5 rounded flex items-center justify-center border pointer-events-none ${
                                                                                 isSelected ? 'bg-teal-600 border-teal-600 text-white' : 'border-slate-300'
                                                                             }`}>
                                                                                 {isSelected && <CheckCircle2 size={14} />}
@@ -1299,22 +1301,24 @@ const Reception = () => {
                                                                     return (
                                                                         <div
                                                                             key={test.id}
-                                                                            onClick={() => {
+                                                                            onClick={(e) => {
+                                                                                e.preventDefault();
+                                                                                e.stopPropagation();
                                                                                 if (isSelected) {
                                                                                     setSelectedLabTests(selectedLabTests.filter(id => id !== test.id));
                                                                                 } else {
                                                                                     setSelectedLabTests([...selectedLabTests, test.id]);
                                                                                 }
                                                                             }}
-                                                                            className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+                                                                            className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between select-none ${
                                                                                 isSelected ? 'border-blue-500 bg-blue-50/50' : 'border-slate-100 hover:border-slate-200'
                                                                             }`}
                                                                         >
-                                                                            <div>
+                                                                            <div className="pointer-events-none">
                                                                                 <p className="text-sm font-bold text-slate-900">{test.name}</p>
                                                                                 <p className="text-xs text-slate-500 font-medium">₹{test.price}</p>
                                                                             </div>
-                                                                            <div className={`w-5 h-5 rounded flex items-center justify-center border ${
+                                                                            <div className={`w-5 h-5 rounded flex items-center justify-center border pointer-events-none ${
                                                                                 isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300'
                                                                             }`}>
                                                                                 {isSelected && <CheckCircle2 size={14} />}
