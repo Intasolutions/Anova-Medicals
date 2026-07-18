@@ -882,7 +882,7 @@ const Billing = () => {
                                             </div>
                                             <div>
                                                 <h4 className="font-bold text-slate-900 text-sm line-clamp-1">{visit.patient_name}</h4>
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase">ID: {(visit.id || "").toString().slice(0, 6)}</p>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase">ID: {(visit.id || "")}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -981,7 +981,7 @@ const Billing = () => {
                         <tbody className="divide-y divide-slate-100">
                             {invoices.filter(inv => (inv.patient_name || "").toLowerCase().includes(searchTerm.toLowerCase()) || (inv.invoice_number || inv.id || "").toString().toLowerCase().includes(searchTerm.toLowerCase())).map((invoice) => (
                                 <tr key={invoice.id} className="hover:bg-slate-50/80 transition-colors group">
-                                    <td className="px-6 py-4 font-mono text-xs font-bold text-slate-500">{invoice.invoice_number || `#${invoice.id?.toString().slice(0, 8).toUpperCase()}`}</td>
+                                    <td className="px-6 py-4 font-mono text-xs font-bold text-slate-500">{invoice.invoice_number || `#${invoice.id}`}</td>
                                     <td className="px-6 py-4 font-bold text-slate-900">{invoice.patient_name || "Guest"}</td>
                                     <td className="px-6 py-4 font-bold text-slate-700">₹{invoice.total_amount}</td>
                                     <td className="px-6 py-4">
@@ -1095,7 +1095,7 @@ const Billing = () => {
                             <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                                 <div>
                                     <h2 className="text-xl font-black text-slate-900 font-outfit uppercase tracking-tight">{formData.id ? 'Edit Invoice' : 'New Invoice'}</h2>
-                                    <p className="text-xs text-slate-500 font-bold mt-1">Ref: {formData.id ? `#${formData.id.slice(0, 8)}` : 'Draft'}</p>
+                                    <p className="text-xs text-slate-500 font-bold mt-1">Ref: {formData.id ? `#${formData.id}` : 'Draft'}</p>
                                 </div>
                                 <div className="flex gap-2">
                                     <button onClick={handlePrint} className="p-2 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition-colors">
@@ -1391,7 +1391,7 @@ const Billing = () => {
                             </div>
                             <div className="text-right">
                                 <div className="text-4xl font-black text-slate-300">INVOICE</div>
-                                <p className="text-sm font-bold text-slate-900 mt-2">#{formData.id ? formData.id.slice(0, 8).toUpperCase() : 'DRAFT'}</p>
+                                <p className="text-sm font-bold text-slate-900 mt-2">#{formData.id ? formData.id.toUpperCase() : 'DRAFT'}</p>
                                 <p className="text-xs text-slate-500">{(() => { const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`; })()}</p>
                             </div>
                         </div>

@@ -1,4 +1,3 @@
-import uuid
 from django.db import models
 from django.conf import settings
 from django.core.validators import MinValueValidator
@@ -24,7 +23,11 @@ class Patient(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.registration_number or self.registration_number == 'TEMP':
-            self.registration_number = f"REV-{uuid.uuid4().hex[:6].upper()}"
+            last_patient = Patient.objects.order_by('created_at').last()
+            if last_patient and last_patient.registration_number and last_patient.registration_number.isdigit():
+                self.registration_number = str(int(last_patient.registration_number) + 1)
+            else:
+                self.registration_number = "10001"
         super().save(*args, **kwargs)
 
     def __str__(self):

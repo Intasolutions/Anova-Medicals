@@ -194,7 +194,7 @@ const TriageModal = ({ visit, onClose, onSave, doctors = [], pharmacyStock = [],
                                 {visit.patient_gender ? ` / ${visit.patient_gender}` : ''}
                             </span>
                             <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                            <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">ID: {visit.patient_registration_number || (visit.v_id || visit.id)?.slice(0, 8)}</span>
+                            <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">ID: {visit.patient_registration_number || (visit.v_id || visit.id)}</span>
                         </div>
                     </div>
                     <button onClick={onClose} className="p-2 bg-white rounded-full hover:bg-red-50 hover:text-red-500 transition-colors shadow-sm border border-slate-100"><X size={20} /></button>
@@ -1213,7 +1213,7 @@ const CasualtyPage = () => {
                                                     <div>
                                                         <p className="font-bold text-slate-900">{visit.patient_name}</p>
                                                         <p className="text-xs text-slate-500 font-mono flex items-center gap-1">
-                                                            ID: {visit.patient_registration_number || visit.v_id?.slice(0, 8)}
+                                                            ID: {visit.patient_registration_number || visit.v_id}
                                                             {(visit.patient_age || visit.patient_gender) && (
                                                                 <>
                                                                     <span className="w-1 h-1 bg-slate-300 rounded-full"></span>

@@ -1568,7 +1568,7 @@ const Laboratory = () => {
                                     <div className="p-4 bg-blue-50 rounded-xl border border-blue-100 flex justify-between items-center">
                                         <div>
                                             <p className="font-bold text-blue-900 text-sm">{selectedVisit.patient_name}</p>
-                                            <p className="text-xs text-blue-600 font-mono">ID: {selectedVisit.id.slice(0, 8)}</p>
+                                            <p className="text-xs text-blue-600 font-mono">ID: {selectedVisit.id}</p>
                                         </div>
                                         <button type="button" onClick={() => setSelectedVisit(null)} className="text-xs font-bold text-blue-500 hover:underline">Change</button>
                                     </div>
@@ -1918,7 +1918,7 @@ const Laboratory = () => {
                                     </div>
                                     <div className="text-right space-y-1">
                                         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Report ID</p>
-                                        <p className="text-xl font-black text-slate-900">#{printCharge.lc_id.toString().slice(0, 8)}</p>
+                                        <p className="text-xl font-black text-slate-900">#{printCharge.lc_id}</p>
                                         <p className="text-sm font-medium text-slate-500">{(() => { const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()}</p>
                                     </div>
                                 </div>

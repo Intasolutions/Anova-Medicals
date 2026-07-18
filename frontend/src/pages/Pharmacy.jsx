@@ -46,7 +46,7 @@ const ReceiptTemplate = ({ sale }) => (
                 const d = new Date(sale.sale_date);
                 return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
             })()}</span></div>
-            <div className="flex justify-between"><span>Invoice No</span> <span className="font-bold">: {sale.invoice_no || sale.id?.slice(0, 8).toUpperCase()}</span></div>
+            <div className="flex justify-between"><span>Invoice No</span> <span className="font-bold">: {sale.invoice_no || sale.id}</span></div>
             <div className="flex justify-between"><span>Patient</span> <span>: {sale.patient?.full_name || 'Walk-In'}</span></div>
             <div className="flex justify-between"><span>Doctor</span> <span>: {sale.doctor?.username || '---'}</span></div>
         </div>
@@ -1098,7 +1098,7 @@ const Pharmacy = () => {
                                         salesHistory.map(sale => (
                                             <div key={sale.id} className="p-4 bg-white border border-slate-200 rounded-xl flex flex-col gap-2">
                                                 <div className="flex justify-between items-center">
-                                                    <span className="font-mono text-[10px] font-bold text-gray-500">#{sale.patient_registration_number || sale.id.slice(0,8).toUpperCase()}</span>
+                                                    <span className="font-mono text-[10px] font-bold text-gray-500">#{sale.patient_registration_number || sale.id}</span>
                                                     <span className="text-[10px] font-black border border-emerald-200 text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded uppercase tracking-wider shrink-0">COMPLETED</span>
                                                 </div>
                                                 <div className="flex justify-between items-end gap-2">
@@ -1464,7 +1464,7 @@ const Pharmacy = () => {
                                                     <span className="px-3 py-1 border border-gray-300 text-gray-700 rounded-lg text-xs font-black uppercase tracking-wider">Valid Invoice</span>
                                                     <span className="text-slate-400 text-xs font-bold uppercase">{(() => { const d = new Date(returnSaleData.sale_date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`; })()}</span>
                                                 </div>
-                                                <h3 className="text-3xl font-black text-slate-900 font-mono">#{returnSaleData.patient_registration_number || returnSaleData.id.slice(0, 8).toUpperCase()}</h3>
+                                                <h3 className="text-3xl font-black text-slate-900 font-mono">#{returnSaleData.patient_registration_number || returnSaleData.id}</h3>
                                                 <p className="text-sm font-bold text-slate-500 mt-1">Billed To: <span className="text-slate-900">{returnSaleData.patient_name || "Guest"}</span></p>
                                             </div>
                                             <div className="text-right">
@@ -1605,7 +1605,7 @@ const Pharmacy = () => {
                                                     <td className="px-6 py-4 font-mono font-bold text-slate-900">
                                                         <div className="flex items-center gap-2">
                                                             {expandedSaleId === sale.id ? <ChevronDown size={14} className="text-slate-400" /> : <ChevronRight size={14} className="text-slate-400" />}
-                                                            #{sale.patient_registration_number || sale.id.slice(0, 8).toUpperCase()}
+                                                            #{sale.patient_registration_number || sale.id}
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4 font-mono text-xs text-slate-500">

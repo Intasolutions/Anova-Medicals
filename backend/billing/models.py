@@ -18,14 +18,10 @@ class Invoice(BaseModel):
     def save(self, *args, **kwargs):
         if not self.invoice_number:
             last_invoice = Invoice.objects.exclude(invoice_number__isnull=True).exclude(invoice_number="").order_by('created_at').last()
-            if not last_invoice or not last_invoice.invoice_number:
-                self.invoice_number = "INV-1000"
+            if not last_invoice or not last_invoice.invoice_number or not last_invoice.invoice_number.isdigit():
+                self.invoice_number = "20001"
             else:
-                try:
-                    last_num = int(last_invoice.invoice_number.split('-')[1])
-                    self.invoice_number = f"INV-{last_num + 1}"
-                except (IndexError, ValueError):
-                    self.invoice_number = f"INV-1000"
+                self.invoice_number = str(int(last_invoice.invoice_number) + 1)
         super().save(*args, **kwargs)
 
     def __str__(self):

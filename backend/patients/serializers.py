@@ -3,7 +3,7 @@ from .models import Patient, Visit
 
 
 class PatientSerializer(serializers.ModelSerializer):
-    p_id = serializers.UUIDField(source='id', read_only=True)
+    p_id = serializers.IntegerField(source='id', read_only=True)
 
     total_visits = serializers.SerializerMethodField()
     active_visit_role = serializers.SerializerMethodField()
@@ -45,7 +45,7 @@ class PatientSerializer(serializers.ModelSerializer):
 
 
 class VisitSerializer(serializers.ModelSerializer):
-    v_id = serializers.UUIDField(source='id', read_only=True)
+    v_id = serializers.IntegerField(source='id', read_only=True)
     patient_name = serializers.CharField(source='patient.full_name', read_only=True)
     doctor_name = serializers.SerializerMethodField()
     consultation_fee = serializers.SerializerMethodField()

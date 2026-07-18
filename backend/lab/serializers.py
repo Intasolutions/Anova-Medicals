@@ -92,7 +92,7 @@ class LabInventoryLogSerializer(serializers.ModelSerializer):
 
 
 class LabInventorySerializer(serializers.ModelSerializer):
-    item_id = serializers.UUIDField(source='id', read_only=True)
+    item_id = serializers.IntegerField(source='id', read_only=True)
     is_low_stock = serializers.BooleanField(read_only=True)
     logs = LabInventoryLogSerializer(many=True, read_only=True)
     batches = LabBatchSerializer(many=True, read_only=True)
@@ -124,7 +124,7 @@ class LabPurchaseItemSerializer(serializers.ModelSerializer):
 
 
 class LabPurchaseSerializer(serializers.ModelSerializer):
-    purchase_id = serializers.UUIDField(source='id', read_only=True)
+    purchase_id = serializers.IntegerField(source='id', read_only=True)
     supplier_name = serializers.CharField(source='supplier.supplier_name', read_only=True)
     items = LabPurchaseItemSerializer(many=True, write_only=True)
     items_detail = LabPurchaseItemSerializer(source='items', many=True, read_only=True)
@@ -247,8 +247,8 @@ class LabPurchaseSerializer(serializers.ModelSerializer):
 
 
 class LabChargeSerializer(serializers.ModelSerializer):
-    lc_id = serializers.UUIDField(source='id', read_only=True)
-    visit_id = serializers.UUIDField(source='visit.id', read_only=True)
+    lc_id = serializers.IntegerField(source='id', read_only=True)
+    visit_id = serializers.IntegerField(source='visit.id', read_only=True)
     patient_name = serializers.CharField(source='visit.patient.full_name', read_only=True)
     registration_number = serializers.CharField(source='visit.patient.registration_number', read_only=True)
     patient_age = serializers.CharField(source='visit.patient.age', read_only=True)

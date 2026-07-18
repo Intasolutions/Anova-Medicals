@@ -29,16 +29,20 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         month = self.request.query_params.get('month')
         year = self.request.query_params.get('year')
         
-        if date_str:
-            try:
-                queryset = queryset.filter(created_at__date=date_str)
-            except ValueError:
-                pass
-        elif month and year:
-            try:
-                queryset = queryset.filter(created_at__month=month, created_at__year=year)
-            except ValueError:
-                pass
+        if self.request.query_params.get('unpaid') == 'true':
+            # Ignore date filters for unpaid invoices (they need to be collected regardless of date)
+            queryset = queryset.exclude(payment_status='PAID')
+        else:
+            if date_str:
+                try:
+                    queryset = queryset.filter(created_at__date=date_str)
+                except ValueError:
+                    pass
+            elif month and year:
+                try:
+                    queryset = queryset.filter(created_at__month=month, created_at__year=year)
+                except ValueError:
+                    pass
                 
         return queryset
 

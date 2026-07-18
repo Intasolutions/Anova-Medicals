@@ -782,7 +782,7 @@ const Doctor = () => {
                                     <div>
                                         <h2 className="text-xl font-bold text-slate-900">{selectedVisit.patient_name}</h2>
                                         <div className="flex items-center gap-2 text-xs font-bold text-slate-500 mt-0.5 uppercase flex-wrap">
-                                            <span>ID: {selectedVisit.patient_registration_number || String(selectedVisit.v_id || selectedVisit.id).slice(0, 8)}</span>
+                                            <span>ID: {selectedVisit.patient_registration_number || (selectedVisit.v_id || selectedVisit.id)}</span>
                                             <span className="text-blue-600">
                                                 {selectedVisit.patient_gender === 'M' ? 'Male' : selectedVisit.patient_gender === 'F' ? 'Female' : 'Other'} · {selectedVisit.patient_age} Yrs
                                                 {selectedVisit.patient_age_months > 0 ? ` ${selectedVisit.patient_age_months} Mos` : ''}

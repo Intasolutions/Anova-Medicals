@@ -742,7 +742,7 @@ const Reception = () => {
                                                                     <div>
                                                                         <p className="font-bold text-slate-900 text-sm">{p.full_name}</p>
                                                                         <p className="text-[10px] font-black text-slate-400 font-mono tracking-wider uppercase mt-0.5">
-                                                                            {p.registration_number || p.p_id.slice(0, 8)} • {p.age}Y {p.age_months > 0 ? `${p.age_months}M` : ''} • {p.gender}
+                                                                            {p.registration_number || p.p_id} • {p.age}Y {p.age_months > 0 ? `${p.age_months}M` : ''} • {p.gender}
                                                                         </p>
                                                                     </div>
                                                                 </div>
@@ -1464,7 +1464,7 @@ const Reception = () => {
                                                         <div key={inv.id} className="p-4 rounded-2xl border border-slate-100 bg-slate-50 hover:border-indigo-200 transition-all group space-y-3">
                                                             <div className="flex justify-between items-start">
                                                                 <div>
-                                                                    <p className="font-bold text-slate-900 text-sm">{inv.invoice_number || `Invoice #${inv.id.toString().slice(0, 8).toUpperCase()}`}</p>
+                                                                    <p className="font-bold text-slate-900 text-sm">{inv.invoice_number || `Invoice #${inv.id}`}</p>
                                                                     <span className="text-xs font-bold text-slate-400">{(() => { const d = new Date(inv.created_at); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()}</span>
                                                                 </div>
                                                                 <span className={`text-[10px] font-black px-2 py-0.5 rounded uppercase ${inv.payment_status === 'PAID' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
@@ -1681,7 +1681,7 @@ const Reception = () => {
                             <div className="p-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
                                 <div>
                                     <h3 className="font-bold text-lg text-slate-800">Add Service to Invoice</h3>
-                                    <p className="text-xs text-slate-400">Invoice {addingServiceInvoice.invoice_number || `#${addingServiceInvoice.id.toString().slice(0,8).toUpperCase()}`}</p>
+                                    <p className="text-xs text-slate-400">Invoice {addingServiceInvoice.invoice_number || `#${addingServiceInvoice.id}`}</p>
                                 </div>
                                 <button onClick={() => setAddingServiceInvoice(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>
                             </div>

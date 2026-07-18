@@ -9,14 +9,14 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ('medical', '0001_initial'),
+        ('casualty', '0001_initial'),
         ('patients', '0001_initial'),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='doctornote',
+            model_name='casualtylog',
             name='visit',
-            field=models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='doctor_note', to='patients.visit'),
+            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='casualty_logs', to='patients.visit'),
         ),
     ]

@@ -9,7 +9,7 @@ from .models import (
 
 
 class SupplierSerializer(serializers.ModelSerializer):
-    supplier_id = serializers.UUIDField(source='id', read_only=True)
+    supplier_id = serializers.IntegerField(source='id', read_only=True)
 
     class Meta:
         model = Supplier
@@ -18,7 +18,7 @@ class SupplierSerializer(serializers.ModelSerializer):
 
 
 class PharmacyStockSerializer(serializers.ModelSerializer):
-    med_id = serializers.UUIDField(source='id', read_only=True)
+    med_id = serializers.IntegerField(source='id', read_only=True)
     supplier_name = serializers.SerializerMethodField()
 
     class Meta:
@@ -31,7 +31,7 @@ class PharmacyStockSerializer(serializers.ModelSerializer):
 
 
 class PurchaseItemSerializer(serializers.ModelSerializer):
-    item_id = serializers.UUIDField(source='id', read_only=True)
+    item_id = serializers.IntegerField(source='id', read_only=True)
 
     class Meta:
         model = PurchaseItem
@@ -40,7 +40,7 @@ class PurchaseItemSerializer(serializers.ModelSerializer):
 
 
 class PurchaseInvoiceSerializer(serializers.ModelSerializer):
-    purchase_id = serializers.UUIDField(source='id', read_only=True)
+    purchase_id = serializers.IntegerField(source='id', read_only=True)
     # ✅ make items writable (bulk upload via JSON)
     items = PurchaseItemSerializer(many=True, write_only=True)
     items_detail = PurchaseItemSerializer(source='items', many=True, read_only=True)
@@ -250,7 +250,7 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
 
 
 class PharmacySaleItemSerializer(serializers.ModelSerializer):
-    item_id = serializers.UUIDField(source='id', read_only=True)
+    item_id = serializers.IntegerField(source='id', read_only=True)
     med_name = serializers.CharField(source='med_stock.name', read_only=True)
     batch_no = serializers.CharField(source='med_stock.batch_no', read_only=True)
     expiry_date = serializers.DateField(source='med_stock.expiry_date', read_only=True)
@@ -264,7 +264,7 @@ class PharmacySaleItemSerializer(serializers.ModelSerializer):
 
 
 class PharmacySaleSerializer(serializers.ModelSerializer):
-    sale_id = serializers.UUIDField(source='id', read_only=True)
+    sale_id = serializers.IntegerField(source='id', read_only=True)
     patient_name = serializers.CharField(source='patient.full_name', read_only=True)
     patient_registration_number = serializers.CharField(source='patient.registration_number', read_only=True)
     # allow creating items in same request
@@ -398,7 +398,7 @@ class PharmacySaleSerializer(serializers.ModelSerializer):
 
 
 class PharmacyReturnItemSerializer(serializers.ModelSerializer):
-    return_item_id = serializers.UUIDField(source='id', read_only=True)
+    return_item_id = serializers.IntegerField(source='id', read_only=True)
     med_name = serializers.CharField(source='med_stock.name', read_only=True)
     batch_no = serializers.CharField(source='med_stock.batch_no', read_only=True)
 
@@ -409,7 +409,7 @@ class PharmacyReturnItemSerializer(serializers.ModelSerializer):
 
 
 class PharmacyReturnSerializer(serializers.ModelSerializer):
-    return_id = serializers.UUIDField(source='id', read_only=True)
+    return_id = serializers.IntegerField(source='id', read_only=True)
     # Allows creating return items in the same call
     items = PharmacyReturnItemSerializer(many=True, read_only=True)
     items_data = serializers.ListField(child=serializers.DictField(), write_only=True)
