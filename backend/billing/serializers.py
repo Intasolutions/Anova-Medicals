@@ -59,9 +59,22 @@ class InvoiceSerializer(serializers.ModelSerializer):
             invoice = Invoice.objects.filter(visit=visit).order_by('created_at').first()
             
         if invoice:
-            # Append items to existing master invoice
+
+            # Append items to existing master invoice (Deduplicating to prevent double amounts)
             for item_data in items_data:
-                InvoiceItem.objects.create(invoice=invoice, **item_data)
+                desc = item_data.get('description')
+                batch = item_data.get('batch', '')
+                
+                # Check if item already exists on this invoice
+                exists = InvoiceItem.objects.filter(
+                    invoice=invoice,
+                    description=desc
+                ).filter(
+                    models.Q(batch=batch) | models.Q(batch__isnull=True)
+                ).exists()
+                
+                if not exists:
+                    InvoiceItem.objects.create(invoice=invoice, **item_data)
                 
             # Recalculate total amount
             invoice.total_amount = sum(item.amount for item in invoice.items.all())
