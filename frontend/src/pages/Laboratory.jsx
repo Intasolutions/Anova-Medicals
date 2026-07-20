@@ -2813,9 +2813,14 @@ const Laboratory = () => {
                                                             {new Date(test.created_at).toLocaleDateString()} at {new Date(test.created_at).toLocaleTimeString()}
                                                         </p>
                                                     </div>
-                                                    <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wide border ${test.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-600 border-slate-100'}`}>
-                                                        {test.status}
-                                                    </span>
+                                                    <div className="flex gap-2">
+                                                        <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wide border ${test.payment_status === 'PAID' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : test.payment_status === 'UNBILLED' ? 'bg-slate-50 text-slate-500 border-slate-200' : 'bg-rose-50 text-rose-600 border-rose-100'}`}>
+                                                            {test.payment_status === 'PAID' ? 'PAID' : test.payment_status === 'UNBILLED' ? 'UNBILLED' : 'BILL PENDING'}
+                                                        </span>
+                                                        <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wide border ${test.status === 'COMPLETED' ? 'bg-purple-50 text-purple-600 border-purple-100' : 'bg-slate-50 text-slate-600 border-slate-100'}`}>
+                                                            {test.status}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                                 
                                                 {test.results && Object.keys(test.results).length > 0 ? (
