@@ -615,7 +615,7 @@ const Billing = () => {
                 setShowModal(false);
                 setFormData({ patient_name: "", patient: null, visit: null, doctor: "", payment_status: "PENDING", discount_amount: 0, items: [] });
                 
-                if (savedInvoice && savedInvoice.payment_status === 'PENDING') {
+                if (savedInvoice && (savedInvoice.payment_status === 'PENDING' || savedInvoice.payment_status === 'PARTIAL')) {
                     setPaymentData({ invoice: savedInvoice, payments: { CASH: '', UPI: '', CARD: '' }, remarks: '' });
                     setShowPaymentModal(true);
                     showToast('success', "Invoice generated! Please collect payment.");
