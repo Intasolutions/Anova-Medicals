@@ -182,7 +182,7 @@ const Laboratory = () => {
     const [manualProductSearch, setManualProductSearch] = useState({ rowIdx: null, results: [] });
     // Fetch Lab Suppliers on Mount
     useEffect(() => {
-        api.get('lab/suppliers/').then(r => setLabSuppliers(r.data.results || [])).catch(console.error);
+        api.get('lab/suppliers/?page_size=1000').then(r => setLabSuppliers(r.data.results || [])).catch(console.error);
     }, []);
 
     // --- Effects ---
@@ -340,21 +340,21 @@ const Laboratory = () => {
 
     const fetchLabTests = async () => {
         try {
-            const { data } = await api.get('lab/tests/');
+            const { data } = await api.get('lab/tests/?page_size=10000');
             setLabTests(data.results || data || []);
         } catch (err) { console.error("Failed to load tests", err); }
     };
 
     const fetchCategories = async () => {
         try {
-            const { data } = await api.get('lab/categories/');
+            const { data } = await api.get('lab/categories/?page_size=1000');
             setCategories(data.results || data || []);
         } catch (err) { console.error("Failed to load categories", err); }
     };
 
     const fetchLabSuppliers = async () => {
         try {
-            const { data } = await api.get('lab/suppliers/');
+            const { data } = await api.get('lab/suppliers/?page_size=1000');
             setLabSuppliers(data.results || data || []);
         } catch (err) { console.error("Failed to load suppliers", err); }
     };

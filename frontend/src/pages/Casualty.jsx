@@ -810,7 +810,7 @@ const CasualtyPage = () => {
         try {
             const [stock, svcs] = await Promise.all([
                 api.get('/pharmacy/stock/?page_size=2000'), // increased limit to get more stock for filtering
-                api.get('/casualty/service-definitions/')
+                api.get('/casualty/service-definitions/?page_size=10000')
             ]);
             setPharmacyStock(stock.data.results || stock.data);
             setServiceDefinitions(svcs.data.results || svcs.data);
@@ -869,7 +869,7 @@ const CasualtyPage = () => {
 
     const fetchDoctors = async () => {
         try {
-            const { data } = await api.get('/users/management/doctors/');
+            const { data } = await api.get('/users/management/doctors/?page_size=1000');
             setDoctors(data);
         } catch (error) { console.error("Failed to load doctors", error); }
     };

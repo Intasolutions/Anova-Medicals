@@ -33,7 +33,7 @@ const ManagePage = () => {
     const fetchDoctors = async () => {
         try {
             setLoading(true);
-            const { data } = await api.get('/users/management/doctors/');
+            const { data } = await api.get('/users/management/doctors/?page_size=1000');
             setDoctors(data);
         } catch (error) {
             showToast('error', 'Failed to fetch doctors list.');
@@ -45,7 +45,7 @@ const ManagePage = () => {
     const fetchServices = async () => {
         try {
             setLoading(true);
-            const { data } = await api.get('/casualty/service-definitions/');
+            const { data } = await api.get('/casualty/service-definitions/?page_size=10000');
             setServices(data.results || data);
         } catch (error) {
             showToast('error', 'Failed to fetch services list.');
@@ -57,7 +57,7 @@ const ManagePage = () => {
     const fetchPharmacySuppliers = async () => {
         try {
             setLoading(true);
-            const { data } = await api.get('/pharmacy/suppliers/');
+            const { data } = await api.get('/pharmacy/suppliers/?page_size=10000');
             setPharmacySuppliers(data.results || data);
         } catch (error) {
             showToast('error', 'Failed to fetch pharmacy suppliers.');

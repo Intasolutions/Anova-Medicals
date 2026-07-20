@@ -338,7 +338,7 @@ const Doctor = () => {
 
     const fetchDoctors = async () => {
         try {
-            const { data } = await api.get('/users/management/doctors/');
+            const { data } = await api.get('/users/management/doctors/?page_size=1000');
             const docs = Array.isArray(data) ? data : (data.results || []);
             setDoctorsList(docs.filter(d => (d.u_id || d.id) !== (user?.u_id || user?.id)));
         } catch (e) { console.error(e); }
@@ -453,7 +453,7 @@ const Doctor = () => {
         setServiceSearch(query);
         if (query.length < 2) { setServiceResults([]); return; }
         try {
-            const { data } = await api.get(`/casualty/service-definitions/?search=${query}`);
+            const { data } = await api.get(`/casualty/service-definitions/?search=${query}&page_size=1000`);
             setServiceResults(data.results || data);
         } catch (e) { console.error(e); }
     };

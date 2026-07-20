@@ -209,7 +209,7 @@ const Pharmacy = () => {
 
     const fetchSuppliers = useCallback(async () => {
         try {
-            const { data } = await api.get('pharmacy/suppliers/');
+            const { data } = await api.get('pharmacy/suppliers/?page_size=1000');
             setSuppliers(Array.isArray(data) ? data : (data.results || []));
         } catch (err) { setSuppliers([]); }
     }, []);
