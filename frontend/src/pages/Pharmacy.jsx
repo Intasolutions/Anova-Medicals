@@ -33,7 +33,9 @@ const ReceiptTemplate = ({ sale }) => (
             <img src="/logo.png" alt="Logo" className="w-12 h-12 object-contain mx-auto mb-2" />
             <h1 className="text-xl font-black tracking-widest uppercase">ANOVA MEDICAL CENTER</h1>
             <div className="flex flex-col items-center gap-1 text-xs font-bold text-slate-500">
-                <p>Opposite Trading Company 5th Mile, Mananthavady, Wayanad</p>
+                <p>144, Calicut Road, Kellur, 5th mile, Wayanad.</p>
+                <p>Ph: 8304889381</p>
+                <p>anovamedicalcentre29@gmail.com</p>
             </div>
             <p className="text-xs font-bold border-y border-slate-200 py-1 mt-2">Tax Invoice / Retail Bill</p>
         </div>

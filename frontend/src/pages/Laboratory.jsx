@@ -2188,7 +2188,7 @@ const Laboratory = () => {
                                         <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mt-0.5">
                                             {printCharge.groupStatus === 'PENDING' ? 'Lab Request / Receipt' : 'Laboratory Services'}
                                         </p>
-                                        <p className="text-[10px] font-bold text-slate-400 mt-0.5">Opposite Trading Company 5th Mile, Mananthavady, Wayanad</p>
+                                        <p className="text-[10px] font-bold text-slate-400 mt-0.5">144, Calicut Road, Kellur, 5th mile, Wayanad. Ph: 8304889381. Email: anovamedicalcentre29@gmail.com</p>
                                     </div>
                                 </div>
                                 <div className="text-right space-y-0.5">

@@ -133,11 +133,11 @@ const Billing = () => {
     const fetchMetadata = async () => {
         try {
             const [docRes, patRes, stockRes, svcRes, labRes] = await Promise.all([
-                api.get(`users/management/doctors/`),
-                api.get(`reception/patients/`),
-                api.get(`pharmacy/stock/`),
-                api.get(`casualty/service-definitions/`),
-                api.get(`lab/tests/`)
+                api.get(`users/management/doctors/?page_size=1000`),
+                api.get(`reception/patients/?page_size=10000`),
+                api.get(`pharmacy/stock/?page_size=10000`),
+                api.get(`casualty/service-definitions/?page_size=10000`),
+                api.get(`lab/tests/?page_size=10000`)
             ]);
             setDoctors(Array.isArray(docRes.data) ? docRes.data : docRes.data.results);
             setPatients(Array.isArray(patRes.data) ? patRes.data : patRes.data.results);
@@ -1405,9 +1405,10 @@ const Billing = () => {
                                 <div>
                                     <h1 className="text-3xl font-black text-slate-900 tracking-widest uppercase">ANOVA MEDICAL CENTER</h1>
                                 <div className="mt-4 text-xs text-slate-600 font-bold space-y-1">
-                                    <p>Opposite Trading Company 5th Mile</p>
-                                    <p>Mananthavady, Wayanad</p>
-                                    <p>Ph: 04936-222952</p>
+                                    <p>144, Calicut Road, Kellur</p>
+                                    <p>5th mile, Wayanad</p>
+                                    <p>Ph: 8304889381</p>
+                                    <p>anovamedicalcentre29@gmail.com</p>
                                 </div>
                             </div>
                             <div className="text-right">

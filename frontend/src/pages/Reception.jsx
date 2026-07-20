@@ -247,10 +247,10 @@ const Reception = () => {
     const fetchDoctorsAndTests = async () => {
         try {
             const [docsRes, testsRes, svcsRes, refDocsRes] = await Promise.all([
-                api.get('/users/management/doctors/'),
-                api.get('/lab/tests/'),
-                api.get('/casualty/service-definitions/'),
-                api.get('/reception/referring-doctors/')
+                api.get('/users/management/doctors/?page_size=1000'),
+                api.get('/lab/tests/?page_size=10000'),
+                api.get('/casualty/service-definitions/?page_size=10000'),
+                api.get('/reception/referring-doctors/?page_size=1000')
             ]);
             setDoctors(docsRes.data.results || docsRes.data);
             setAvailableLabTests(testsRes.data.results || testsRes.data);
