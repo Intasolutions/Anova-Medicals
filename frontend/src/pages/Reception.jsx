@@ -1185,7 +1185,6 @@ const Reception = () => {
                                                 >
                                                     <option value="DOCTOR">Doctor (Consultation)</option>
                                                     <option value="LAB">Laboratory</option>
-                                                    <option value="PHARMACY">Pharmacy</option>
                                                     <option value="CASUALTY">Services Only (Direct to Billing)</option>
                                                 </select>
                                             </div>
@@ -1250,25 +1249,21 @@ const Reception = () => {
                                                             ))}
                                                         </datalist>
                                                     </div>
-                                                    {visitForm.assigned_role !== 'PHARMACY' && (
-                                                        <>
-                                                            <div className="flex justify-between items-center mb-2">
-                                                                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
-                                                                    {visitForm.assigned_role === 'CASUALTY' ? 'Select Services (Optional)' : 'Select Lab Tests (Optional)'}
-                                                                </label>
-                                                            </div>
-                                                            <div className="relative mb-3 flex-shrink-0">
-                                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                                                <input
-                                                                    type="text"
-                                                                    placeholder={visitForm.assigned_role === 'CASUALTY' ? 'Search services...' : 'Search lab tests...'}
-                                                                    className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
-                                                                    value={visitForm.assigned_role === 'CASUALTY' ? serviceSearchQ : labTestSearchQ}
-                                                                    onChange={(e) => visitForm.assigned_role === 'CASUALTY' ? setServiceSearchQ(e.target.value) : setLabTestSearchQ(e.target.value)}
-                                                                />
-                                                            </div>
-                                                        </>
-                                                    )}
+                                                    <div className="flex justify-between items-center mb-2">
+                                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+                                                            {visitForm.assigned_role === 'CASUALTY' ? 'Select Services (Optional)' : 'Select Lab Tests (Optional)'}
+                                                        </label>
+                                                    </div>
+                                                    <div className="relative mb-3 flex-shrink-0">
+                                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                                        <input
+                                                            type="text"
+                                                            placeholder={visitForm.assigned_role === 'CASUALTY' ? 'Search services...' : 'Search lab tests...'}
+                                                            className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                                                            value={visitForm.assigned_role === 'CASUALTY' ? serviceSearchQ : labTestSearchQ}
+                                                            onChange={(e) => visitForm.assigned_role === 'CASUALTY' ? setServiceSearchQ(e.target.value) : setLabTestSearchQ(e.target.value)}
+                                                        />
+                                                    </div>
                                                     
                                                     {visitForm.assigned_role === 'CASUALTY' ? (
                                                         serviceDefinitions.filter(t => t.name.toLowerCase().includes(serviceSearchQ.toLowerCase())).length === 0 ? (
@@ -1336,15 +1331,7 @@ const Reception = () => {
                                                                 })}
                                                             </div>
                                                         )
-                                                    ) : (
-                                                        <div className="flex flex-col items-center justify-center p-8 text-center bg-blue-50/50 rounded-xl border border-blue-100 h-full mt-4">
-                                                            <div className="p-4 bg-white rounded-full shadow-sm mb-4">
-                                                                <Sparkles className="w-8 h-8 text-blue-500" />
-                                                            </div>
-                                                            <p className="text-sm font-bold text-blue-900">Routing to Pharmacy</p>
-                                                            <p className="text-xs text-blue-600 mt-2 max-w-[200px]">The patient will be directly forwarded to the Pharmacy queue.</p>
-                                                        </div>
-                                                    )}
+                                                    ) : null}
                                                     
                                                     <div className="mt-4 p-4 bg-blue-50/50 rounded-xl border border-blue-100 text-xs font-medium text-blue-800 flex gap-2 flex-shrink-0">
                                                         <AlertCircle size={16} className="text-blue-500 shrink-0" />
