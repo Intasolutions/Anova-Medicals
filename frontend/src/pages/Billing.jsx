@@ -1445,33 +1445,52 @@ const Billing = () => {
                                     <th className="py-2 px-2 border-b border-slate-900 text-[9px] font-black text-slate-900 uppercase tracking-widest w-[9%] text-right">Amount</th>
                                 </tr>
                             </thead>
-                            <tbody>
-                                {formData.items.map((item, idx) => (
-                                    <tr key={idx} className="border-b border-slate-300">
-                                        <td className="py-2 px-2 border-r border-slate-300 text-[10px] font-medium text-slate-600 text-center">{idx + 1}</td>
-                                        <td className="py-2 px-2 border-r border-slate-300 text-[10px] font-bold text-slate-800 leading-tight">{item.description}</td>
-                                        <td className="py-2 px-2 border-r border-slate-300 text-[10px] font-bold text-slate-800 text-center">{item.qty}</td>
-                                        <td className="py-2 px-2 border-r border-slate-300 text-[10px] text-slate-600 text-center">{item.gst_percent}</td>
-                                        <td className="py-2 px-2 border-r border-slate-300 text-[10px] text-slate-800 text-right">{parseFloat(item.unit_price).toFixed(2)}</td>
-                                        <td className="py-2 px-2 text-[10px] font-bold text-slate-900 text-right">{parseFloat(item.amount).toFixed(2)}</td>
+                                {(() => {
+                                    let globalIdx = 1;
+                                    const groupedItems = formData.items.reduce((acc, item) => {
+                                        const dept = item.dept || 'OTHER';
+                                        if (!acc[dept]) acc[dept] = [];
+                                        acc[dept].push(item);
+                                        return acc;
+                                    }, {});
+                                    
+                                    return Object.entries(groupedItems).map(([dept, items]) => (
+                                        <tbody key={dept}>
+                                            <tr className="bg-slate-200/50 border-b border-slate-400">
+                                                <td colSpan={6} className="py-1 px-2 text-[9px] font-black text-slate-700 tracking-widest uppercase">
+                                                    {dept === 'CASUALTY' ? 'SERVICES' : dept === 'LAB' ? 'LABORATORY' : dept === 'PHARMACY' ? 'PHARMACY' : dept}
+                                                </td>
+                                            </tr>
+                                            {items.map((item) => (
+                                                <tr key={globalIdx} className="border-b border-slate-300 bg-white">
+                                                    <td className="py-2 px-2 border-r border-slate-300 text-[10px] font-medium text-slate-600 text-center">{globalIdx++}</td>
+                                                    <td className="py-2 px-2 border-r border-slate-300 text-[10px] font-bold text-slate-800 leading-tight">{item.description}</td>
+                                                    <td className="py-2 px-2 border-r border-slate-300 text-[10px] font-bold text-slate-800 text-center">{item.qty}</td>
+                                                    <td className="py-2 px-2 border-r border-slate-300 text-[10px] text-slate-600 text-center">{item.gst_percent}</td>
+                                                    <td className="py-2 px-2 border-r border-slate-300 text-[10px] text-slate-800 text-right">{parseFloat(item.unit_price).toFixed(2)}</td>
+                                                    <td className="py-2 px-2 text-[10px] font-bold text-slate-900 text-right">{parseFloat(item.amount).toFixed(2)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    ));
+                                })()}
+                                
+                                <tbody>
+                                    <tr className="bg-slate-50 border-t-2 border-slate-900">
+                                        <td colSpan={5} className="py-2 px-2 text-right text-[10px] font-bold text-slate-500 border-r border-slate-900 uppercase tracking-wide">Subtotal</td>
+                                        <td className="py-2 px-2 text-right text-sm font-bold text-slate-600">₹{calculateSubtotal(formData.items).toFixed(2)}</td>
                                     </tr>
-                                ))}
-                                {/* Empty rows to maintain height if needed, or just a footer row */}
-                                <tr className="bg-slate-50 border-t-2 border-slate-900">
-                                    <td colSpan={5} className="py-2 px-2 text-right text-[10px] font-bold text-slate-500 border-r border-slate-900 uppercase tracking-wide">Subtotal</td>
-                                    <td className="py-2 px-2 text-right text-sm font-bold text-slate-600">₹{calculateSubtotal(formData.items).toFixed(2)}</td>
-                                </tr>
-                                {(parseFloat(formData.discount_amount) > 0) && (
-                                    <tr className="bg-rose-50 border-t border-slate-300">
-                                        <td colSpan={5} className="py-2 px-2 text-right text-[10px] font-bold text-rose-600 border-r border-slate-900 uppercase tracking-wide">Discount</td>
-                                        <td className="py-2 px-2 text-right text-sm font-bold text-rose-600">-₹{parseFloat(formData.discount_amount).toFixed(2)}</td>
+                                    {(parseFloat(formData.discount_amount) > 0) && (
+                                        <tr className="bg-rose-50 border-t border-slate-300">
+                                            <td colSpan={5} className="py-2 px-2 text-right text-[10px] font-bold text-rose-600 border-r border-slate-900 uppercase tracking-wide">Discount</td>
+                                            <td className="py-2 px-2 text-right text-sm font-bold text-rose-600">-₹{parseFloat(formData.discount_amount).toFixed(2)}</td>
+                                        </tr>
+                                    )}
+                                    <tr className="bg-slate-100 border-t-2 border-slate-900">
+                                        <td colSpan={5} className="py-3 px-2 text-right text-[10px] font-black text-slate-900 border-r border-slate-900 uppercase tracking-wide">Net Amount</td>
+                                        <td className="py-3 px-2 text-right text-sm font-black text-slate-900">₹{Math.ceil(Math.max(0, calculateSubtotal(formData.items) - (parseFloat(formData.discount_amount) || 0))).toFixed(2)}</td>
                                     </tr>
-                                )}
-                                <tr className="bg-slate-100 border-t-2 border-slate-900">
-                                    <td colSpan={5} className="py-3 px-2 text-right text-[10px] font-black text-slate-900 border-r border-slate-900 uppercase tracking-wide">Net Amount</td>
-                                    <td className="py-3 px-2 text-right text-sm font-black text-slate-900">₹{Math.ceil(Math.max(0, calculateSubtotal(formData.items) - (parseFloat(formData.discount_amount) || 0))).toFixed(2)}</td>
-                                </tr>
-                            </tbody>
+                                </tbody>
                         </table>
                     </div>
 
