@@ -261,18 +261,18 @@ const Billing = () => {
             if (foundDoctor) doctorToSet = foundDoctor.id;
         }
 
-        // --- Check for existing DRAFT invoice ---
+        // --- Check for existing invoice ---
         try {
             const existingInvoiceRes = await api.get(`/billing/invoices/?visit=${visit.id || visit.v_id}`);
             const existingInvoices = existingInvoiceRes.data.results || existingInvoiceRes.data;
-            const draftInvoice = existingInvoices.find(inv => inv.payment_status === 'DRAFT');
+            const activeInvoice = existingInvoices.find(inv => inv.payment_status !== 'CANCELLED');
             
-            if (draftInvoice) {
-                handleEditInvoice(draftInvoice);
-                return; // Stop here, we loaded the draft!
+            if (activeInvoice) {
+                handleEditInvoice(activeInvoice);
+                return; // Stop here, we loaded the existing invoice!
             }
         } catch (err) {
-            console.warn("Could not check for existing drafts:", err);
+            console.warn("Could not check for existing invoices:", err);
         }
 
         const newFormData = {
@@ -708,7 +708,7 @@ const Billing = () => {
             let uniqueCasualtyServices = [];
             let uniqueLabItems = [];
 
-            if (!invoice.payment_status || invoice.payment_status === 'DRAFT') {
+            if (invoice.payment_status !== 'PAID' && invoice.payment_status !== 'CANCELLED') {
                 const visitLabItems = ((visitData && visitData.lab_charges_data) || []).map(item => ({
                     dept: "LAB",
                     description: item.test_name,
