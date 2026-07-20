@@ -168,7 +168,14 @@ class LabChargeViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     search_fields = ['test_name', 'visit__patient__full_name', 'visit__patient__phone', 'visit__patient__registration_number']
-    filterset_fields = ['visit', 'status']
+    filterset_fields = ['visit', 'status', 'visit__patient']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        visit_patient = self.request.query_params.get('visit__patient')
+        if visit_patient:
+            qs = qs.filter(visit__patient_id=visit_patient)
+        return qs
 
     def list(self, request, *args, **kwargs):
         response = super().list(request, *args, **kwargs)

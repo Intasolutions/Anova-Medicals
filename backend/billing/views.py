@@ -43,6 +43,11 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                     queryset = queryset.filter(created_at__month=month, created_at__year=year)
                 except ValueError:
                     pass
+                    
+        # Explicitly handle visit__patient since nested filterset_fields might fail silently without a custom FilterSet
+        visit_patient = self.request.query_params.get('visit__patient')
+        if visit_patient:
+            queryset = queryset.filter(visit__patient_id=visit_patient)
                 
         return queryset
 

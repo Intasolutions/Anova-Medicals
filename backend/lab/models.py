@@ -169,6 +169,7 @@ class LabTest(BaseModel):
     price = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     gender = models.CharField(max_length=1, choices=[('M', 'Male'), ('F', 'Female'), ('B', 'Both')], default='B')
     normal_range = models.TextField(blank=True, null=True)
+    description = models.TextField(blank=True, null=True, help_text="Common description/interpretation for the whole test")
 
     def __str__(self):
         return f"{self.name} ({self.category})"
@@ -180,6 +181,7 @@ class LabTestParameter(BaseModel):
     is_heading = models.BooleanField(default=False, help_text="If True, this acts as a subheading (unit/range ignored)")
     unit = models.CharField(max_length=50, blank=True, null=True)
     normal_range = models.TextField(blank=True, null=True)
+    description = models.TextField(blank=True, null=True, help_text="Description box under this parameter")
 
     def __str__(self):
         return f"{self.name} ({self.test.name})"

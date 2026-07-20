@@ -840,7 +840,7 @@ const Doctor = () => {
                             </div>
 
                             {/* Workspace */}
-                            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+                            <div className="flex-1 overflow-y-auto p-8 pb-64 custom-scrollbar">
                                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                                     <div className="lg:col-span-2 space-y-8">
                                         {/* Vitals */}

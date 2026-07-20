@@ -27,7 +27,7 @@ class LabCategorySerializer(serializers.ModelSerializer):
 class LabTestParameterSerializer(serializers.ModelSerializer):
     class Meta:
         model = LabTestParameter
-        fields = ['id', 'name', 'is_heading', 'unit', 'normal_range']
+        fields = ['id', 'name', 'is_heading', 'unit', 'normal_range', 'description']
 
 
 class LabTestRequiredItemSerializer(serializers.ModelSerializer):
@@ -44,7 +44,7 @@ class LabTestSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = LabTest
-        fields = ['id', 'name', 'sub_name', 'category', 'price', 'gender', 'normal_range', 'parameters', 'required_items']
+        fields = ['id', 'name', 'sub_name', 'category', 'price', 'gender', 'normal_range', 'description', 'parameters', 'required_items']
 
     def create(self, validated_data):
         parameters_data = validated_data.pop('parameters', [])
@@ -69,6 +69,7 @@ class LabTestSerializer(serializers.ModelSerializer):
         instance.category = validated_data.get('category', instance.category)
         instance.price = validated_data.get('price', instance.price)
         instance.normal_range = validated_data.get('normal_range', instance.normal_range)
+        instance.description = validated_data.get('description', instance.description)
         instance.save()
 
         if parameters_data is not None:
@@ -256,23 +257,36 @@ class LabChargeSerializer(serializers.ModelSerializer):
     patient_phone = serializers.CharField(source='visit.patient.phone', read_only=True)
     patient_address = serializers.CharField(source='visit.patient.address', read_only=True)
     doctor_name = serializers.SerializerMethodField()
+    payment_status = serializers.SerializerMethodField()
 
     class Meta:
         model = LabCharge
         fields = [
             'lc_id', 'visit', 'visit_id', 'patient_name', 'registration_number', 'patient_age', 'patient_sex',
-            'patient_phone', 'patient_address', 'doctor_name',
+            'patient_phone', 'patient_address', 'doctor_name', 'payment_status',
             'test_name', 'sub_name', 'amount', 'status', 'results', 'report_date', 'drawn_date', 'received_date', 'technician_name',
             'specimen', 'created_at', 'updated_at'
         ]
         read_only_fields = ['lc_id', 'created_at', 'updated_at']
 
     def get_doctor_name(self, obj):
-        if obj.visit.doctor:
+        if obj.visit and obj.visit.doctor:
             return obj.visit.doctor.username
-        if obj.visit.referred_by and obj.visit.referred_by.lower() != 'self':
+        if obj.visit and obj.visit.referred_by and obj.visit.referred_by.lower() != 'self':
             return obj.visit.referred_by
         return 'Self'
+
+    def get_payment_status(self, obj):
+        if not obj.visit:
+            return 'UNBILLED'
+        invoices = obj.visit.invoices.all()
+        if not invoices:
+            return 'UNBILLED'
+        
+        # If any invoice is not PAID, consider it PENDING
+        if any(inv.payment_status != 'PAID' for inv in invoices):
+            return 'PENDING'
+        return 'PAID'
 
     def update(self, instance, validated_data):
         instance = super().update(instance, validated_data)

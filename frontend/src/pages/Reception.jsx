@@ -1554,9 +1554,14 @@ const Reception = () => {
                                                                 </span>
                                                             </div>
                                                             {test.status === 'COMPLETED' && test.results && Object.keys(test.results).length > 0 && (
-                                                                <div className="bg-white p-3 rounded-xl border border-slate-200">
-                                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2">Test Results</p>
-                                                                    <div className="space-y-1">
+                                                                <details className="bg-white rounded-xl border border-slate-200 group">
+                                                                    <summary className="p-3 text-[10px] font-black text-slate-400 uppercase tracking-wider cursor-pointer hover:bg-slate-50 rounded-xl list-none flex items-center justify-between transition-colors">
+                                                                        Test Results
+                                                                        <svg className="w-4 h-4 text-slate-400 group-open:rotate-180 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                                        </svg>
+                                                                    </summary>
+                                                                    <div className="p-3 pt-0 space-y-1 border-t border-slate-50 mt-1">
                                                                         {Object.entries(test.results).map(([param, val], idx) => (
                                                                             <div key={idx} className="flex justify-between items-center text-xs border-b border-slate-50 last:border-0 pb-1 last:pb-0">
                                                                                 <span className="font-bold text-slate-700">{typeof val === 'object' && val?.name ? val.name : param}</span>
@@ -1571,7 +1576,7 @@ const Reception = () => {
                                                                             </div>
                                                                         ))}
                                                                     </div>
-                                                                </div>
+                                                                </details>
                                                             )}
                                                         </div>
                                                     ))

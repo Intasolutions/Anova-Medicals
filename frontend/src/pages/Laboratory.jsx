@@ -130,6 +130,7 @@ const Laboratory = () => {
                 doctor_name: first.doctor_name,
                 patient_phone: first.patient_phone,
                 patient_address: first.patient_address,
+                payment_status: first.payment_status,
                 created_at: first.created_at,
                 status,
                 items
@@ -410,7 +411,7 @@ const Laboratory = () => {
             }
             setShowTestModal(false);
             setEditingTestId(null);
-            setTestCatalogForm({ name: '', sub_name: '', category: 'HAEMATOLOGY', price: '', gender: 'B', normal_range: '', parameters: [], required_items: [] });
+            setTestCatalogForm({ name: '', sub_name: '', category: 'HAEMATOLOGY', price: '', gender: 'B', normal_range: '', description: '', parameters: [], required_items: [] });
             fetchLabTests();
         } catch (err) { showToast('error', 'Failed to save test'); }
     };
@@ -423,6 +424,7 @@ const Laboratory = () => {
             price: test.price,
             gender: test.gender || 'B',
             normal_range: test.normal_range || '',
+            description: test.description || '',
             parameters: test.parameters || [],
             required_items: test.required_items || []
         });
@@ -551,6 +553,13 @@ const Laboratory = () => {
             setShowHistoryModal(true);
             setSelectedPatientName(group.patient_name || 'Anonymous');
             
+            if (!group.visitId) {
+                showToast('error', 'Patient visit information is missing.');
+                setPatientHistory([]);
+                setHistoryLoading(false);
+                return;
+            }
+            
             // Fetch visit to get patient ID
             const visitRes = await api.get(`/reception/visits/${group.visitId}/`);
             const patientId = visitRes.data?.patient?.id || visitRes.data?.patient;
@@ -636,6 +645,7 @@ const Laboratory = () => {
             value: '',
             unit: p.unit || '',
             normal: p.normal_range || '',
+            note: p.description || '',
             is_heading: p.is_heading || false
         })) || [];
 
@@ -666,7 +676,7 @@ const Laboratory = () => {
             technician_name: charge.technician_name || '',
             specimen: charge.specimen || 'BLOOD',
             consumed_items: defaultConsumption,
-            notes: charge.notes || ''
+            notes: charge.notes || catalogTest?.description || ''
         });
         setShowResultModal(true);
     };
@@ -865,7 +875,7 @@ const Laboratory = () => {
                                 </button>
                             </div>
                         ) : activeTab === 'test_catalog' ? (
-                            <button onClick={() => { setEditingTestId(null); setTestCatalogForm({ name: '', sub_name: '', category: 'HAEMATOLOGY', price: '', normal_range: '', parameters: [] }); setShowTestModal(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all active:scale-95">
+                            <button onClick={() => { setEditingTestId(null); setTestCatalogForm({ name: '', sub_name: '', category: 'HAEMATOLOGY', price: '', gender: 'B', normal_range: '', description: '', parameters: [], required_items: [] }); setShowTestModal(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all active:scale-95">
                                 <Plus size={18} /> Add Test
                             </button>
                         ) : activeTab === 'suppliers' ? (
@@ -973,7 +983,16 @@ const Laboratory = () => {
                                                         </div>
                                                         <div>
                                                             <p className="font-bold text-slate-900">{group.patient_name || 'Anonymous'}</p>
-                                                            <p className="text-[10px] font-mono text-slate-400">Reg No: {group.registration_number || 'N/A'}</p>
+                                                            <div className="flex items-center gap-2 mb-1">
+                                                                <p className="text-[10px] font-mono text-slate-400">Reg No: {group.registration_number || 'N/A'}</p>
+                                                                <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                                                                    group.payment_status === 'PAID' ? 'bg-emerald-100 text-emerald-700' :
+                                                                    group.payment_status === 'UNBILLED' ? 'bg-slate-100 text-slate-500' :
+                                                                    'bg-rose-100 text-rose-700 animate-pulse'
+                                                                }`}>
+                                                                    {group.payment_status === 'PAID' ? 'PAID' : group.payment_status === 'UNBILLED' ? 'UNBILLED' : 'BILL PENDING'}
+                                                                </span>
+                                                            </div>
                                                             {group.patient_phone && <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1"><Phone size={10} /> {group.patient_phone}</p>}
                                                             {group.patient_address && <p className="text-[10px] text-slate-500 flex items-center gap-1"><MapPin size={10} /> <span className="line-clamp-1" title={group.patient_address}>{group.patient_address}</span></p>}
                                                             <button 
@@ -1385,13 +1404,17 @@ const Laboratory = () => {
                                         <Input type="number" value={testCatalogForm.price} onChange={e => setTestCatalogForm({ ...testCatalogForm, price: e.target.value })} required className="bg-slate-50 border-2 border-slate-100 rounded-xl font-bold" />
                                     </div>
 
-                                    {/* Parameters Section */}
-                                    <div className="space-y-3 pt-2 border-t border-slate-100">
+                                    <div className="space-y-2">
+                                        <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Test Description</label>
+                                        <textarea value={testCatalogForm.description || ''} onChange={e => setTestCatalogForm({ ...testCatalogForm, description: e.target.value })} className="bg-slate-50 border-2 border-slate-100 rounded-xl font-bold p-3 w-full min-h-[80px]" placeholder="Common description or interpretation for the whole test" />
+                                    </div>
+
+                                    <div className="space-y-3 pt-4 border-t border-slate-100">
                                         <div className="flex justify-between items-center mb-1">
                                             <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Test Parameters</label>
                                             <button
                                                 type="button"
-                                                onClick={() => setTestCatalogForm(prev => ({ ...prev, parameters: [...prev.parameters, { name: '', unit: '', normal_range: '' }] }))}
+                                                onClick={() => setTestCatalogForm(prev => ({ ...prev, parameters: [...prev.parameters, { name: '', unit: '', normal_range: '', description: '', is_heading: false }] }))}
                                                 className="text-xs font-bold text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
                                             >
                                                 + Add Parameter
@@ -1402,8 +1425,7 @@ const Laboratory = () => {
                                             <div className="flex gap-2 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest items-center">
                                                 <span className="flex-1">Parameter Name</span>
                                                 <span className="w-[60px] text-center">Heading?</span>
-                                                <span className="w-16">Unit</span>
-                                                <span className="flex-1">Normal Range</span>
+                                                <span className="flex-1">Details</span>
                                                 <span className="w-[30px]"></span>
                                             </div>
                                         )}
@@ -1443,33 +1465,42 @@ const Laboratory = () => {
                                                         />
                                                     </div>
                                                     {!param.is_heading ? (
-                                                        <>
-                                                            <input
-                                                                placeholder="mg/dL"
-                                                                value={param.unit || ''}
-                                                                onChange={e => {
-                                                                    const newParams = [...testCatalogForm.parameters];
-                                                                    newParams[idx].unit = e.target.value;
-                                                                    setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
-                                                                }}
-                                                                className="w-16 px-2 py-1.5 bg-slate-50 border-2 border-slate-100 rounded-lg outline-none focus:border-blue-500 transition-all text-xs font-bold text-slate-700 h-9"
-                                                            />
+                                                        <div className="flex gap-2 flex-1 flex-col">
+                                                            <div className="flex gap-2 w-full">
+                                                                <input
+                                                                    placeholder="Unit (e.g. mg/dL)"
+                                                                    value={param.unit || ''}
+                                                                    onChange={e => {
+                                                                        const newParams = [...testCatalogForm.parameters];
+                                                                        newParams[idx].unit = e.target.value;
+                                                                        setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
+                                                                    }}
+                                                                    className="w-16 px-2 py-1.5 bg-slate-50 border-2 border-slate-100 rounded-lg outline-none focus:border-blue-500 transition-all text-xs font-bold text-slate-700 h-9"
+                                                                />
+                                                                <textarea
+                                                                    placeholder="Normal Range (e.g. 12-16)"
+                                                                    value={param.normal_range || ''}
+                                                                    onChange={e => {
+                                                                        const newParams = [...testCatalogForm.parameters];
+                                                                        newParams[idx].normal_range = e.target.value;
+                                                                        setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
+                                                                    }}
+                                                                    className="flex-1 bg-slate-50 border-2 border-slate-100 rounded min-h-[36px] px-2 py-1 text-xs outline-none focus:border-blue-500 transition-all font-bold text-slate-700"
+                                                                />
+                                                            </div>
                                                             <textarea
-                                                                placeholder="e.g. 12-16"
-                                                                value={param.normal_range || ''}
+                                                                placeholder="Parameter Description / Interpretation Notes"
+                                                                value={param.description || ''}
                                                                 onChange={e => {
                                                                     const newParams = [...testCatalogForm.parameters];
-                                                                    newParams[idx].normal_range = e.target.value;
+                                                                    newParams[idx].description = e.target.value;
                                                                     setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
                                                                 }}
-                                                                className="flex-1 bg-slate-50 border-2 border-slate-100 rounded min-h-[36px] px-2 py-1 text-xs outline-none focus:border-blue-500 transition-all font-bold text-slate-700"
+                                                                className="w-full bg-slate-50 border-2 border-slate-100 rounded min-h-[36px] px-2 py-1 text-xs outline-none focus:border-blue-500 transition-all font-bold text-slate-500"
                                                             />
-                                                        </>
+                                                        </div>
                                                     ) : (
-                                                        <>
-                                                            <div className="w-16"></div>
-                                                            <div className="flex-1"></div>
-                                                        </>
+                                                        <div className="flex-1 text-xs text-slate-400 italic flex items-center px-2">Subheading only - no range/unit required</div>
                                                     )}
                                                     <button
                                                         type="button"
@@ -1477,9 +1508,9 @@ const Laboratory = () => {
                                                             const newParams = testCatalogForm.parameters.filter((_, i) => i !== idx);
                                                             setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
                                                         }}
-                                                        className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                                                        className="w-8 h-9 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all flex-shrink-0"
                                                     >
-                                                        <X size={14} />
+                                                        <Trash2 size={16} />
                                                     </button>
                                                 </div>
                                             ))}
@@ -2310,7 +2341,7 @@ const Laboratory = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {(printCharge.tests || []).map((test, idx) => (
+                                            {(printCharge.tests || []).filter(t => t.status !== 'CANCELLED').map((test, idx) => (
                                                 <tr key={idx}>
                                                     <td className="px-2 py-2 font-bold text-slate-800 text-xs">
                                                         {test.test_name}
@@ -2322,56 +2353,72 @@ const Laboratory = () => {
                                             <tr className="bg-slate-50">
                                                 <td className="px-2 py-2 text-xs font-black text-slate-900 uppercase tracking-widest text-right">Total Amount</td>
                                                 <td className="px-2 py-2 font-mono font-black text-emerald-600 text-sm text-right">
-                                                    ₹{printCharge.tests.reduce((acc, t) => acc + parseFloat(t.amount || 0), 0).toFixed(2)}
+                                                    ₹{(printCharge.tests || []).filter(t => t.status !== 'CANCELLED').reduce((acc, t) => acc + parseFloat(t.amount || 0), 0).toFixed(2)}
                                                 </td>
                                             </tr>
                                         </tbody>
                                     </table>
                                 ) : (
-                                    (printCharge.tests || [printCharge]).filter(t => t.status !== 'CANCELLED').map((testItem, testIdx) => (
-                                        <div key={testIdx} className="break-inside-avoid">
-                                            <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest border-b border-slate-200 pb-2 mb-3 mt-4 text-center">
-                                                {testItem.test_name}
-                                                {testItem.sub_name && <span className="block text-[10px] font-bold text-slate-500 mt-0.5">{testItem.sub_name}</span>}
-                                            </h3>
-                                            <table className="w-full text-left">
-                                                <thead>
-                                                    <tr className="border-b border-slate-200">
-                                                        <th className="px-2 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4">Parameter Name</th>
-                                                        <th className="px-2 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4">Result Value</th>
-                                                        <th className="px-2 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4">Unit</th>
-                                                        <th className="px-2 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4 text-right">Normal Range</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-100">
-                                                    {(Array.isArray(testItem.results)
-                                                        ? testItem.results
-                                                        : Object.entries(testItem.results || {}).map(([key, val]) => ({ name: key, ...val }))
-                                                    ).map((val, idx) => (
-                                                        val.is_heading ? (
-                                                            <tr key={idx}>
-                                                                <td colSpan="4" className="px-2 py-3 font-black text-slate-900 text-sm uppercase tracking-wider bg-slate-50/50 border-y border-slate-100 text-center">{val.name}</td>
-                                                            </tr>
-                                                        ) : (
-                                                            <tr key={idx}>
-                                                                <td className="px-2 py-1.5 font-bold text-slate-700 text-xs">
-                                                                    {val.name}
-                                                                    {val.note && <span className="block font-medium text-slate-500 text-[10px] mt-0.5 whitespace-pre-wrap">{val.note}</span>}
-                                                                </td>
-                                                                <td className="px-2 py-1.5 font-black text-slate-900 text-xs">{val.value}</td>
-                                                                <td className="px-2 py-1.5 font-bold text-slate-900 text-xs">{val.unit}</td>
-                                                                <td className="px-2 py-1.5 font-bold text-slate-900 text-xs text-right whitespace-pre-wrap">{val.normal}</td>
-                                                            </tr>
-                                                        )
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                            {testItem.notes && (
-                                                <div className="mt-4 border-t border-slate-200 pt-3">
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Test Remarks / Notes</p>
-                                                    <p className="text-xs font-bold text-slate-700 whitespace-pre-wrap">{testItem.notes}</p>
-                                                </div>
+                                    Object.entries(
+                                        (printCharge.tests || [printCharge]).filter(t => t.status !== 'CANCELLED').reduce((acc, testItem) => {
+                                            const cat = labTests.find(t => t.name === testItem.test_name)?.category || 'UNCATEGORIZED';
+                                            if (!acc[cat]) acc[cat] = [];
+                                            acc[cat].push(testItem);
+                                            return acc;
+                                        }, {})
+                                    ).map(([category, testsInCategory]) => (
+                                        <div key={category} className="mb-6">
+                                            {category !== 'UNCATEGORIZED' && (
+                                                <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest text-center border-y-2 border-slate-900 py-2 mb-4 bg-slate-50">
+                                                    {category}
+                                                </h2>
                                             )}
+                                            {testsInCategory.map((testItem, testIdx) => (
+                                                <div key={testIdx} className="break-inside-avoid">
+                                                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest border-b border-slate-200 pb-2 mb-3 mt-4 text-left">
+                                                        {testItem.test_name}
+                                                        {testItem.sub_name && <span className="block text-[10px] font-bold text-slate-500 mt-0.5">{testItem.sub_name}</span>}
+                                                    </h3>
+                                                    <table className="w-full text-left">
+                                                        <thead>
+                                                            <tr className="border-b border-slate-200">
+                                                                <th className="px-2 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4">Parameter Name</th>
+                                                                <th className="px-2 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4">Result Value</th>
+                                                                <th className="px-2 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4">Unit</th>
+                                                                <th className="px-2 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4 text-right">Normal Range</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-slate-100">
+                                                            {(Array.isArray(testItem.results)
+                                                                ? testItem.results
+                                                                : Object.entries(testItem.results || {}).map(([key, val]) => ({ name: key, ...val }))
+                                                            ).map((val, idx) => (
+                                                                val.is_heading ? (
+                                                                    <tr key={idx}>
+                                                                        <td colSpan="4" className="px-2 py-3 font-black text-slate-900 text-sm uppercase tracking-wider bg-slate-50/50 border-y border-slate-100 text-center">{val.name}</td>
+                                                                    </tr>
+                                                                ) : (
+                                                                    <tr key={idx}>
+                                                                        <td className="px-2 py-1.5 font-bold text-slate-700 text-xs">
+                                                                            {val.name}
+                                                                            {val.note && <span className="block font-medium text-slate-500 text-[10px] mt-0.5 whitespace-pre-wrap">{val.note}</span>}
+                                                                        </td>
+                                                                        <td className="px-2 py-1.5 font-black text-slate-900 text-xs">{val.value}</td>
+                                                                        <td className="px-2 py-1.5 font-bold text-slate-900 text-xs">{val.unit}</td>
+                                                                        <td className="px-2 py-1.5 font-bold text-slate-900 text-xs text-right whitespace-pre-wrap">{val.normal}</td>
+                                                                    </tr>
+                                                                )
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                    {testItem.notes && (
+                                                        <div className="mt-4 border-t border-slate-200 pt-3">
+                                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Test Remarks / Notes</p>
+                                                            <p className="text-xs font-bold text-slate-700 whitespace-pre-wrap">{testItem.notes}</p>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
                                         </div>
                                     ))
                                 )}
@@ -2772,38 +2819,46 @@ const Laboratory = () => {
                                                 </div>
                                                 
                                                 {test.results && Object.keys(test.results).length > 0 ? (
-                                                    <div className="bg-slate-50 rounded-lg p-3">
-                                                        <table className="w-full text-xs text-left">
-                                                            <thead>
-                                                                <tr className="text-slate-400 uppercase tracking-wider">
-                                                                    <th className="pb-2">Parameter</th>
-                                                                    <th className="pb-2 text-right">Result</th>
-                                                                    <th className="pb-2 pl-2">Unit</th>
-                                                                    <th className="pb-2 text-right">Reference</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody className="divide-y divide-slate-100 font-medium">
-                                                                {Array.isArray(test.results) 
-                                                                    ? test.results.filter(r => !r.is_heading).map((r, i) => (
-                                                                        <tr key={i}>
-                                                                            <td className="py-2 text-slate-700">{r.name}</td>
-                                                                            <td className="py-2 text-right font-bold text-blue-700">{r.value || '--'}</td>
-                                                                            <td className="py-2 pl-2 text-slate-500">{r.unit || ''}</td>
-                                                                            <td className="py-2 text-right text-slate-400 text-[10px]">{r.normal_range || ''}</td>
-                                                                        </tr>
-                                                                    ))
-                                                                    : Object.entries(test.results).map(([key, val], i) => (
-                                                                        <tr key={i}>
-                                                                            <td className="py-2 text-slate-700">{key}</td>
-                                                                            <td className="py-2 text-right font-bold text-blue-700">{val.value || val || '--'}</td>
-                                                                            <td className="py-2 pl-2 text-slate-500">{val.unit || ''}</td>
-                                                                            <td className="py-2 text-right text-slate-400 text-[10px]">{val.normal || val.normal_range || ''}</td>
-                                                                        </tr>
-                                                                    ))
-                                                                }
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
+                                                    <details className="bg-slate-50 rounded-lg group">
+                                                        <summary className="p-3 text-[10px] font-black text-slate-400 uppercase tracking-wider cursor-pointer hover:bg-slate-100 rounded-lg list-none flex items-center justify-between transition-colors">
+                                                            View Test Results
+                                                            <svg className="w-4 h-4 text-slate-400 group-open:rotate-180 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                            </svg>
+                                                        </summary>
+                                                        <div className="p-3 pt-0">
+                                                            <table className="w-full text-xs text-left">
+                                                                <thead>
+                                                                    <tr className="text-slate-400 uppercase tracking-wider">
+                                                                        <th className="pb-2">Parameter</th>
+                                                                        <th className="pb-2 text-right">Result</th>
+                                                                        <th className="pb-2 pl-2">Unit</th>
+                                                                        <th className="pb-2 text-right">Reference</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-slate-100 font-medium">
+                                                                    {Array.isArray(test.results) 
+                                                                        ? test.results.filter(r => !r.is_heading).map((r, i) => (
+                                                                            <tr key={i}>
+                                                                                <td className="py-2 text-slate-700">{r.name}</td>
+                                                                                <td className="py-2 text-right font-bold text-blue-700">{r.value || '--'}</td>
+                                                                                <td className="py-2 pl-2 text-slate-500">{r.unit || ''}</td>
+                                                                                <td className="py-2 text-right text-slate-400 text-[10px]">{r.normal_range || ''}</td>
+                                                                            </tr>
+                                                                        ))
+                                                                        : Object.entries(test.results).map(([key, val], i) => (
+                                                                            <tr key={i}>
+                                                                                <td className="py-2 text-slate-700">{key}</td>
+                                                                                <td className="py-2 text-right font-bold text-blue-700">{val.value || val || '--'}</td>
+                                                                                <td className="py-2 pl-2 text-slate-500">{val.unit || ''}</td>
+                                                                                <td className="py-2 text-right text-slate-400 text-[10px]">{val.normal || val.normal_range || ''}</td>
+                                                                            </tr>
+                                                                        ))
+                                                                    }
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    </details>
                                                 ) : (
                                                     <p className="text-xs italic text-slate-400 bg-slate-50 p-3 rounded-lg text-center">No results available</p>
                                                 )}
