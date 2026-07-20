@@ -1373,14 +1373,14 @@ const Billing = () => {
                                 <div className="flex gap-3">
                                     <button onClick={() => setShowModal(false)} className="px-6 py-3 rounded-xl font-bold text-slate-600 hover:bg-white border border-transparent hover:border-slate-200 transition-all">Cancel</button>
                                     {(!formData.id || formData.payment_status === 'DRAFT') && (
-                                        <>
-                                            <button onClick={() => handleCreateInvoice('DRAFT')} disabled={isSubmitting} className="px-6 py-3 rounded-xl font-bold text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-all">
-                                                Save as Draft
-                                            </button>
-                                            <button onClick={() => handleCreateInvoice('PENDING')} disabled={isSubmitting} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold shadow-xl shadow-slate-900/20 hover:bg-blue-600 transition-all flex items-center gap-2 disabled:bg-slate-400 disabled:cursor-not-allowed">
-                                                <CheckCircle2 size={18} /> {isSubmitting ? 'Saving...' : 'Generate Invoice'}
-                                            </button>
-                                        </>
+                                        <button onClick={() => handleCreateInvoice('DRAFT')} disabled={isSubmitting} className="px-6 py-3 rounded-xl font-bold text-blue-600 hover:bg-blue-50 border border-transparent hover:border-blue-200 transition-all">
+                                            Save as Draft
+                                        </button>
+                                    )}
+                                    {(!formData.id || formData.payment_status === 'DRAFT' || formData.payment_status === 'PENDING') && (
+                                        <button onClick={() => handleCreateInvoice('PENDING')} disabled={isSubmitting} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold shadow-xl shadow-slate-900/20 hover:bg-blue-600 transition-all flex items-center gap-2 disabled:bg-slate-400 disabled:cursor-not-allowed">
+                                            <CheckCircle2 size={18} /> {isSubmitting ? 'Saving...' : (formData.id && formData.payment_status === 'PENDING' ? 'Update & Pay' : 'Generate Invoice')}
+                                        </button>
                                     )}
                                 </div>
                             </div>
