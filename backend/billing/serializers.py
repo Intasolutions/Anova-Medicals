@@ -52,17 +52,47 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
-        invoice = Invoice.objects.create(**validated_data)
-        for item_data in items_data:
-            InvoiceItem.objects.create(invoice=invoice, **item_data)
+        visit = validated_data.get('visit')
+        
+        invoice = None
+        if visit:
+            invoice = Invoice.objects.filter(visit=visit).order_by('created_at').first()
             
-        if invoice.payment_status == 'PAID' and invoice.total_amount > 0:
-            PaymentTransaction.objects.create(
-                invoice=invoice,
-                amount=invoice.total_amount,
-                mode=getattr(invoice, 'payment_mode', 'CASH') or 'CASH',
-                remarks='Auto-generated from direct paid invoice'
-            )
+        if invoice:
+            # Append items to existing master invoice
+            for item_data in items_data:
+                InvoiceItem.objects.create(invoice=invoice, **item_data)
+                
+            # Recalculate total amount
+            invoice.total_amount = sum(item.amount for item in invoice.items.all())
+            
+            # Adjust payment status based on new total
+            paid_amount = sum(p.amount for p in invoice.payments.all())
+            discount = invoice.discount_amount or 0
+            
+            if invoice.total_amount == 0:
+                invoice.payment_status = 'PENDING'
+            elif paid_amount + discount >= invoice.total_amount:
+                invoice.payment_status = 'PAID'
+            elif paid_amount > 0:
+                invoice.payment_status = 'PARTIAL'
+            else:
+                invoice.payment_status = 'PENDING'
+                
+            invoice.save()
+        else:
+            # Create new invoice
+            invoice = Invoice.objects.create(**validated_data)
+            for item_data in items_data:
+                InvoiceItem.objects.create(invoice=invoice, **item_data)
+                
+            if invoice.payment_status == 'PAID' and invoice.total_amount > 0:
+                PaymentTransaction.objects.create(
+                    invoice=invoice,
+                    amount=invoice.total_amount,
+                    mode=getattr(invoice, 'payment_mode', 'CASH') or 'CASH',
+                    remarks='Auto-generated from direct paid invoice'
+                )
         
         # Emit Socket Event
         try:

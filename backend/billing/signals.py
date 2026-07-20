@@ -26,9 +26,8 @@ def create_or_update_consultation_invoice(sender, instance, created, **kwargs):
             unit_price=amount
         )
     else:
-        # Update existing PENDING invoice if doctor/fee changed
-        # We look for an existing PENDING invoice for this visit
-        invoice = Invoice.objects.filter(visit=instance, payment_status='PENDING').first()
+        # Update existing master invoice if doctor/fee changed
+        invoice = Invoice.objects.filter(visit=instance).order_by('created_at').first()
         if invoice:
             # Find the consultation item
             cons_item = InvoiceItem.objects.filter(invoice=invoice, dept='CONSULTATION').first()
@@ -38,8 +37,30 @@ def create_or_update_consultation_invoice(sender, instance, created, **kwargs):
                     cons_item.amount = amount
                     cons_item.unit_price = amount
                     cons_item.save()
-                    
-                    # Update Invoice Total
-                    # Re-sum all items to ensure accuracy
-                    invoice.total_amount = sum(item.amount for item in invoice.items.all())
-                    invoice.save()
+            else:
+                # Add consultation item if missing
+                InvoiceItem.objects.create(
+                    invoice=invoice,
+                    dept='CONSULTATION',
+                    description='General Consultation Fee',
+                    amount=amount,
+                    unit_price=amount
+                )
+                
+            # Update Invoice Total
+            invoice.total_amount = sum(item.amount for item in invoice.items.all())
+            
+            # Adjust payment status
+            paid_amount = sum(p.amount for p in invoice.payments.all())
+            discount = invoice.discount_amount or 0
+            
+            if invoice.total_amount == 0:
+                invoice.payment_status = 'PENDING'
+            elif paid_amount + discount >= invoice.total_amount:
+                invoice.payment_status = 'PAID'
+            elif paid_amount > 0:
+                invoice.payment_status = 'PARTIAL'
+            else:
+                invoice.payment_status = 'PENDING'
+                
+            invoice.save()

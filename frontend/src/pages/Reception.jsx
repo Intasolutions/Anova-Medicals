@@ -67,7 +67,7 @@ const Reception = () => {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [activeTab, setActiveTab] = useState('front-desk'); // 'front-desk' | 'billing'
-    const [frontDeskTab, setFrontDeskTab] = useState('all'); // 'all' | 'active'
+    const [frontDeskTab, setFrontDeskTab] = useState('active'); // 'all' | 'active'
     const [editingPatientId, setEditingPatientId] = useState(null);
 
     // Modals

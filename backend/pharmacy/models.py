@@ -193,6 +193,7 @@ class PharmacyStock(BaseModel):
         ('POWDER', 'Powder'),
         ('SPRAY', 'Spray'),
         ('OTHER', 'Other'),
+        ('MEDICINE', 'Medicine'),
     )
     medicine_type = models.CharField(max_length=20, choices=MEDICINE_TYPE_CHOICES, default='TABLET')
     

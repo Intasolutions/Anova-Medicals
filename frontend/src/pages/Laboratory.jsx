@@ -2117,47 +2117,77 @@ const Laboratory = () => {
                                 ) : (
                                     // *** REPORT VIEW (Original) ***
                                     <div className="mb-12 space-y-12">
-                                        {(printCharge.tests || [printCharge]).map((testItem, testIdx) => (
-                                            <div key={testIdx} className={testIdx > 0 ? "pt-8 border-t-2 border-slate-100" : ""}>
-                                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest border-b border-slate-200 pb-2 mb-4">
-                                                    {testItem.test_name}
-                                                    {testItem.sub_name && <span className="block text-xs font-bold text-slate-500 mt-1">{testItem.sub_name}</span>}
-                                                </h3>
-                                                <table className="w-full text-left">
-                                                    <thead>
-                                                        <tr className="border-b border-slate-200">
-                                                            <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4">Parameter Name</th>
-                                                            <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4">Result Value</th>
-                                                            <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4">Unit</th>
-                                                            <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4 text-right">Normal Range</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody className="divide-y divide-slate-100">
-                                                        {(Array.isArray(testItem.results)
-                                                            ? testItem.results
-                                                            : Object.entries(testItem.results || {}).map(([key, val]) => ({ name: key, ...val }))
-                                                        ).map((val, idx) => (
-                                                            val.is_heading ? (
-                                                                <tr key={idx}>
-                                                                    <td colSpan="4" className="py-4 font-black text-slate-900 text-sm uppercase tracking-wider bg-slate-50 border-y border-slate-100 text-center">{val.name}</td>
+                                        {Object.entries(
+                                            (printCharge.tests || [printCharge]).filter(t => t.status !== 'CANCELLED').reduce((acc, testItem) => {
+                                                const cat = labTests.find(t => t.name === testItem.test_name)?.category || 'UNCATEGORIZED';
+                                                if (!acc[cat]) acc[cat] = [];
+                                                acc[cat].push(testItem);
+                                                return acc;
+                                            }, {})
+                                        ).map(([category, testsInCategory]) => (
+                                            <div key={category} className="mb-6">
+                                                {category !== 'UNCATEGORIZED' && (
+                                                    <h2 className="text-lg font-black text-slate-900 uppercase tracking-widest text-center border-y border-slate-200 py-3 mb-6 bg-slate-50">
+                                                        {category}
+                                                    </h2>
+                                                )}
+                                                {testsInCategory.map((testItem, testIdx) => {
+                                                    const catalogTest = labTests.find(t => t.name === testItem.test_name);
+                                                    return (
+                                                    <div key={testIdx} className={testIdx > 0 ? "pt-8 border-t border-slate-100" : ""}>
+                                                        <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest border-b border-slate-200 pb-2 mb-4 text-left">
+                                                            {testItem.test_name}
+                                                            {testItem.sub_name && <span className="block text-xs font-bold text-slate-500 mt-1">{testItem.sub_name}</span>}
+                                                        </h3>
+                                                        {catalogTest?.description && (
+                                                            <div className="mb-4 text-xs font-medium text-slate-600 bg-slate-50 p-3 rounded-lg">
+                                                                {catalogTest.description}
+                                                            </div>
+                                                        )}
+                                                        <table className="w-full text-left">
+                                                            <thead>
+                                                                <tr className="border-b border-slate-200">
+                                                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4">Parameter Name</th>
+                                                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4">Result Value</th>
+                                                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4">Unit</th>
+                                                                    <th className="p-4 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4 text-right">Normal Range</th>
                                                                 </tr>
-                                                            ) : (
-                                                                <tr key={idx}>
-                                                                    <td className="py-4 font-bold text-slate-700 text-sm">
-                                                                        {val.name}
-                                                                        {val.note && <span className="block font-medium text-slate-500 text-xs mt-1 whitespace-pre-wrap">{val.note}</span>}
-                                                                    </td>
-                                                                    <td className="py-4 font-black text-slate-900 text-sm">{val.value}</td>
-                                                                    <td className="py-4 font-bold text-slate-500 text-xs">{val.unit}</td>
-                                                                    <td className="py-4 font-bold text-slate-500 text-xs text-right whitespace-pre-wrap">{val.normal}</td>
-                                                                </tr>
-                                                            )
-                                                        ))}
-                                                    </tbody>
-                                                </table>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-slate-100">
+                                                                {(Array.isArray(testItem.results)
+                                                                    ? testItem.results
+                                                                    : Object.entries(testItem.results || {}).map(([key, val]) => ({ name: key, ...val }))
+                                                                ).map((val, idx) => {
+                                                                    const paramDesc = catalogTest?.parameters?.find(p => p.name === val.name)?.description;
+                                                                    return val.is_heading ? (
+                                                                        <tr key={idx}>
+                                                                            <td colSpan="4" className="py-4 font-black text-slate-900 text-sm uppercase tracking-wider bg-slate-50 border-y border-slate-100 text-center">{val.name}</td>
+                                                                        </tr>
+                                                                    ) : (
+                                                                        <tr key={idx}>
+                                                                            <td className="py-4 font-bold text-slate-700 text-sm">
+                                                                                {val.name}
+                                                                                {paramDesc && <span className="block font-medium text-slate-500 text-[10px] mt-1 whitespace-pre-wrap">{paramDesc}</span>}
+                                                                                {val.note && <span className="block font-medium text-slate-500 text-xs mt-1 whitespace-pre-wrap">{val.note}</span>}
+                                                                            </td>
+                                                                            <td className="py-4 font-black text-slate-900 text-sm">{val.value}</td>
+                                                                            <td className="py-4 font-bold text-slate-500 text-xs">{val.unit}</td>
+                                                                            <td className="py-4 font-bold text-slate-500 text-xs text-right whitespace-pre-wrap">{val.normal}</td>
+                                                                        </tr>
+                                                                    )
+                                                                })}
+                                                            </tbody>
+                                                        </table>
+                                                        {testItem.notes && (
+                                                            <div className="mt-6 border-t border-slate-200 pt-4">
+                                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Test Remarks / Notes</p>
+                                                                <p className="text-sm font-bold text-slate-700 whitespace-pre-wrap">{testItem.notes}</p>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )})}
                                             </div>
                                         ))}
-
                                     </div>
                                 )}
                                 <div className="flex justify-between items-end mt-20 pt-8 border-t border-slate-200">
@@ -2373,12 +2403,19 @@ const Laboratory = () => {
                                                     {category}
                                                 </h2>
                                             )}
-                                            {testsInCategory.map((testItem, testIdx) => (
+                                            {testsInCategory.map((testItem, testIdx) => {
+                                                const catalogTest = labTests.find(t => t.name === testItem.test_name);
+                                                return (
                                                 <div key={testIdx} className="break-inside-avoid">
                                                     <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest border-b border-slate-200 pb-2 mb-3 mt-4 text-left">
                                                         {testItem.test_name}
                                                         {testItem.sub_name && <span className="block text-[10px] font-bold text-slate-500 mt-0.5">{testItem.sub_name}</span>}
                                                     </h3>
+                                                    {catalogTest?.description && (
+                                                        <div className="mb-3 text-[10px] font-medium text-slate-600 bg-slate-50 p-2 rounded-lg">
+                                                            {catalogTest.description}
+                                                        </div>
+                                                    )}
                                                     <table className="w-full text-left">
                                                         <thead>
                                                             <tr className="border-b border-slate-200">
@@ -2392,8 +2429,9 @@ const Laboratory = () => {
                                                             {(Array.isArray(testItem.results)
                                                                 ? testItem.results
                                                                 : Object.entries(testItem.results || {}).map(([key, val]) => ({ name: key, ...val }))
-                                                            ).map((val, idx) => (
-                                                                val.is_heading ? (
+                                                            ).map((val, idx) => {
+                                                                const paramDesc = catalogTest?.parameters?.find(p => p.name === val.name)?.description;
+                                                                return val.is_heading ? (
                                                                     <tr key={idx}>
                                                                         <td colSpan="4" className="px-2 py-3 font-black text-slate-900 text-sm uppercase tracking-wider bg-slate-50/50 border-y border-slate-100 text-center">{val.name}</td>
                                                                     </tr>
@@ -2401,6 +2439,7 @@ const Laboratory = () => {
                                                                     <tr key={idx}>
                                                                         <td className="px-2 py-1.5 font-bold text-slate-700 text-xs">
                                                                             {val.name}
+                                                                            {paramDesc && <span className="block font-medium text-slate-500 text-[10px] mt-0.5 whitespace-pre-wrap">{paramDesc}</span>}
                                                                             {val.note && <span className="block font-medium text-slate-500 text-[10px] mt-0.5 whitespace-pre-wrap">{val.note}</span>}
                                                                         </td>
                                                                         <td className="px-2 py-1.5 font-black text-slate-900 text-xs">{val.value}</td>
@@ -2408,7 +2447,7 @@ const Laboratory = () => {
                                                                         <td className="px-2 py-1.5 font-bold text-slate-900 text-xs text-right whitespace-pre-wrap">{val.normal}</td>
                                                                     </tr>
                                                                 )
-                                                            ))}
+                                                            })}
                                                         </tbody>
                                                     </table>
                                                     {testItem.notes && (
@@ -2418,7 +2457,7 @@ const Laboratory = () => {
                                                         </div>
                                                     )}
                                                 </div>
-                                            ))}
+                                            )})}
                                         </div>
                                     ))
                                 )}

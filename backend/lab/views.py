@@ -293,16 +293,15 @@ class LabChargeViewSet(viewsets.ModelViewSet):
             # so it also triggers on CANCELLED if it's the last test.
             
             # --- BILLING LOGIC ---
-            # 1. Get/Create Invoice for this Visit
-            # We look for a pending invoice for this visit, or create one.
-            invoice, created = Invoice.objects.get_or_create(
-                visit=instance.visit,
-                payment_status='PENDING',
-                defaults={
-                    'patient_name': instance.visit.patient.full_name if instance.visit.patient else 'Unknown',
-                    'total_amount': 0
-                }
-            )
+            # 1. Get/Create Master Invoice for this Visit
+            invoice = Invoice.objects.filter(visit=instance.visit).order_by('created_at').first()
+            if not invoice:
+                invoice = Invoice.objects.create(
+                    visit=instance.visit,
+                    payment_status='PENDING',
+                    patient_name=instance.visit.patient.full_name if instance.visit.patient else 'Unknown',
+                    total_amount=0
+                )
 
             # 2. Add Invoice Item
             InvoiceItem.objects.create(
@@ -314,9 +313,21 @@ class LabChargeViewSet(viewsets.ModelViewSet):
                 amount=instance.amount
             )
 
-            # 3. Update Invoice Total
-            total = sum(item.amount for item in invoice.items.all())
-            invoice.total_amount = total
+            # 3. Update Invoice Total & Status
+            invoice.total_amount = sum(item.amount for item in invoice.items.all())
+            
+            paid_amount = sum(p.amount for p in invoice.payments.all())
+            discount = invoice.discount_amount or 0
+            
+            if invoice.total_amount == 0:
+                invoice.payment_status = 'PENDING'
+            elif paid_amount + discount >= invoice.total_amount:
+                invoice.payment_status = 'PAID'
+            elif paid_amount > 0:
+                invoice.payment_status = 'PARTIAL'
+            else:
+                invoice.payment_status = 'PENDING'
+                
             invoice.save()
             
         # Check if all tests for this visit are completed/cancelled

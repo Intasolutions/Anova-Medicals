@@ -176,7 +176,7 @@ const Pharmacy = () => {
         category: 'PHARMACY',
         cash_discount: 0, courier_charge: 0 // New Extra Expenses
     });
-    const medicineTypes = ['TABLET', 'SYRUP', 'DROP', 'INJECTION', 'GEL', 'CREAM', 'OINTMENT', 'POWDER', 'SPRAY', 'OTHER'];
+    const medicineTypes = ['TABLET', 'SYRUP', 'DROP', 'INJECTION', 'GEL', 'CREAM', 'OINTMENT', 'POWDER', 'SPRAY', 'OTHER', 'MEDICINE'];
     const [scannedBarcode, setScannedBarcode] = useState('');
     const [manualProductSearch, setManualProductSearch] = useState({ rowIdx: null, results: [] });
 
