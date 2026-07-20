@@ -128,6 +128,8 @@ const Laboratory = () => {
                 patient_age: first.patient_age,
                 patient_sex: first.patient_sex,
                 doctor_name: first.doctor_name,
+                patient_phone: first.patient_phone,
+                patient_address: first.patient_address,
                 created_at: first.created_at,
                 status,
                 items
@@ -170,6 +172,10 @@ const Laboratory = () => {
     const [visitQuery, setVisitQuery] = useState('');
     const [categoryForm, setCategoryForm] = useState({ name: '', description: '' });
     const [categories, setCategories] = useState([]);
+    const [showHistoryModal, setShowHistoryModal] = useState(false);
+    const [patientHistory, setPatientHistory] = useState([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
+    const [selectedPatientName, setSelectedPatientName] = useState('');
 
     // --- Manual Stock In State ---
     const [showManualStockModal, setShowManualStockModal] = useState(false);
@@ -536,6 +542,32 @@ const Laboratory = () => {
             fetchInventory();
         } catch (err) {
             showToast('error', err.response?.data?.error || 'Failed to save purchase');
+        }
+    };
+
+    const fetchPatientHistory = async (group) => {
+        try {
+            setHistoryLoading(true);
+            setShowHistoryModal(true);
+            setSelectedPatientName(group.patient_name || 'Anonymous');
+            
+            // Fetch visit to get patient ID
+            const visitRes = await api.get(`/reception/visits/${group.visitId}/`);
+            const patientId = visitRes.data?.patient?.id || visitRes.data?.patient;
+            
+            if (patientId) {
+                // Fetch lab history for this patient
+                const labRes = await api.get(`/lab/charges/?visit__patient=${patientId}&page_size=1000`);
+                setPatientHistory(labRes.data.results || labRes.data || []);
+            } else {
+                setPatientHistory([]);
+            }
+        } catch (err) {
+            console.error("Failed to fetch history:", err);
+            showToast('error', 'Could not fetch patient history');
+            setPatientHistory([]);
+        } finally {
+            setHistoryLoading(false);
         }
     };
 
@@ -942,6 +974,14 @@ const Laboratory = () => {
                                                         <div>
                                                             <p className="font-bold text-slate-900">{group.patient_name || 'Anonymous'}</p>
                                                             <p className="text-[10px] font-mono text-slate-400">Reg No: {group.registration_number || 'N/A'}</p>
+                                                            {group.patient_phone && <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1"><Phone size={10} /> {group.patient_phone}</p>}
+                                                            {group.patient_address && <p className="text-[10px] text-slate-500 flex items-center gap-1"><MapPin size={10} /> <span className="line-clamp-1" title={group.patient_address}>{group.patient_address}</span></p>}
+                                                            <button 
+                                                                onClick={() => fetchPatientHistory(group)}
+                                                                className="mt-2 text-[10px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-2 py-1 rounded-md transition-colors"
+                                                            >
+                                                                View History
+                                                            </button>
                                                         </div>
                                                     </div>
                                                 </td>
@@ -2695,6 +2735,92 @@ const Laboratory = () => {
                     </div>
                 )}
             </AnimatePresence >
+
+            {/* Patient History Modal */}
+            <AnimatePresence>
+                {showHistoryModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/40 backdrop-blur-sm">
+                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-4xl rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Lab History</h3>
+                                    <p className="text-sm font-bold text-slate-400 mt-1">{selectedPatientName}</p>
+                                </div>
+                                <button onClick={() => setShowHistoryModal(false)} className="p-2 rounded-full hover:bg-white shadow-sm"><X size={20} className="text-slate-400" /></button>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-6 bg-slate-50/30">
+                                {historyLoading ? (
+                                    <div className="flex justify-center py-10">
+                                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                    </div>
+                                ) : patientHistory.length > 0 ? (
+                                    <div className="space-y-4">
+                                        {patientHistory.map((test) => (
+                                            <div key={test.lc_id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <div>
+                                                        <h4 className="font-bold text-slate-800">{test.test_name}</h4>
+                                                        <p className="text-xs text-slate-500 mt-1 flex items-center gap-2">
+                                                            <Clock size={12} />
+                                                            {new Date(test.created_at).toLocaleDateString()} at {new Date(test.created_at).toLocaleTimeString()}
+                                                        </p>
+                                                    </div>
+                                                    <span className={`px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wide border ${test.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-slate-50 text-slate-600 border-slate-100'}`}>
+                                                        {test.status}
+                                                    </span>
+                                                </div>
+                                                
+                                                {test.results && Object.keys(test.results).length > 0 ? (
+                                                    <div className="bg-slate-50 rounded-lg p-3">
+                                                        <table className="w-full text-xs text-left">
+                                                            <thead>
+                                                                <tr className="text-slate-400 uppercase tracking-wider">
+                                                                    <th className="pb-2">Parameter</th>
+                                                                    <th className="pb-2 text-right">Result</th>
+                                                                    <th className="pb-2 pl-2">Unit</th>
+                                                                    <th className="pb-2 text-right">Reference</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody className="divide-y divide-slate-100 font-medium">
+                                                                {Array.isArray(test.results) 
+                                                                    ? test.results.filter(r => !r.is_heading).map((r, i) => (
+                                                                        <tr key={i}>
+                                                                            <td className="py-2 text-slate-700">{r.name}</td>
+                                                                            <td className="py-2 text-right font-bold text-blue-700">{r.value || '--'}</td>
+                                                                            <td className="py-2 pl-2 text-slate-500">{r.unit || ''}</td>
+                                                                            <td className="py-2 text-right text-slate-400 text-[10px]">{r.normal_range || ''}</td>
+                                                                        </tr>
+                                                                    ))
+                                                                    : Object.entries(test.results).map(([key, val], i) => (
+                                                                        <tr key={i}>
+                                                                            <td className="py-2 text-slate-700">{key}</td>
+                                                                            <td className="py-2 text-right font-bold text-blue-700">{val.value || val || '--'}</td>
+                                                                            <td className="py-2 pl-2 text-slate-500">{val.unit || ''}</td>
+                                                                            <td className="py-2 text-right text-slate-400 text-[10px]">{val.normal || val.normal_range || ''}</td>
+                                                                        </tr>
+                                                                    ))
+                                                                }
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-xs italic text-slate-400 bg-slate-50 p-3 rounded-lg text-center">No results available</p>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-10 bg-white rounded-xl border border-slate-200">
+                                        <Activity size={32} className="mx-auto text-slate-300 mb-3" />
+                                        <p className="text-slate-500 font-bold">No previous lab tests found.</p>
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div >
     );
 };
