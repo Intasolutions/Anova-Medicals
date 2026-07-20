@@ -219,7 +219,7 @@ const Users = () => {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Email</label>
-                                    <Input type="email" placeholder="staff@demohospital.com" value={addForm.email} onChange={e => setAddForm({ ...addForm, email: e.target.value })} className="rounded-2xl border-2 border-slate-100 bg-slate-50 focus:bg-white py-4 font-bold" />
+                                    <Input type="email" placeholder="staff@anovamedicalcenter.com" value={addForm.email} onChange={e => setAddForm({ ...addForm, email: e.target.value })} className="rounded-2xl border-2 border-slate-100 bg-slate-50 focus:bg-white py-4 font-bold" />
                                 </div>
 
                                 <div className="space-y-2">
