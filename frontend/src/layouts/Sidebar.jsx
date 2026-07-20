@@ -32,7 +32,7 @@ const Sidebar = () => {
             initial={false}
             animate={{ width: isHovered ? 280 : 80 }}
             transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="h-screen bg-white border-r border-slate-100 flex flex-col sticky top-0 z-50 overflow-hidden shadow-2xl shadow-slate-200/50"
+            className="h-screen bg-white border-r border-slate-100 flex flex-col sticky top-0 z-50 overflow-hidden shadow-2xl shadow-slate-200/50 print:hidden"
         >
             {/* --- Branding Section --- */}
             <div className="h-20 flex items-center px-6 gap-4 overflow-hidden border-b border-slate-50">

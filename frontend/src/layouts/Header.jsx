@@ -82,7 +82,7 @@ const Header = () => {
     const breadcrumbs = getBreadcrumbs();
 
     return (
-        <header className="h-16 bg-white/90 backdrop-blur-xl border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-40">
+        <header className="h-16 bg-white/90 backdrop-blur-xl border-b border-slate-200 px-6 flex items-center justify-between sticky top-0 z-40 print:hidden">
             {/* --- Left: Breadcrumbs & Smart Search --- */}
             <div className="flex items-center gap-6 flex-1">
                 <div className="flex items-center gap-2 text-sm font-bold">

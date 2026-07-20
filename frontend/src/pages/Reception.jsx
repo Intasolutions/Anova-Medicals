@@ -537,7 +537,7 @@ const Reception = () => {
 
 
     return (
-        <div className="bg-slate-50 h-full flex flex-col overflow-hidden relative">
+        <div className="bg-slate-50 h-full flex flex-col overflow-hidden relative print:h-auto print:overflow-visible print:bg-white">
 
             {/* --- Toast Notification --- */}
             <AnimatePresence>
@@ -547,7 +547,7 @@ const Reception = () => {
             </AnimatePresence>
 
             {/* --- Tab Navigation Header --- */}
-            <div className="bg-white border-b border-slate-200 px-8 py-0 flex items-center justify-between flex-shrink-0 h-16 z-30 shadow-sm sticky top-0">
+            <div className="bg-white border-b border-slate-200 px-8 py-0 flex items-center justify-between flex-shrink-0 h-16 z-30 shadow-sm sticky top-0 print:hidden">
                 <div className="flex items-center gap-8 h-full">
                     <button
                         onClick={() => setActiveTab('front-desk')}
@@ -593,7 +593,7 @@ const Reception = () => {
             </div>
 
             {/* --- Main Content Area --- */}
-            <div className="flex-1 overflow-hidden relative bg-slate-50/50">
+            <div className="flex-1 overflow-hidden relative bg-slate-50/50 print:overflow-visible print:bg-white">
 
                 {activeTab === 'services' ? (
                     /* --- SERVICES TAB --- */
@@ -602,7 +602,7 @@ const Reception = () => {
                     </div>
                 ) : activeTab === 'billing' ? (
                     /* --- BILLING TAB --- */
-                    <div className="h-full overflow-y-auto custom-scrollbar p-6">
+                    <div className="h-full overflow-y-auto custom-scrollbar p-6 print:p-0 print:overflow-visible">
                         <Billing />
                     </div>
                 ) : (
