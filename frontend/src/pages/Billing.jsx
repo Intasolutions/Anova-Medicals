@@ -1399,21 +1399,19 @@ const Billing = () => {
                 <div className="flex flex-col h-full justify-between min-h-screen">
                     <div>
                         {/* Header */}
-                        <div className="flex justify-between items-start mb-8 border-b-2 border-slate-900 pb-6">
-                            <div className="flex items-center gap-4">
-                                <img src="/logo.png" alt="Logo" className="w-16 h-16 object-contain" />
+                        <div className="flex justify-between items-start mb-8 border-b-2 border-slate-900 pb-4">
+                            <div className="flex items-center gap-3">
+                                <img src="/logo.png" alt="Logo" className="w-14 h-14 object-contain" />
                                 <div>
-                                    <h1 className="text-3xl font-black text-slate-900 tracking-widest uppercase">ANOVA MEDICAL CENTER</h1>
-                                    <div className="mt-4 text-xs text-slate-600 font-bold space-y-1">
-                                        <p>144, Calicut Road, Kellur</p>
-                                        <p>5th mile, Wayanad</p>
-                                        <p>Ph: 8304889381</p>
-                                        <p>anovamedicalcentre29@gmail.com</p>
+                                    <h1 className="text-xl font-black text-slate-900 tracking-widest uppercase">ANOVA MEDICAL CENTER</h1>
+                                    <div className="mt-1 text-[10px] text-slate-600 font-bold">
+                                        <p>144, Calicut Road, Kellur, 5th mile, Wayanad</p>
+                                        <p>Ph: 8304889381 | anovamedicalcentre29@gmail.com</p>
                                     </div>
                                 </div>
                             </div>
                             <div className="text-right">
-                                <div className="text-4xl font-black text-slate-300">INVOICE</div>
+                                <div className="text-3xl font-black text-slate-300">INVOICE</div>
                                 <p className="text-sm font-bold text-slate-900 mt-2">#{formData.id ? String(formData.id).toUpperCase() : 'DRAFT'}</p>
                                 <p className="text-xs text-slate-500">{(() => { const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} ${d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`; })()}</p>
                             </div>

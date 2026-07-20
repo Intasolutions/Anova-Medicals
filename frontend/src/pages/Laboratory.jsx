@@ -2165,6 +2165,11 @@ const Laboratory = () => {
                                 visibility: visible !important;
                             }
                             
+                            @page {
+                                size: A4;
+                                margin: 10mm;
+                            }
+                            
                             .print-portal-content * {
                                 visibility: visible !important;
                             }
