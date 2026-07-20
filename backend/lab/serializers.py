@@ -283,10 +283,23 @@ class LabChargeSerializer(serializers.ModelSerializer):
         if not invoices:
             return 'UNBILLED'
         
-        # If any invoice is not PAID, consider it PENDING
-        if any(inv.payment_status != 'PAID' for inv in invoices):
-            return 'PENDING'
-        return 'PAID'
+        test_invoiced = False
+        test_paid = False
+        
+        for inv in invoices:
+            for item in inv.items.all():
+                if item.dept == 'LAB' and item.description == obj.test_name:
+                    test_invoiced = True
+                    if inv.payment_status == 'PAID':
+                        test_paid = True
+                        break
+            if test_paid:
+                break
+                
+        if not test_invoiced:
+            return 'UNBILLED'
+            
+        return 'PAID' if test_paid else 'PENDING'
 
     def update(self, instance, validated_data):
         instance = super().update(instance, validated_data)

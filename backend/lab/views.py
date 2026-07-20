@@ -303,15 +303,22 @@ class LabChargeViewSet(viewsets.ModelViewSet):
                     total_amount=0
                 )
 
-            # 2. Add Invoice Item
-            InvoiceItem.objects.create(
+            # 2. Add Invoice Item (Only if not already billed manually by Reception/Billing)
+            existing_item = InvoiceItem.objects.filter(
                 invoice=invoice,
                 dept='LAB',
-                description=instance.test_name,
-                qty=1,
-                unit_price=instance.amount,
-                amount=instance.amount
-            )
+                description=instance.test_name
+            ).exists()
+            
+            if not existing_item:
+                InvoiceItem.objects.create(
+                    invoice=invoice,
+                    dept='LAB',
+                    description=instance.test_name,
+                    qty=1,
+                    unit_price=instance.amount,
+                    amount=instance.amount
+                )
 
             # 3. Update Invoice Total & Status
             invoice.total_amount = sum(item.amount for item in invoice.items.all())

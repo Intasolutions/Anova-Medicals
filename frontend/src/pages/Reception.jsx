@@ -63,6 +63,7 @@ const Reception = () => {
     const navigate = useNavigate();
     const [patientsData, setPatientsData] = useState({ results: [], count: 0 });
     const { globalSearch } = useSearch();
+    const [patientSearch, setPatientSearch] = useState('');
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
@@ -129,11 +130,10 @@ const Reception = () => {
         setTimeout(() => setNotification(null), 4000); // Auto hide after 4s
     };
 
-    // --- Effects ---
     useEffect(() => {
         fetchPatients(true);
         fetchStats();
-    }, [page, globalSearch, pageSize, frontDeskTab]);
+    }, [page, globalSearch, patientSearch, pageSize, frontDeskTab]);
 
     // Add 4-second automatic refresh
     useEffect(() => {
@@ -143,7 +143,7 @@ const Reception = () => {
         }, 4000);
 
         return () => clearInterval(interval);
-    }, [page, globalSearch, pageSize, frontDeskTab]);
+    }, [page, globalSearch, patientSearch, pageSize, frontDeskTab]);
 
     useEffect(() => {
         fetchStats();
@@ -197,7 +197,7 @@ const Reception = () => {
                 url += `&only_active=true`;
             }
 
-            url += `${globalSearch ? `&search=${encodeURIComponent(globalSearch)}` : ''}`;
+            url += `${patientSearch ? `&search=${encodeURIComponent(patientSearch)}` : globalSearch ? `&search=${encodeURIComponent(globalSearch)}` : ''}`;
 
             const { data } = await api.get(url);
             setPatientsData(data);
@@ -695,6 +695,19 @@ const Reception = () => {
                                     >
                                         Active Patients
                                     </button>
+                                    <div className="relative ml-4">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search by name, phone, or ID..."
+                                            value={patientSearch}
+                                            onChange={(e) => {
+                                                setPatientSearch(e.target.value);
+                                                setPage(1); // Reset page on search
+                                            }}
+                                            className="w-64 pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                                        />
+                                    </div>
                                 </div>
                             </div>
                             <button
@@ -1231,8 +1244,8 @@ const Reception = () => {
                                                     ))}
                                                 </div>
                                             ) : (
-                                                <div className="flex-1 overflow-hidden flex flex-col pt-2">
-                                                    <div className="mb-4">
+                                                <div className="flex-1 overflow-hidden flex flex-col pt-2 min-h-0">
+                                                    <div className="mb-4 flex-shrink-0">
                                                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Referred By (Doctor Name)</label>
                                                         <input 
                                                             type="text" 
@@ -1249,7 +1262,7 @@ const Reception = () => {
                                                             ))}
                                                         </datalist>
                                                     </div>
-                                                    <div className="flex justify-between items-center mb-2">
+                                                    <div className="flex justify-between items-center mb-2 flex-shrink-0">
                                                         <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
                                                             {visitForm.assigned_role === 'CASUALTY' ? 'Select Services (Optional)' : 'Select Lab Tests (Optional)'}
                                                         </label>
@@ -1267,9 +1280,9 @@ const Reception = () => {
                                                     
                                                     {visitForm.assigned_role === 'CASUALTY' ? (
                                                         serviceDefinitions.filter(t => t.name.toLowerCase().includes(serviceSearchQ.toLowerCase())).length === 0 ? (
-                                                            <p className="text-sm text-slate-400 text-center py-4">No services match your search.</p>
+                                                            <p className="text-sm text-slate-400 text-center py-4 flex-shrink-0">No services match your search.</p>
                                                         ) : (
-                                                            <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                                                            <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar min-h-0">
                                                                 {serviceDefinitions.filter(t => t.name.toLowerCase().includes(serviceSearchQ.toLowerCase())).map(test => {
                                                                     const isSelected = selectedStartServices.includes(test.id);
                                                                     return (
@@ -1284,7 +1297,7 @@ const Reception = () => {
                                                                                     setSelectedStartServices([...selectedStartServices, test.id]);
                                                                                 }
                                                                             }}
-                                                                            className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between group ${isSelected ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-slate-100 hover:border-blue-200 hover:bg-slate-50'}`}
+                                                                            className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between group flex-shrink-0 ${isSelected ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-slate-100 hover:border-blue-200 hover:bg-slate-50'}`}
                                                                         >
                                                                             <div>
                                                                                 <p className={`font-bold text-sm ${isSelected ? 'text-blue-900' : 'text-slate-900'}`}>{test.name}</p>
@@ -1300,9 +1313,9 @@ const Reception = () => {
                                                         )
                                                     ) : visitForm.assigned_role === 'LAB' ? (
                                                         availableLabTests.filter(t => t.name.toLowerCase().includes(labTestSearchQ.toLowerCase())).length === 0 ? (
-                                                            <p className="text-sm text-slate-400 text-center py-4">No lab tests match your search.</p>
+                                                            <p className="text-sm text-slate-400 text-center py-4 flex-shrink-0">No lab tests match your search.</p>
                                                         ) : (
-                                                            <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                                                            <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar min-h-0">
                                                                 {availableLabTests.filter(t => t.name.toLowerCase().includes(labTestSearchQ.toLowerCase())).map(test => {
                                                                     const isSelected = selectedLabTests.includes(test.id);
                                                                     return (
@@ -1317,7 +1330,7 @@ const Reception = () => {
                                                                                     setSelectedLabTests([...selectedLabTests, test.id]);
                                                                                 }
                                                                             }}
-                                                                            className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between group ${isSelected ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-slate-100 hover:border-blue-200 hover:bg-slate-50'}`}
+                                                                            className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between group flex-shrink-0 ${isSelected ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-slate-100 hover:border-blue-200 hover:bg-slate-50'}`}
                                                                         >
                                                                             <div>
                                                                                 <p className={`font-bold text-sm ${isSelected ? 'text-blue-900' : 'text-slate-900'}`}>{test.name}</p>
