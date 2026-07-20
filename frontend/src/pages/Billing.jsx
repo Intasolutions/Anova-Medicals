@@ -1404,11 +1404,12 @@ const Billing = () => {
                                 <img src="/logo.png" alt="Logo" className="w-16 h-16 object-contain" />
                                 <div>
                                     <h1 className="text-3xl font-black text-slate-900 tracking-widest uppercase">ANOVA MEDICAL CENTER</h1>
-                                <div className="mt-4 text-xs text-slate-600 font-bold space-y-1">
-                                    <p>144, Calicut Road, Kellur</p>
-                                    <p>5th mile, Wayanad</p>
-                                    <p>Ph: 8304889381</p>
-                                    <p>anovamedicalcentre29@gmail.com</p>
+                                    <div className="mt-4 text-xs text-slate-600 font-bold space-y-1">
+                                        <p>144, Calicut Road, Kellur</p>
+                                        <p>5th mile, Wayanad</p>
+                                        <p>Ph: 8304889381</p>
+                                        <p>anovamedicalcentre29@gmail.com</p>
+                                    </div>
                                 </div>
                             </div>
                             <div className="text-right">
