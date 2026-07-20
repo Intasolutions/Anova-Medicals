@@ -992,7 +992,7 @@ const Doctor = () => {
                                         {/* Lab Requisition */}
                                         <AnimatePresence>
                                             {referral === 'LAB' && (
-                                                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+                                                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
                                                     <div className="bg-purple-50/50 rounded-[24px] border border-purple-100 p-6">
                                                         <div className="flex justify-between items-center mb-4">
                                                             <label className="flex items-center gap-2 text-sm font-bold text-slate-700">
@@ -1039,7 +1039,7 @@ const Doctor = () => {
                                         {/* Assign Services */}
                                         <AnimatePresence>
                                             {true && (
-                                                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden mb-6">
+                                                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-6">
                                                     <div className="bg-teal-50/50 rounded-[24px] border border-teal-100 p-6">
                                                         <div className="flex justify-between items-center mb-4">
                                                             <label className="flex items-center gap-2 text-sm font-bold text-slate-700">

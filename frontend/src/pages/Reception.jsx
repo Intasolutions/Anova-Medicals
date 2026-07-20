@@ -797,7 +797,7 @@ const Reception = () => {
                                                                             onClick={(e) => { e.stopPropagation(); handleNewVisit(p); }}
                                                                             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 transition-all shadow-sm active:scale-95"
                                                                         >
-                                                                            Start Visit
+                                                                            + New Visit
                                                                         </button>
                                                                     )}
                                                                 </div>

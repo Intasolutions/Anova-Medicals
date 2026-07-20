@@ -2328,7 +2328,7 @@ const Laboratory = () => {
                                         </tbody>
                                     </table>
                                 ) : (
-                                    (printCharge.tests || [printCharge]).map((testItem, testIdx) => (
+                                    (printCharge.tests || [printCharge]).filter(t => t.status !== 'CANCELLED').map((testItem, testIdx) => (
                                         <div key={testIdx} className="break-inside-avoid">
                                             <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest border-b border-slate-200 pb-2 mb-3 mt-4 text-center">
                                                 {testItem.test_name}
