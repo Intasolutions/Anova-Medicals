@@ -523,20 +523,27 @@ const Billing = () => {
     const calculateSubtotal = (items) => (items || []).reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0);
 
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const submitLock = useRef(false);
 
     const handleCreateInvoice = async (status = 'PENDING') => {
-        if (isSubmitting) return; // Prevent double clicks
+        if (isSubmitting || submitLock.current) return; // Prevent double clicks synchronously
+        submitLock.current = true;
+        setIsSubmitting(true);
 
-        // Filter out empty items (no description or empty description)
-        const validItems = formData.items.filter(item => item.description && item.description.trim() !== '');
+        try {
+            // Filter out empty items (no description or empty description)
+            const validItems = formData.items.filter(item => item.description && item.description.trim() !== '');
 
-        if (validItems.length === 0) {
-            return showToast('error', 'Please add at least one item to generate an invoice.');
-        }
+            if (validItems.length === 0) {
+                showToast('error', 'Please add at least one item to generate an invoice.');
+                submitLock.current = false;
+                setIsSubmitting(false);
+                return;
+            }
 
-        // --- Client Side Stock Validation ---
-        for (const item of validItems) {
-            if (item.dept === 'PHARMACY' && !item.stock_deducted) {
+            // --- Client Side Stock Validation ---
+            for (const item of validItems) {
+                if (item.dept === 'PHARMACY' && !item.stock_deducted) {
                 // Find current stock in our local list
                 const stock = pharmacyStock.find(s =>
                     s.name.toLowerCase() === item.description.toLowerCase() &&
@@ -629,6 +636,7 @@ const Billing = () => {
             showToast('error', errorMsg);
         } finally {
             setIsSubmitting(false);
+            submitLock.current = false;
         }
     };
 
@@ -768,7 +776,11 @@ const Billing = () => {
         setShowPaymentModal(true);
     };
 
+    const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+    const paymentLock = useRef(false);
+
     const handleConfirmPayment = async () => {
+        if (isProcessingPayment || paymentLock.current) return;
         if (!paymentData.invoice) return;
 
         const paymentsList = [];
@@ -792,6 +804,8 @@ const Billing = () => {
             return;
         }
 
+        paymentLock.current = true;
+        setIsProcessingPayment(true);
         try {
             // New Endpoint for Adding Payment
             await api.post(`billing/invoices/${paymentData.invoice.id}/add_payment/`, {
@@ -806,6 +820,9 @@ const Billing = () => {
         } catch (error) {
             console.error(error);
             showToast('error', "Failed to record payment.");
+        } finally {
+            setIsProcessingPayment(false);
+            paymentLock.current = false;
         }
     };
 
@@ -1601,9 +1618,10 @@ const Billing = () => {
 
                                 <button
                                     onClick={handleConfirmPayment}
-                                    className="w-full py-4 bg-emerald-500 text-white rounded-xl font-bold text-lg shadow-xl shadow-emerald-500/20 hover:bg-emerald-600 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                                    disabled={isProcessingPayment}
+                                    className="w-full py-4 bg-emerald-500 text-white rounded-xl font-black text-sm uppercase tracking-wider hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/30 flex justify-center items-center gap-2 disabled:bg-slate-300 disabled:shadow-none"
                                 >
-                                    <CheckCircle2 size={20} /> Confirm Payment
+                                    <CheckCircle2 size={18} /> {isProcessingPayment ? "Processing..." : "Confirm Payment"}
                                 </button>
                             </div>
                         </motion.div>

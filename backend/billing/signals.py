@@ -29,24 +29,29 @@ def create_or_update_consultation_invoice(sender, instance, created, **kwargs):
         # Update existing master invoice if doctor/fee changed
         invoice = Invoice.objects.filter(visit=instance).order_by('created_at').first()
         if invoice:
-            # Find the consultation item
             cons_item = InvoiceItem.objects.filter(invoice=invoice, dept='CONSULTATION').first()
-            if cons_item:
-                # If the amount differs (e.g. doctor assigned/changed), update it
-                if cons_item.amount != amount:
-                    cons_item.amount = amount
-                    cons_item.unit_price = amount
-                    cons_item.save()
+            
+            if instance.doctor:
+                if cons_item:
+                    # If the amount differs (e.g. doctor assigned/changed), update it
+                    if cons_item.amount != amount:
+                        cons_item.amount = amount
+                        cons_item.unit_price = amount
+                        cons_item.save()
+                else:
+                    # Add consultation item if missing
+                    InvoiceItem.objects.create(
+                        invoice=invoice,
+                        dept='CONSULTATION',
+                        description='General Consultation Fee',
+                        amount=amount,
+                        unit_price=amount
+                    )
             else:
-                # Add consultation item if missing
-                InvoiceItem.objects.create(
-                    invoice=invoice,
-                    dept='CONSULTATION',
-                    description='General Consultation Fee',
-                    amount=amount,
-                    unit_price=amount
-                )
-                
+                # If no doctor is assigned but a consultation item exists, remove it
+                if cons_item:
+                    cons_item.delete()
+                    
             # Update Invoice Total
             invoice.total_amount = sum(item.amount for item in invoice.items.all())
             
