@@ -161,7 +161,7 @@ const Laboratory = () => {
     const [selectedVisit, setSelectedVisit] = useState(null);
 
     // Forms
-    const [resultData, setResultData] = useState({ results: {}, technician_name: 'MUHAMMED NIYAS', specimen: 'BLOOD', consumed_items: [] });
+    const [resultData, setResultData] = useState({ results: {}, technician_name: '', specimen: 'BLOOD', consumed_items: [] });
     const [testForm, setTestForm] = useState({ test_name: '', amount: '' });
     const [selectedTests, setSelectedTests] = useState([]); // Array of { name, price, isCustom }
     const [stockForm, setStockForm] = useState({ qty: '', cost: '', notes: '' });
@@ -586,7 +586,7 @@ const Laboratory = () => {
             }
             setResultData({
                 results: initialResults,
-                technician_name: charge.technician_name || 'MUHAMMED NIYAS',
+                technician_name: charge.technician_name || '',
                 specimen: charge.specimen || 'BLOOD',
                 consumed_items: charge.consumed_items || [],
                 notes: charge.notes || ''
@@ -631,7 +631,7 @@ const Laboratory = () => {
 
         setResultData({
             results: initialResults,
-            technician_name: charge.technician_name || 'MUHAMMED NIYAS',
+            technician_name: charge.technician_name || '',
             specimen: charge.specimen || 'BLOOD',
             consumed_items: defaultConsumption,
             notes: charge.notes || ''
