@@ -536,44 +536,40 @@ const Billing = () => {
 
             if (validItems.length === 0) {
                 showToast('error', 'Please add at least one item to generate an invoice.');
-                submitLock.current = false;
-                setIsSubmitting(false);
                 return;
             }
 
             // --- Client Side Stock Validation ---
             for (const item of validItems) {
                 if (item.dept === 'PHARMACY' && !item.stock_deducted) {
-                // Find current stock in our local list
-                const stock = pharmacyStock.find(s =>
-                    s.name.toLowerCase() === item.description.toLowerCase() &&
-                    s.batch_no.toLowerCase() === (item.batch || "").toLowerCase()
-                );
+                    // Find current stock in our local list
+                    const stock = pharmacyStock.find(s =>
+                        s.name.toLowerCase() === item.description.toLowerCase() &&
+                        s.batch_no.toLowerCase() === (item.batch || "").toLowerCase()
+                    );
 
-                if (stock) {
-                    if (stock.qty_available < item.qty) {
-                        return showToast('error', `Insufficient stock for ${item.description}. Available: ${stock.qty_available}, Requested: ${item.qty}`);
+                    if (stock) {
+                        if (stock.qty_available < item.qty) {
+                            return showToast('error', `Insufficient stock for ${item.description}. Available: ${stock.qty_available}, Requested: ${item.qty}`);
+                        }
+                    } else if (item.qty > 0) {
+                        return showToast('error', `No stock record found for ${item.description}. Please select from the dropdown.`);
                     }
-                } else if (item.qty > 0) {
-                    return showToast('error', `No stock record found for ${item.description}. Please select from the dropdown.`);
                 }
             }
-        }
 
-        setIsSubmitting(true);
-        const subtotal = calculateSubtotal(validItems);
-        const discount = parseFloat(formData.discount_amount) || 0;
-        const invoiceData = {
-            patient_name: formData.patient_name,
-            patient: formData.patient || selectedPatientId || null,
-            payment_status: status,
-            total_amount: subtotal.toFixed(2),
-            discount_amount: discount.toFixed(2),
-            items: validItems.map(({ id, created_at, updated_at, ...rest }) => ({ ...rest, id })),
-            visit: (typeof formData.visit === 'object' && formData.visit) ? formData.visit.id : formData.visit
-        };
+            const subtotal = calculateSubtotal(validItems);
+            const discount = parseFloat(formData.discount_amount) || 0;
+            const invoiceData = {
+                patient_name: formData.patient_name,
+                patient: formData.patient || selectedPatientId || null,
+                payment_status: status,
+                total_amount: subtotal.toFixed(2),
+                discount_amount: discount.toFixed(2),
+                items: validItems.map(({ id, created_at, updated_at, ...rest }) => ({ ...rest, id })),
+                visit: (typeof formData.visit === 'object' && formData.visit) ? formData.visit.id : formData.visit
+            };
 
-        try {
             let savedInvoice;
             if (formData.id) {
                 const res = await api.patch(`billing/invoices/${formData.id}/`, invoiceData);
