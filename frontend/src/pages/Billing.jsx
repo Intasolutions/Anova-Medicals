@@ -1383,28 +1383,31 @@ const Billing = () => {
                 {`
                 @media print {
                     @page {
-                        size: A5;
+                        size: A4;
                         margin: 10mm;
                     }
-                    /* Ensure the print area takes up the full page */
                     #invoice-print-area {
                         width: 100%;
-                        height: 100%;
+                        height: auto;
                         padding: 0 !important;
                     }
+                    /* Page break fixes for multi-page tables */
+                    table { page-break-inside: auto; }
+                    tr { page-break-inside: avoid; page-break-after: auto; }
+                    thead { display: table-header-group; }
                 }
                 `}
             </style>
             <div id="invoice-print-area" className="hidden print:block absolute top-0 left-0 w-full h-auto bg-white z-[9999] p-8">
-                <div className="flex flex-col h-full justify-between min-h-screen">
+                <div className="flex flex-col gap-6">
                     <div>
                         {/* Header */}
                         <div className="flex justify-between items-start mb-8 border-b-2 border-slate-900 pb-4">
-                            <div className="flex items-center gap-3">
-                                <img src="/logo.png" alt="Logo" className="w-14 h-14 object-contain" />
+                            <div className="flex items-center gap-4">
+                                <img src="/logo.png" alt="Logo" className="w-16 h-16 object-contain" />
                                 <div>
-                                    <h1 className="text-xl font-black text-slate-900 tracking-widest uppercase">ANOVA MEDICAL CENTER</h1>
-                                    <div className="mt-1 text-[10px] text-slate-600 font-bold">
+                                    <h1 className="text-3xl font-black text-slate-900 tracking-widest uppercase">ANOVA MEDICAL CENTER</h1>
+                                    <div className="mt-1 text-xs text-slate-600 font-bold">
                                         <p>144, Calicut Road, Kellur, 5th mile, Wayanad</p>
                                         <p>Ph: 8304889381 | anovamedicalcentre29@gmail.com</p>
                                     </div>
