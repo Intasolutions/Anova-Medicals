@@ -13,10 +13,9 @@ import { useDialog } from '../context/DialogContext';
 import CasualtyServicesQueue from '../components/CasualtyServicesQueue';
 import Pagination from '../components/Pagination';
 import api from '../api/axios';
-import Billing from './Billing'; // Integrated Billing Module
+import Billing from './Billing';
 import { socket } from '../socket';
 
-// --- Sub-Component: Skeleton Loader (Premium Loading State) ---
 const TableSkeleton = () => (
     <div className="animate-pulse space-y-4 p-6">
         {[1, 2, 3, 4].map((i) => (

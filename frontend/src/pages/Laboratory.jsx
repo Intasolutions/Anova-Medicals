@@ -1916,13 +1916,13 @@ const Laboratory = () => {
                                                             <input
                                                                 className="w-full bg-slate-100 border-b border-transparent text-xs font-bold text-slate-400 outline-none p-2 rounded cursor-not-allowed opacity-70"
                                                                 placeholder="Unit"
-                                                                value={field.unit}
+                                                                value={field.unit || ''}
                                                                 readOnly
                                                             />
                                                         </div>
                                                         <div className="col-span-2 relative">
                                                             <div className="w-full bg-slate-100 border-b border-transparent text-xs font-bold text-slate-400 text-right p-2 rounded cursor-not-allowed opacity-70 whitespace-pre-wrap min-h-[32px] break-words">
-                                                                {field.normal || "Ref Range"}
+                                                                {field.normal || field.normal_range || "Ref Range"}
                                                             </div>
                                                             <button
                                                                 type="button"
@@ -2171,8 +2171,8 @@ const Laboratory = () => {
                                                                                 {val.note && <span className="block font-medium text-slate-500 text-xs mt-1 whitespace-pre-wrap">{val.note}</span>}
                                                                             </td>
                                                                             <td className="py-4 font-black text-slate-900 text-sm">{val.value}</td>
-                                                                            <td className="py-4 font-bold text-slate-500 text-xs">{val.unit}</td>
-                                                                            <td className="py-4 font-bold text-slate-500 text-xs text-right whitespace-pre-wrap">{val.normal}</td>
+                                                                            <td className="py-4 font-bold text-slate-500 text-xs">{val.unit || ''}</td>
+                                                                            <td className="py-4 font-bold text-slate-500 text-xs text-right whitespace-pre-wrap">{val.normal || val.normal_range || ''}</td>
                                                                         </tr>
                                                                     )
                                                                 })}
@@ -2443,8 +2443,8 @@ const Laboratory = () => {
                                                                             {val.note && <span className="block font-medium text-slate-500 text-[10px] mt-0.5 whitespace-pre-wrap">{val.note}</span>}
                                                                         </td>
                                                                         <td className="px-2 py-1.5 font-black text-slate-900 text-xs">{val.value}</td>
-                                                                        <td className="px-2 py-1.5 font-bold text-slate-900 text-xs">{val.unit}</td>
-                                                                        <td className="px-2 py-1.5 font-bold text-slate-900 text-xs text-right whitespace-pre-wrap">{val.normal}</td>
+                                                                        <td className="px-2 py-1.5 font-bold text-slate-900 text-xs">{val.unit || ''}</td>
+                                                                        <td className="px-2 py-1.5 font-bold text-slate-900 text-xs text-right whitespace-pre-wrap">{val.normal || val.normal_range || ''}</td>
                                                                     </tr>
                                                                 )
                                                             })}

@@ -16,11 +16,21 @@ class DashboardStatsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        today = timezone.now().date()
-        last_week = today - timedelta(days=7)
+        date_str = request.query_params.get('date')
+        if date_str:
+            from datetime import datetime
+            try:
+                target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            except ValueError:
+                target_date = timezone.now().date()
+        else:
+            target_date = timezone.now().date()
+
+        last_week = target_date - timedelta(days=7)
 
         # 1. Patient & Visit Stats
-        new_patients_today = Patient.objects.filter(created_at__date=today).count()
+        new_patients_today = Patient.objects.filter(created_at__date=target_date).count()
+        visits_today = Visit.objects.filter(created_at__date=target_date).count()
         active_visits = Visit.objects.filter(status__in=['OPEN', 'IN_PROGRESS']).count()
         
         # 2. Recent Activity (Visits)
@@ -36,7 +46,7 @@ class DashboardStatsView(APIView):
         from billing.models import PaymentTransaction
         
         revenue_today = PaymentTransaction.objects.filter(
-            created_at__date=today
+            created_at__date=target_date
         ).aggregate(Sum('amount'))['amount__sum'] or 0
 
         weekly_revenue = PaymentTransaction.objects.filter(
@@ -51,7 +61,8 @@ class DashboardStatsView(APIView):
         low_stock_count = PharmacyStock.objects.filter(qty_available__lte=F('reorder_level'), is_deleted=False).count()
 
         data = {
-            "patients_today": new_patients_today,
+            "patients_today": visits_today, # Used to be new_patients_today, now tracks total visits
+            "new_patients_today": new_patients_today,
             "active_visits": active_visits,
             "revenue_today": float(revenue_today),
             "pharmacy_low_stock": low_stock_count,

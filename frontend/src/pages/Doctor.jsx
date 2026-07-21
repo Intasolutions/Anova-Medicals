@@ -180,8 +180,8 @@ const HistoryModal = ({ history, onClose }) => {
                                                                 ) : String(res)}
                                                             </td>
                                                             <td className="px-3 py-2 font-bold text-slate-900">{typeof res === 'object' ? res.value : '--'}</td>
-                                                            <td className="px-3 py-2 text-slate-500">{typeof res === 'object' ? res.unit : '--'}</td>
-                                                            <td className="px-3 py-2 text-slate-400 text-xs">{typeof res === 'object' ? res.normal : '--'}</td>
+                                                            <td className="px-3 py-2 text-slate-500">{typeof res === 'object' ? (res.unit || '') : '--'}</td>
+                                                            <td className="px-3 py-2 text-slate-400 text-xs">{typeof res === 'object' ? (res.normal || res.normal_range || '--') : '--'}</td>
                                                         </tr>
                                                     ))}
                                                 </tbody>
@@ -942,8 +942,8 @@ const Doctor = () => {
                                                                             <tr key={rIdx}>
                                                                                 <td className="px-3 py-2 font-medium text-slate-700">{typeof res === 'object' ? res.name : String(res)}</td>
                                                                                 <td className="px-3 py-2 font-bold text-slate-900">{typeof res === 'object' ? res.value : '--'}</td>
-                                                                                <td className="px-3 py-2 text-slate-500">{typeof res === 'object' ? res.unit : '--'}</td>
-                                                                                <td className="px-3 py-2 text-slate-400 text-xs">{typeof res === 'object' ? res.normal : '--'}</td>
+                                                                                <td className="px-3 py-2 text-slate-500">{typeof res === 'object' ? (res.unit || '') : '--'}</td>
+                                                                                <td className="px-3 py-2 text-slate-400 text-xs">{typeof res === 'object' ? (res.normal || res.normal_range || '--') : '--'}</td>
                                                                             </tr>
                                                                         ))}
                                                                     </tbody>

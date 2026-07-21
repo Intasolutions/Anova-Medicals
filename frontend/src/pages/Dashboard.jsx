@@ -61,6 +61,7 @@ const Dashboard = () => {
     const navigate = useNavigate();
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
     useEffect(() => {
         if (user && user.role !== 'ADMIN') {
@@ -77,7 +78,7 @@ const Dashboard = () => {
         const fetchStats = async () => {
             try {
                 // Real API call
-                const { data } = await api.get('/core/dashboard/stats/');
+                const { data } = await api.get(`/core/dashboard/stats/?date=${selectedDate}`);
                 setStats(data);
             } catch (err) {
                 console.error("Dashboard data fetch failed, using fallback for UI demo");
@@ -87,7 +88,7 @@ const Dashboard = () => {
         };
 
         if (user?.role === 'ADMIN') fetchStats();
-    }, [user, navigate]);
+    }, [user, navigate, selectedDate]);
 
     // --- Chart Data Processing (The Fix) ---
     const processedChartData = useMemo(() => {
@@ -132,10 +133,14 @@ const Dashboard = () => {
                         <Calendar size={18} />
                     </div>
                     <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Today's Date</p>
-                        <p className="text-sm font-bold text-slate-700">
-                            {new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                        </p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Date</p>
+                        <input 
+                            type="date"
+                            value={selectedDate}
+                            onChange={(e) => setSelectedDate(e.target.value)}
+                            className="text-sm font-bold text-slate-700 bg-transparent border-none outline-none cursor-pointer p-0 m-0"
+                            max={new Date().toISOString().split('T')[0]}
+                        />
                     </div>
                 </div>
             </div>
@@ -143,7 +148,7 @@ const Dashboard = () => {
             {/* --- Key Metrics Grid --- */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <StatCard
-                    label="New Patients"
+                    label="Patients Today"
                     value={stats?.patients_today ?? 0}
                     change={stats?.patients_change ? `${stats.patients_change}%` : null}
                     trend={stats?.patients_change >= 0 ? 'up' : 'down'}

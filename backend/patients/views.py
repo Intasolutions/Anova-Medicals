@@ -127,10 +127,12 @@ class VisitViewSet(viewsets.ModelViewSet):
         billing_queue = self.request.query_params.get('billing_queue')
         if billing_queue == 'true':
             from django.db.models import Q
+            from django.utils import timezone
+            today = timezone.localdate()
             qs = qs.filter(
                 Q(assigned_role='BILLING', status='OPEN') | 
                 Q(invoices__payment_status__in=['DRAFT', 'PENDING', 'PARTIAL'])
-            ).distinct()
+            ).filter(created_at__date=today).distinct()
             
         return qs
 
