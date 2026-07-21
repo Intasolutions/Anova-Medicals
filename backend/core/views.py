@@ -33,15 +33,15 @@ class DashboardStatsView(APIView):
         } for v in recent_visits]
 
         # 3. Financials (Today & Weekly Trend)
-        revenue_today = Invoice.objects.filter(
-            created_at__date=today, 
-            payment_status='PAID'
-        ).aggregate(Sum('total_amount'))['total_amount__sum'] or 0
+        from billing.models import PaymentTransaction
+        
+        revenue_today = PaymentTransaction.objects.filter(
+            created_at__date=today
+        ).aggregate(Sum('amount'))['amount__sum'] or 0
 
-        weekly_revenue = Invoice.objects.filter(
-            created_at__date__gte=last_week,
-            payment_status='PAID'
-        ).annotate(date=TruncDate('created_at')).values('date').annotate(total=Sum('total_amount')).order_by('date')
+        weekly_revenue = PaymentTransaction.objects.filter(
+            created_at__date__gte=last_week
+        ).annotate(date=TruncDate('created_at')).values('date').annotate(total=Sum('amount')).order_by('date')
 
         # 4. Lab Stats
         pending_labs = LabCharge.objects.filter(status='PENDING').count()

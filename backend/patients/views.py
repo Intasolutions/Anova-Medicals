@@ -42,9 +42,14 @@ class PatientViewSet(viewsets.ModelViewSet):
             status__in=active_statuses
         )
         
+        from django.db.models import Max
+        from django.db.models.functions import Coalesce
         qs = Patient.objects.annotate(
-            has_active_visit=Exists(active_visits_subquery)
-        ).order_by('has_active_visit', '-created_at')
+            has_active_visit=Exists(active_visits_subquery),
+            latest_visit_update=Max('visits__updated_at')
+        ).annotate(
+            latest_activity=Coalesce('latest_visit_update', 'updated_at')
+        ).order_by('-latest_activity', '-created_at')
         
         # Filter Logic: Exclude active patients if requested
         exclude_active = self.request.query_params.get('exclude_active')
@@ -116,6 +121,15 @@ class VisitViewSet(viewsets.ModelViewSet):
             qs = qs.filter(
                 Q(assigned_role='LAB', status='OPEN') | 
                 Q(lab_charges__status='PENDING')
+            ).distinct()
+            
+        # Support for Billing Queue (Patients assigned to billing OR patients with draft/pending invoices)
+        billing_queue = self.request.query_params.get('billing_queue')
+        if billing_queue == 'true':
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(assigned_role='BILLING', status='OPEN') | 
+                Q(invoices__payment_status__in=['DRAFT', 'PENDING', 'PARTIAL'])
             ).distinct()
             
         return qs

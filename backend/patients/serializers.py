@@ -13,16 +13,23 @@ class PatientSerializer(serializers.ModelSerializer):
 
     total_visits = serializers.SerializerMethodField()
     active_visit_role = serializers.SerializerMethodField()
+    active_visit_id = serializers.SerializerMethodField()
 
     class Meta:
         model = Patient
-        fields = ['id', 'p_id', 'registration_number', 'full_name', 'age', 'age_months', 'gender', 'phone', 'address', 'id_proof', 'medical_history', 'total_visits', 'last_consulted_doctor', 'created_at', 'updated_at', 'active_visit_role']
+        fields = ['id', 'p_id', 'registration_number', 'full_name', 'age', 'age_months', 'gender', 'phone', 'address', 'id_proof', 'medical_history', 'total_visits', 'last_consulted_doctor', 'created_at', 'updated_at', 'active_visit_role', 'active_visit_id']
         read_only_fields = ['id', 'p_id', 'created_at', 'updated_at']
 
     def get_active_visit_role(self, obj):
         active_visit = obj.visits.filter(status__in=['OPEN', 'IN_PROGRESS', 'WAITING']).first()
         if active_visit:
             return active_visit.assigned_role
+        return None
+
+    def get_active_visit_id(self, obj):
+        active_visit = obj.visits.filter(status__in=['OPEN', 'IN_PROGRESS', 'WAITING']).first()
+        if active_visit:
+            return active_visit.id
         return None
 
     def get_total_visits(self, obj):

@@ -5,7 +5,7 @@ import {
     UserPlus, Phone, User as UserIcon, ArrowRight, X,
     Activity, Thermometer, Heart, Scale, Stethoscope,
     MapPin, ChevronRight, Search, CheckCircle2, AlertCircle, FileText, IndianRupee, Edit, Trash2,
-    Users, Info, Wallet, Sparkles, CreditCard
+    Users, Info, Wallet, Sparkles, CreditCard, AlertTriangle
 } from 'lucide-react';
 import { useSearch } from '../context/SearchContext';
 import { useAuth } from '../context/AuthContext';
@@ -111,7 +111,7 @@ const Reception = () => {
         assigned_role: 'DOCTOR',
         doctor: '',
         referred_by: 'Self',
-        vitals: { temp: '', bp: '', pulse: '', weight: '' }
+        vitals: { temp: '', bp: '', pulse: '', weight: '', spo2: '' }
     });
 
     // Dashboard Stats
@@ -123,6 +123,55 @@ const Reception = () => {
     });
     const [statsLoading, setStatsLoading] = useState(true);
 
+    // --- Routing State ---
+    const [showRouteModal, setShowRouteModal] = useState(false);
+    const [routeForm, setRouteForm] = useState({ assigned_role: 'DOCTOR', doctor: '', casualty_services: [], lab_tests: [] });
+    const [routeSubmitting, setRouteSubmitting] = useState(false);
+    const [routingVisitId, setRoutingVisitId] = useState(null);
+    const [routeServiceSearch, setRouteServiceSearch] = useState('');
+    const [routeLabSearch, setRouteLabSearch] = useState('');
+    const [routeDoctorSearch, setRouteDoctorSearch] = useState('');
+
+    const handleRoutePatient = async (e) => {
+        e.preventDefault();
+        if (!routingVisitId) return;
+        
+        if (routeForm.assigned_role === 'CASUALTY' && routeForm.casualty_services.length === 0) {
+            showToast('error', 'Please select at least one service to route.');
+            return;
+        }
+        if (routeForm.assigned_role === 'LAB' && routeForm.lab_tests.length === 0) {
+            showToast('error', 'Please select at least one lab test to route.');
+            return;
+        }
+        if (routeForm.assigned_role === 'DOCTOR' && !routeForm.doctor) {
+            showToast('error', 'Please select a doctor to route.');
+            return;
+        }
+
+        setRouteSubmitting(true);
+        try {
+            const payload = {
+                assigned_role: routeForm.assigned_role
+            };
+            if (routeForm.assigned_role === 'DOCTOR') payload.doctor = routeForm.doctor;
+            if (routeForm.assigned_role === 'CASUALTY') payload.casualty_services = routeForm.casualty_services;
+            if (routeForm.assigned_role === 'LAB') payload.lab_tests = routeForm.lab_tests;
+
+            await api.patch(`/reception/visits/${routingVisitId}/`, payload);
+            showToast('success', `Patient routed to ${routeForm.assigned_role === 'DOCTOR' ? 'Doctor' : routeForm.assigned_role === 'LAB' ? 'Laboratory' : 'Services'}.`);
+            setShowRouteModal(false);
+            setRouteForm({ assigned_role: 'DOCTOR', doctor: '', casualty_services: [], lab_tests: [] });
+            setRoutingVisitId(null);
+            fetchPatients(false);
+            fetchStats();
+        } catch (err) {
+            showToast('error', 'Failed to route patient');
+            console.error(err);
+        } finally {
+            setRouteSubmitting(false);
+        }
+    };
 
     // --- Helper: Show Notification ---
     const showToast = (type, message) => {
@@ -218,25 +267,27 @@ const Reception = () => {
             const today = new Date().toISOString().split('T')[0];
 
             // Fetch stats from various endpoints
-            const [patientsRes, visitsRes, invoicesRes] = await Promise.all([
+            const [patientsRes, visitsRes, invoicesRes, dashboardStatsRes] = await Promise.all([
                 api.get(`/reception/patients/?created_at__date=${today}`),
                 api.get(`/reception/visits/?status__in=OPEN,IN_PROGRESS`),
-                api.get(`/billing/invoices/?created_at__date=${today}`)
+                api.get(`/billing/invoices/?created_at__date=${today}`),
+                api.get(`/core/dashboard/stats/`)
             ]);
 
             const newPatients = patientsRes.data.count || patientsRes.data.results?.length || 0;
             const activeVisits = visitsRes.data.count || visitsRes.data.results?.length || 0;
-            const todayRevenue = invoicesRes.data.results?.filter(inv => inv.payment_status === 'PAID')
-                .reduce((sum, inv) => sum + parseFloat(inv.total_amount || 0), 0) || 0;
+            
+            // Correct revenue from backend (sums all PaymentTransactions today)
+            const todayRevenue = dashboardStatsRes.data?.revenue_today || 0;
 
-            // Get recent invoices (any non-draft, last 5)
-            const recentInvoicesRes = await api.get(`/billing/invoices/?ordering=-created_at&page_size=5`);
+            // Paid visits = count of invoices fully paid today
+            const paidInvoicesCount = invoicesRes.data.results?.filter(inv => inv.payment_status === 'PAID').length || 0;
 
             setStats({
                 newPatients,
                 activeVisits,
                 todayRevenue,
-                recentVisits: recentInvoicesRes.data.results || recentInvoicesRes.data || []
+                recentVisits: new Array(paidInvoicesCount) // Hack to keep the .length logic working without changing UI state structure
             });
         } catch (err) {
             console.error('Error fetching stats:', err);
@@ -391,7 +442,7 @@ const Reception = () => {
 
     const handleNewVisit = async (p) => {
         setSelectedPatient(p);
-        setVisitForm({ assigned_role: 'DOCTOR', doctor: '', vitals: { temp: '', bp: '', pulse: '', weight: '' } });
+        setVisitForm({ assigned_role: 'DOCTOR', doctor: '', vitals: { temp: '', bp: '', pulse: '', weight: '', spo2: '' } });
         setSelectedLabTests([]);
         setSelectedStartServices([]);
         setServiceSearchQ('');
@@ -444,7 +495,7 @@ const Reception = () => {
                 showToast('success', `Visit token generated for ${selectedPatient.full_name}`);
             }
 
-            setVisitForm({ assigned_role: 'DOCTOR', doctor: '', referred_by: 'Self', vitals: { temp: '', bp: '', pulse: '', weight: '' } });
+            setVisitForm({ assigned_role: 'DOCTOR', doctor: '', referred_by: 'Self', vitals: { temp: '', bp: '', pulse: '', weight: '', spo2: '' } });
             setSelectedLabTests([]);
             setSelectedStartServices([]);
             setServiceSearchQ('');
@@ -798,14 +849,31 @@ const Reception = () => {
                                                                         <Trash2 size={16} />
                                                                     </button>
                                                                     {p.active_visit_role ? (
-                                                                        <div className={`inline-flex flex-col items-center justify-center px-3 py-1.5 rounded-lg border ${
-                                                                            p.active_visit_role === 'DOCTOR' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' :
-                                                                            p.active_visit_role === 'LAB' ? 'bg-purple-50 border-purple-200 text-purple-700' :
-                                                                            p.active_visit_role === 'BILLING' ? 'bg-amber-50 border-amber-200 text-amber-700' :
-                                                                            'bg-blue-50 border-blue-200 text-blue-700'
-                                                                        }`}>
-                                                                            <span className="text-[10px] font-black uppercase tracking-widest">{p.active_visit_role}</span>
-                                                                            <span className="text-[8px] font-black opacity-50 uppercase tracking-widest">Active Phase</span>
+                                                                        <div className="flex items-center justify-end gap-2">
+                                                                            <div className={`inline-flex flex-col items-center justify-center px-3 py-1.5 rounded-lg border ${
+                                                                                p.active_visit_role === 'DOCTOR' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' :
+                                                                                p.active_visit_role === 'LAB' ? 'bg-purple-50 border-purple-200 text-purple-700' :
+                                                                                p.active_visit_role === 'BILLING' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                                                                                'bg-blue-50 border-blue-200 text-blue-700'
+                                                                            }`}>
+                                                                                <span className="text-[10px] font-black uppercase tracking-widest">{p.active_visit_role}</span>
+                                                                                <span className="text-[8px] font-black opacity-50 uppercase tracking-widest">Active Phase</span>
+                                                                            </div>
+                                                                            <button 
+                                                                                onClick={async (e) => {
+                                                                                    e.stopPropagation();
+                                                                                    if (doctors.length === 0 || serviceDefinitions.length === 0) {
+                                                                                        await fetchDoctorsAndTests();
+                                                                                    }
+                                                                                    setRoutingVisitId(p.active_visit_id);
+                                                                                    setShowRouteModal(true);
+                                                                                }}
+                                                                                disabled={!p.active_visit_id}
+                                                                                title={!p.active_visit_id ? "Active Visit ID missing" : "Route Patient"}
+                                                                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-200 text-xs font-bold hover:bg-indigo-100 transition-all disabled:opacity-50"
+                                                                            >
+                                                                                <Activity size={12}/> Route
+                                                                            </button>
                                                                         </div>
                                                                     ) : (
                                                                         <button
@@ -1100,7 +1168,7 @@ const Reception = () => {
                                         initial={{ opacity: 0, scale: 0.95, y: 20 }}
                                         animate={{ opacity: 1, scale: 1, y: 0 }}
                                         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                                        className="relative bg-white w-full max-w-4xl max-h-[90vh] rounded-[32px] shadow-2xl overflow-hidden flex flex-col md:flex-row"
+                                        className="relative bg-white w-full max-w-5xl h-[95vh] rounded-[32px] shadow-2xl overflow-hidden flex flex-col md:flex-row"
                                     >
                                         {/* Left: Vitals */}
                                         <div className="md:w-1/2 p-8 border-r border-slate-100 bg-slate-50/50">
@@ -1171,6 +1239,22 @@ const Reception = () => {
                                                             onChange={e => setVisitForm({ ...visitForm, vitals: { ...visitForm.vitals, weight: e.target.value } })}
                                                         />
                                                         <span className="text-xs font-bold text-slate-400">kg</span>
+                                                    </div>
+                                                </div>
+                                                {/* SpO2 */}
+                                                <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 shadow-sm focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all">
+                                                    <div className="flex justify-between mb-2">
+                                                        <label className="text-[10px] font-bold text-slate-400 uppercase">SpO2</label>
+                                                        <Activity size={16} className="text-cyan-500" />
+                                                    </div>
+                                                    <div className="flex items-baseline gap-1">
+                                                        <input
+                                                            type="text" placeholder="98"
+                                                            className="w-full text-2xl font-bold text-slate-900 outline-none placeholder:text-slate-200"
+                                                            value={visitForm.vitals.spo2}
+                                                            onChange={e => setVisitForm({ ...visitForm, vitals: { ...visitForm.vitals, spo2: e.target.value } })}
+                                                        />
+                                                        <span className="text-xs font-bold text-slate-400">%</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1279,44 +1363,85 @@ const Reception = () => {
                                                     </div>
                                                     
                                                     {visitForm.assigned_role === 'CASUALTY' ? (
-                                                        serviceDefinitions.filter(t => t.name.toLowerCase().includes(serviceSearchQ.toLowerCase())).length === 0 ? (
-                                                            <p className="text-sm text-slate-400 text-center py-4 flex-shrink-0">No services match your search.</p>
-                                                        ) : (
-                                                            <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar min-h-0">
-                                                                {serviceDefinitions.filter(t => t.name.toLowerCase().includes(serviceSearchQ.toLowerCase())).map(test => {
-                                                                    const isSelected = selectedStartServices.includes(test.id);
-                                                                    return (
-                                                                        <div
-                                                                            key={test.id}
-                                                                            onClick={(e) => {
-                                                                                e.preventDefault();
-                                                                                e.stopPropagation();
-                                                                                if (isSelected) {
-                                                                                    setSelectedStartServices(selectedStartServices.filter(id => id !== test.id));
-                                                                                } else {
-                                                                                    setSelectedStartServices([...selectedStartServices, test.id]);
-                                                                                }
-                                                                            }}
-                                                                            className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between group flex-shrink-0 ${isSelected ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-slate-100 hover:border-blue-200 hover:bg-slate-50'}`}
-                                                                        >
-                                                                            <div>
-                                                                                <p className={`font-bold text-sm ${isSelected ? 'text-blue-900' : 'text-slate-900'}`}>{test.name}</p>
-                                                                                <p className="text-xs text-slate-500 font-medium mt-0.5">₹{test.base_charge}</p>
+                                                        <React.Fragment>
+                                                            {selectedStartServices.length > 0 && (
+                                                                <div className="mb-4">
+                                                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Selected Services ({selectedStartServices.length})</label>
+                                                                    <div className="flex flex-wrap gap-2">
+                                                                        {selectedStartServices.map(id => {
+                                                                            const service = serviceDefinitions.find(s => s.id === id);
+                                                                            if(!service) return null;
+                                                                            return (
+                                                                                <div key={id} className="flex items-center gap-1 bg-blue-100 text-blue-800 px-3 py-1.5 rounded-lg text-sm font-bold">
+                                                                                    <span>{service.name}</span>
+                                                                                    <button type="button" onClick={() => setSelectedStartServices(selectedStartServices.filter(sId => sId !== id))} className="text-blue-500 hover:text-blue-800 ml-1 bg-blue-200 rounded-full p-0.5 transition-colors"><X size={14}/></button>
+                                                                                </div>
+                                                                            )
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            {serviceDefinitions.filter(t => t.name.toLowerCase().includes(serviceSearchQ.toLowerCase()) && !selectedStartServices.includes(t.id)).length === 0 ? (
+                                                                <p className="text-sm text-slate-400 text-center py-4 flex-shrink-0">No unselected services match your search.</p>
+                                                            ) : (
+                                                                <div className="flex-1 min-h-[300px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                                                                    {serviceDefinitions
+                                                                        .filter(t => t.name.toLowerCase().includes(serviceSearchQ.toLowerCase()) && !selectedStartServices.includes(t.id))
+                                                                        .map(test => {
+                                                                        const isSelected = selectedStartServices.includes(test.id);
+                                                                        return (
+                                                                            <div
+                                                                                key={test.id}
+                                                                                onClick={(e) => {
+                                                                                    e.preventDefault();
+                                                                                    e.stopPropagation();
+                                                                                    if (isSelected) {
+                                                                                        setSelectedStartServices(selectedStartServices.filter(id => id !== test.id));
+                                                                                    } else {
+                                                                                        setSelectedStartServices([...selectedStartServices, test.id]);
+                                                                                    }
+                                                                                }}
+                                                                                className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between group flex-shrink-0 ${isSelected ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-slate-100 hover:border-blue-200 hover:bg-slate-50'}`}
+                                                                            >
+                                                                                <div>
+                                                                                    <p className={`font-bold text-sm ${isSelected ? 'text-blue-900' : 'text-slate-900'}`}>{test.name}</p>
+                                                                                    <p className="text-xs text-slate-500 font-medium mt-0.5">₹{test.base_charge}</p>
+                                                                                </div>
+                                                                                <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${isSelected ? 'border-blue-600 bg-blue-600' : 'border-slate-300'}`}>
+                                                                                    {isSelected && <CheckCircle2 size={14} className="text-white" />}
+                                                                                </div>
                                                                             </div>
-                                                                            <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${isSelected ? 'border-blue-600 bg-blue-600' : 'border-slate-300'}`}>
-                                                                                {isSelected && <CheckCircle2 size={14} className="text-white" />}
-                                                                            </div>
-                                                                        </div>
-                                                                    );
-                                                                })}
-                                                            </div>
-                                                        )
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
+                                                        </React.Fragment>
                                                     ) : visitForm.assigned_role === 'LAB' ? (
-                                                        availableLabTests.filter(t => t.name.toLowerCase().includes(labTestSearchQ.toLowerCase())).length === 0 ? (
-                                                            <p className="text-sm text-slate-400 text-center py-4 flex-shrink-0">No lab tests match your search.</p>
-                                                        ) : (
-                                                            <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar min-h-0">
-                                                                {availableLabTests.filter(t => t.name.toLowerCase().includes(labTestSearchQ.toLowerCase())).map(test => {
+                                                        <React.Fragment>
+                                                            {selectedLabTests.length > 0 && (
+                                                                <div className="mb-4">
+                                                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">Selected Lab Tests ({selectedLabTests.length})</label>
+                                                                    <div className="flex flex-wrap gap-2">
+                                                                        {selectedLabTests.map(id => {
+                                                                            const test = availableLabTests.find(t => t.id === id);
+                                                                            if(!test) return null;
+                                                                            return (
+                                                                                <div key={id} className="flex items-center gap-1 bg-blue-100 text-blue-800 px-3 py-1.5 rounded-lg text-sm font-bold">
+                                                                                    <span>{test.name}</span>
+                                                                                    <button type="button" onClick={() => setSelectedLabTests(selectedLabTests.filter(tId => tId !== id))} className="text-blue-500 hover:text-blue-800 ml-1 bg-blue-200 rounded-full p-0.5 transition-colors"><X size={14}/></button>
+                                                                                </div>
+                                                                            )
+                                                                        })}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                            {availableLabTests.filter(t => t.name.toLowerCase().includes(labTestSearchQ.toLowerCase()) && !selectedLabTests.includes(t.id)).length === 0 ? (
+                                                                <p className="text-sm text-slate-400 text-center py-4 flex-shrink-0">No unselected lab tests match your search.</p>
+                                                            ) : (
+                                                                <div className="flex-1 min-h-[300px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                                                                    {availableLabTests
+                                                                        .filter(t => t.name.toLowerCase().includes(labTestSearchQ.toLowerCase()) && !selectedLabTests.includes(t.id))
+                                                                        .map(test => {
                                                                     const isSelected = selectedLabTests.includes(test.id);
                                                                     return (
                                                                         <div
@@ -1343,7 +1468,8 @@ const Reception = () => {
                                                                     );
                                                                 })}
                                                             </div>
-                                                        )
+                                                        )}
+                                                        </React.Fragment>
                                                     ) : null}
                                                     
                                                     <div className="mt-4 p-4 bg-blue-50/50 rounded-xl border border-blue-100 text-xs font-medium text-blue-800 flex gap-2 flex-shrink-0">
@@ -1755,6 +1881,180 @@ const Reception = () => {
                                     )}
                                 </div>
                             </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+            {/* --- MODAL: Route Patient --- */}
+            <AnimatePresence>
+                {showRouteModal && (
+                    <div className="fixed inset-0 z-[120] flex items-center justify-center">
+                        <motion.div
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+                            onClick={() => !routeSubmitting && setShowRouteModal(false)}
+                        />
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="relative bg-white w-full max-w-lg rounded-2xl shadow-2xl p-6"
+                        >
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                                    <Activity className="text-indigo-600" />
+                                    Route Patient
+                                </h3>
+                                <button onClick={() => !routeSubmitting && setShowRouteModal(false)} className="p-2 text-slate-400 hover:text-red-500 rounded-full hover:bg-slate-100 transition-colors">
+                                    <X size={20} />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleRoutePatient} className="flex flex-col h-[65vh] max-h-[600px]">
+                                {/* Department Selection */}
+                                <div className="mb-4 flex-shrink-0">
+                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Destination Department</label>
+                                    <select
+                                        value={routeForm.assigned_role}
+                                        onChange={(e) => setRouteForm({ ...routeForm, assigned_role: e.target.value })}
+                                        className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+                                    >
+                                        <option value="DOCTOR">Doctor (Consultation)</option>
+                                        <option value="LAB">Laboratory</option>
+                                        <option value="CASUALTY">Services / Casualty</option>
+                                    </select>
+                                </div>
+
+                                {routeForm.assigned_role === 'DOCTOR' ? (
+                                    <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Select Doctor</label>
+                                        <div className="relative mb-3 flex-shrink-0">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                            <input
+                                                type="text"
+                                                placeholder="Search doctors..."
+                                                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                                                value={routeDoctorSearch}
+                                                onChange={(e) => setRouteDoctorSearch(e.target.value)}
+                                            />
+                                        </div>
+                                        {doctors.filter(d => d.username.toLowerCase().includes(routeDoctorSearch.toLowerCase())).length === 0 ? (
+                                            <p className="text-sm text-slate-400 text-center py-4">No doctors available.</p>
+                                        ) : doctors.filter(d => d.username.toLowerCase().includes(routeDoctorSearch.toLowerCase())).map(doc => (
+                                            <div
+                                                key={doc.u_id || doc.id}
+                                                onClick={() => setRouteForm({ ...routeForm, doctor: doc.u_id || doc.id })}
+                                                className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex items-center gap-4 group ${routeForm.doctor === (doc.u_id || doc.id)
+                                                    ? 'border-indigo-600 bg-indigo-50 shadow-sm'
+                                                    : 'border-slate-100 hover:border-indigo-200 hover:bg-slate-50'
+                                                    }`}
+                                            >
+                                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${routeForm.doctor === (doc.u_id || doc.id) ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400 group-hover:text-indigo-500'
+                                                    }`}>
+                                                    <UserIcon size={18} />
+                                                </div>
+                                                <div className="flex-1">
+                                                    <p className={`font-bold text-sm ${routeForm.doctor === (doc.u_id || doc.id) ? 'text-indigo-900' : 'text-slate-900'}`}>
+                                                        Dr. {doc.first_name || doc.username} {doc.last_name || ''}
+                                                    </p>
+                                                </div>
+                                                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${routeForm.doctor === (doc.u_id || doc.id) ? 'border-indigo-600' : 'border-slate-300'
+                                                    }`}>
+                                                    {routeForm.doctor === (doc.u_id || doc.id) && <div className="w-2.5 h-2.5 rounded-full bg-indigo-600" />}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block flex-shrink-0">
+                                            {routeForm.assigned_role === 'CASUALTY' ? 'Select Services' : 'Select Lab Tests'}
+                                        </label>
+                                        <div className="relative mb-3 flex-shrink-0">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                            <input
+                                                type="text"
+                                                placeholder={routeForm.assigned_role === 'CASUALTY' ? 'Search services...' : 'Search lab tests...'}
+                                                className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none transition-all"
+                                                value={routeForm.assigned_role === 'CASUALTY' ? routeServiceSearch : routeLabSearch}
+                                                onChange={(e) => routeForm.assigned_role === 'CASUALTY' ? setRouteServiceSearch(e.target.value) : setRouteLabSearch(e.target.value)}
+                                            />
+                                        </div>
+                                        
+                                        {/* Selected Items Tags */}
+                                        {(routeForm.assigned_role === 'CASUALTY' ? routeForm.casualty_services : routeForm.lab_tests).length > 0 && (
+                                            <div className="mb-3 flex-shrink-0">
+                                                <div className="flex flex-wrap gap-2">
+                                                    {(routeForm.assigned_role === 'CASUALTY' ? routeForm.casualty_services : routeForm.lab_tests).map(id => {
+                                                        const item = routeForm.assigned_role === 'CASUALTY' 
+                                                            ? serviceDefinitions.find(s => s.id === id)
+                                                            : availableLabTests.find(t => t.id === id);
+                                                        if(!item) return null;
+                                                        return (
+                                                            <div key={id} className="flex items-center gap-1 bg-indigo-100 text-indigo-800 px-3 py-1.5 rounded-lg text-sm font-bold">
+                                                                <span>{item.name}</span>
+                                                                <button type="button" onClick={() => {
+                                                                    if (routeForm.assigned_role === 'CASUALTY') {
+                                                                        setRouteForm(prev => ({ ...prev, casualty_services: prev.casualty_services.filter(sId => sId !== id) }));
+                                                                    } else {
+                                                                        setRouteForm(prev => ({ ...prev, lab_tests: prev.lab_tests.filter(tId => tId !== id) }));
+                                                                    }
+                                                                }} className="text-indigo-500 hover:text-indigo-800 ml-1 bg-indigo-200 rounded-full p-0.5 transition-colors"><X size={14}/></button>
+                                                            </div>
+                                                        )
+                                                    })}
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
+                                            {(routeForm.assigned_role === 'CASUALTY' ? serviceDefinitions : availableLabTests)
+                                                .filter(t => t.name.toLowerCase().includes((routeForm.assigned_role === 'CASUALTY' ? routeServiceSearch : routeLabSearch).toLowerCase()))
+                                                .map(item => {
+                                                const isSelected = (routeForm.assigned_role === 'CASUALTY' ? routeForm.casualty_services : routeForm.lab_tests).includes(item.id);
+                                                return (
+                                                    <div
+                                                        key={item.id}
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            if (routeForm.assigned_role === 'CASUALTY') {
+                                                                if (isSelected) {
+                                                                    setRouteForm(prev => ({ ...prev, casualty_services: prev.casualty_services.filter(id => id !== item.id) }));
+                                                                } else {
+                                                                    setRouteForm(prev => ({ ...prev, casualty_services: [...prev.casualty_services, item.id] }));
+                                                                }
+                                                            } else {
+                                                                if (isSelected) {
+                                                                    setRouteForm(prev => ({ ...prev, lab_tests: prev.lab_tests.filter(id => id !== item.id) }));
+                                                                } else {
+                                                                    setRouteForm(prev => ({ ...prev, lab_tests: [...prev.lab_tests, item.id] }));
+                                                                }
+                                                            }
+                                                        }}
+                                                        className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex items-center justify-between group ${isSelected ? 'border-indigo-600 bg-indigo-50 shadow-sm' : 'border-slate-100 hover:border-indigo-200 hover:bg-slate-50'}`}
+                                                    >
+                                                        <div>
+                                                            <p className={`font-bold text-sm ${isSelected ? 'text-indigo-900' : 'text-slate-900'}`}>{item.name}</p>
+                                                            {routeForm.assigned_role === 'CASUALTY' && <p className="text-xs text-slate-500 font-medium mt-0.5">₹{item.base_charge}</p>}
+                                                        </div>
+                                                        <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center ${isSelected ? 'border-indigo-600 bg-indigo-600' : 'border-slate-300'}`}>
+                                                            {isSelected && <CheckCircle2 size={14} className="text-white" />}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="pt-4 flex gap-3 flex-shrink-0 border-t border-slate-100 mt-4">
+                                    <button type="button" onClick={() => setShowRouteModal(false)} className="flex-1 p-3 rounded-xl border-2 border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-colors">Cancel</button>
+                                    <button type="submit" disabled={routeSubmitting} className="flex-1 p-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-600/30 disabled:opacity-50 disabled:cursor-not-allowed">
+                                        {routeSubmitting ? 'Routing...' : 'Confirm & Route'}
+                                    </button>
+                                </div>
+                            </form>
                         </motion.div>
                     </div>
                 )}

@@ -108,8 +108,8 @@ const Billing = () => {
     const fetchPendingVisits = async (showLoading = false) => {
         if (showLoading) setLoading(true);
         try {
-            // Visits where assigned_role is BILLING and status is OPEN/IN_PROGRESS
-            const { data } = await api.get('/reception/visits/?assigned_role=BILLING&status=OPEN');
+            // Visits where assigned_role is BILLING OR have unpaid/draft invoices
+            const { data } = await api.get('/reception/visits/?billing_queue=true');
             setPendingVisits(data.results || data || []);
         } catch (err) {
             console.error('Failed to load pending bills', err);
@@ -1377,9 +1377,9 @@ const Billing = () => {
                                             Save as Draft
                                         </button>
                                     )}
-                                    {(!formData.id || formData.payment_status === 'DRAFT' || formData.payment_status === 'PENDING') && (
+                                    {(!formData.id || formData.payment_status === 'DRAFT' || formData.payment_status === 'PENDING' || formData.payment_status === 'PARTIAL') && (
                                         <button onClick={() => handleCreateInvoice('PENDING')} disabled={isSubmitting} className="px-8 py-3 bg-slate-900 text-white rounded-xl font-bold shadow-xl shadow-slate-900/20 hover:bg-blue-600 transition-all flex items-center gap-2 disabled:bg-slate-400 disabled:cursor-not-allowed">
-                                            <CheckCircle2 size={18} /> {isSubmitting ? 'Saving...' : (formData.id && formData.payment_status === 'PENDING' ? 'Update & Pay' : 'Generate Invoice')}
+                                            <CheckCircle2 size={18} /> {isSubmitting ? 'Saving...' : (formData.id && (formData.payment_status === 'PENDING' || formData.payment_status === 'PARTIAL') ? 'Collect Payment' : 'Generate Invoice & Pay')}
                                         </button>
                                     )}
                                 </div>

@@ -347,16 +347,21 @@ class LabChargeViewSet(viewsets.ModelViewSet):
                 ).exists()
                 
                 if not pending_tests:
-                    instance.visit.assigned_role = 'DOCTOR'
-                    instance.visit.status = 'OPEN' 
-                    instance.visit.save()
-                    
-                    # Notify Doctor
-                    from core.models import Notification
                     if instance.visit.doctor:
+                        # Return to doctor if prescribed by one
+                        instance.visit.assigned_role = 'DOCTOR'
+                        instance.visit.status = 'OPEN'
+                        instance.visit.save()
+                        
+                        # Notify Doctor
+                        from core.models import Notification
                         Notification.objects.create(
                             recipient=instance.visit.doctor,
                             message=f"Lab Results Ready: {instance.visit.patient.full_name}",
                             type='LAB_RESULT',
                             related_id=instance.visit.id
                         )
+                    else:
+                        # If walk-in (no doctor), visit is complete
+                        instance.visit.status = 'CLOSED'
+                        instance.visit.save()
