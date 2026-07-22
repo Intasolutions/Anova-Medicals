@@ -130,8 +130,11 @@ class VisitViewSet(viewsets.ModelViewSet):
             from django.utils import timezone
             today = timezone.now().date()
             qs = qs.filter(
-                Q(assigned_role='BILLING', status='OPEN') | 
-                Q(invoices__payment_status__in=['DRAFT', 'PENDING', 'PARTIAL'])
+                Q(created_at__date=today) &
+                (
+                    Q(assigned_role='BILLING', status='OPEN') | 
+                    Q(invoices__payment_status__in=['DRAFT', 'PENDING', 'PARTIAL'])
+                )
             ).distinct()
             
         return qs
