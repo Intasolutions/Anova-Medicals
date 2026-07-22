@@ -128,7 +128,7 @@ class VisitViewSet(viewsets.ModelViewSet):
         if billing_queue == 'true':
             from django.db.models import Q
             from django.utils import timezone
-            today = timezone.localdate()
+            today = timezone.now().date()
             qs = qs.filter(
                 Q(assigned_role='BILLING', status='OPEN') | 
                 Q(invoices__payment_status__in=['DRAFT', 'PENDING', 'PARTIAL'])
