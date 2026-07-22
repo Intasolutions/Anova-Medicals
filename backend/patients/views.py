@@ -132,7 +132,7 @@ class VisitViewSet(viewsets.ModelViewSet):
             qs = qs.filter(
                 Q(assigned_role='BILLING', status='OPEN') | 
                 Q(invoices__payment_status__in=['DRAFT', 'PENDING', 'PARTIAL'])
-            ).filter(created_at__date=today).distinct()
+            ).distinct()
             
         return qs
 

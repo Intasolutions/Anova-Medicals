@@ -640,14 +640,16 @@ const Laboratory = () => {
         const normalize = str => str?.toLowerCase().replace(/[^a-z0-9]/g, '');
         const catalogTest = labTests.find(t => normalize(t.name) === normalize(charge.test_name));
 
-        let initialResults = charge.results || catalogTest?.parameters?.map(p => ({
-            name: p.name,
-            value: '',
-            unit: p.unit || '',
-            normal: p.normal_range || '',
-            note: p.description || '',
-            is_heading: p.is_heading || false
-        })) || [];
+        let initialResults = catalogTest?.parameters?.length > 0 
+            ? catalogTest.parameters.map(p => ({
+                name: p.name,
+                value: '',
+                unit: p.unit || '',
+                normal: p.normal_range || '',
+                note: p.description || '',
+                is_heading: p.is_heading || false
+            }))
+            : [];
 
         if (initialResults.length === 0) {
             // Fallback to Templates or Default
