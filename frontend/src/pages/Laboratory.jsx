@@ -1647,12 +1647,13 @@ const Laboratory = () => {
             <AnimatePresence>
                 {showModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-950/40 backdrop-blur-sm no-print">
-                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden flex flex-col">
+                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
                             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                                 <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">New Lab Request</h3>
                                 <button onClick={() => setShowModal(false)} className="p-2 rounded-full hover:bg-slate-200 transition-colors"><X size={20} className="text-slate-500" /></button>
                             </div>
-                            <form onSubmit={handleAddTest} className="p-8 space-y-6">
+                            <form onSubmit={handleAddTest} className="flex flex-col flex-1 overflow-hidden">
+                                <div className="p-8 space-y-6 overflow-y-auto flex-1">
                                 {/* Patient Search Block */}
                                 {!selectedVisit ? (
                                     <div className="space-y-2">
@@ -1877,7 +1878,8 @@ const Laboratory = () => {
                                     )}
                                 </div>
 
-                                <div className="flex justify-end gap-3 pt-4">
+                                </div>
+                                <div className="p-6 border-t border-slate-100 bg-slate-50 mt-auto shrink-0">
                                     <Button type="submit" disabled={selectedTests.length === 0} className="w-full h-12 rounded-xl bg-slate-900 text-white font-bold shadow-lg shadow-slate-900/20 disabled:opacity-50 disabled:cursor-not-allowed">
                                         {selectedTests.length > 0 ? `Confirm & Create Request (${selectedTests.length})` : 'Select a Test from Search'}
                                     </Button>

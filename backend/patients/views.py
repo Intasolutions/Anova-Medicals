@@ -61,6 +61,8 @@ class PatientViewSet(viewsets.ModelViewSet):
         if only_active == 'true':
             qs = qs.filter(has_active_visit=True)
             
+        qs = qs.prefetch_related('visits', 'visits__doctor')
+            
         return qs
 
     @action(detail=False, methods=['get'], url_path='export')
@@ -136,6 +138,19 @@ class VisitViewSet(viewsets.ModelViewSet):
                     Q(invoices__payment_status__in=['DRAFT', 'PENDING', 'PARTIAL'])
                 )
             ).distinct()
+            
+        qs = qs.select_related('patient', 'doctor', 'doctor_note')
+        qs = qs.prefetch_related(
+            'lab_charges',
+            'pharmacy_sales',
+            'pharmacy_sales__items',
+            'pharmacy_sales__items__med_stock',
+            'casualty_services',
+            'casualty_observations',
+            'casualty_medicines',
+            'casualty_medicines__med_stock',
+            'invoices'
+        )
             
         return qs
 

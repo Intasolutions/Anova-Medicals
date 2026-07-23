@@ -21,19 +21,19 @@ class PatientSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'p_id', 'created_at', 'updated_at']
 
     def get_active_visit_role(self, obj):
-        active_visit = obj.visits.filter(status__in=['OPEN', 'IN_PROGRESS', 'WAITING']).first()
+        active_visit = next((v for v in obj.visits.all() if v.status in ['OPEN', 'IN_PROGRESS', 'WAITING']), None)
         if active_visit:
             return active_visit.assigned_role
         return None
 
     def get_active_visit_id(self, obj):
-        active_visit = obj.visits.filter(status__in=['OPEN', 'IN_PROGRESS', 'WAITING']).first()
+        active_visit = next((v for v in obj.visits.all() if v.status in ['OPEN', 'IN_PROGRESS', 'WAITING']), None)
         if active_visit:
             return active_visit.id
         return None
 
     def get_total_visits(self, obj):
-        return obj.visits.count()
+        return len(obj.visits.all())
 
     def validate_phone(self, value):
         cleaned = value.strip()
@@ -46,13 +46,32 @@ class PatientSerializer(serializers.ModelSerializer):
 
     last_consulted_doctor = serializers.SerializerMethodField()
 
-    def get_last_consulted_doctor(self, obj):
+    def get_last_visit_date(self, obj):
+        visits = list(obj.visits.all())
+        if visits:
+            last_visit = sorted(visits, key=lambda x: x.created_at, reverse=True)[0]
+            return last_visit.created_at
+        return obj.created_at
+
+    def get_last_doctor(self, obj):
         # Find the last visit that actually had a doctor assigned
-        last_visit = obj.visits.filter(doctor__isnull=False).order_by('-created_at').first()
-        if last_visit:
+        visits = [v for v in obj.visits.all() if v.doctor_id]
+        if visits:
+            last_visit = sorted(visits, key=lambda x: x.created_at, reverse=True)[0]
             return {
                 "id": last_visit.doctor.id,
-                "name": f"Dr. {last_visit.doctor.first_name} {last_visit.doctor.last_name}"
+                "name": f"Dr. {last_visit.doctor.first_name} {last_visit.doctor.last_name}" if hasattr(last_visit.doctor, 'first_name') else f"Dr. {last_visit.doctor.username}"
+            }
+        return None
+
+    def get_last_consulted_doctor(self, obj):
+        # Find the last visit that actually had a doctor assigned
+        visits = [v for v in obj.visits.all() if v.doctor_id]
+        if visits:
+            last_visit = sorted(visits, key=lambda x: x.created_at, reverse=True)[0]
+            return {
+                "id": last_visit.doctor.id,
+                "name": f"Dr. {last_visit.doctor.first_name} {last_visit.doctor.last_name}" if hasattr(last_visit.doctor, 'first_name') else f"Dr. {last_visit.doctor.username}"
             }
         return None
 

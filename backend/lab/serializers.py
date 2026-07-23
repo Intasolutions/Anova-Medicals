@@ -279,6 +279,29 @@ class LabChargeSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['lc_id', 'created_at', 'updated_at']
 
+    @transaction.atomic
+    def create(self, validated_data):
+        test_name = validated_data.get('test_name')
+        from .models import LabTest
+        test_obj = LabTest.objects.filter(name=test_name).first()
+
+        if test_obj and test_obj.is_package:
+            # Create the parent charge
+            parent_charge = super().create(validated_data)
+            # Create sub-tests
+            for sub_test in test_obj.package_tests.all():
+                LabCharge.objects.create(
+                    visit=validated_data.get('visit'),
+                    test_name=sub_test.name,
+                    sub_name=sub_test.sub_name,
+                    amount=0,
+                    status=validated_data.get('status', 'PENDING'),
+                    parent_charge=parent_charge
+                )
+            return parent_charge
+        
+        return super().create(validated_data)
+
     def get_doctor_name(self, obj):
         if obj.visit and obj.visit.doctor:
             return obj.visit.doctor.username
