@@ -18,8 +18,17 @@ const Reports = () => {
     const [activeReport, setActiveReport] = useState('financial');
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 7) + '-01');
-    const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+        const getLocalDateStr = () => {
+        const d = new Date();
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    };
+    const getLocalMonthStr = () => {
+        const d = new Date();
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01';
+    };
+
+    const [startDate, setStartDate] = useState(getLocalMonthStr());
+    const [endDate, setEndDate] = useState(getLocalDateStr());
 
     const [selectedNote, setSelectedNote] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');

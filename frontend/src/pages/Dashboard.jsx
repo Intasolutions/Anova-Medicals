@@ -306,6 +306,44 @@ const Dashboard = () => {
                 </motion.div>
             </div>
 
+            
+            {/* --- Department Breakdown --- */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    className="lg:col-span-3 bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50 p-8 flex flex-col"
+                >
+                    <div className="flex justify-between items-center mb-8">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-purple-50 rounded-xl text-purple-600"><Wallet size={20} /></div>
+                            <h2 className="text-xl font-black text-slate-900 tracking-tight font-outfit">Revenue by Department</h2>
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {stats?.module_revenue && Object.keys(stats.module_revenue).length > 0 ? (
+                            Object.entries(stats.module_revenue).map(([dept, amount]) => (
+                                <div key={dept} className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-3">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">{dept}</span>
+                                        <span className="text-lg font-black text-slate-900">₹{amount.toLocaleString()}</span>
+                                    </div>
+                                    <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                                        <div className="h-full bg-purple-500 rounded-full" style={{ width: `${Math.min((amount / (stats.revenue_today || 1)) * 100, 100)}%` }} />
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="col-span-full py-8 text-center">
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No department revenue data available for this date.</p>
+                            </div>
+                        )}
+                    </div>
+                </motion.div>
+            </div>
+
             {/* Custom Styles for invisible scrollbars if needed */}
             <style>{`
                 ::-webkit-scrollbar { width: 0px; background: transparent; }

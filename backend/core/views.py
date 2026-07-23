@@ -60,6 +60,15 @@ class DashboardStatsView(APIView):
         from django.db.models import F
         low_stock_count = PharmacyStock.objects.filter(qty_available__lte=F('reorder_level'), is_deleted=False).count()
 
+        # 6. Module-wise Revenue Breakdown
+        from billing.models import InvoiceItem
+        module_revenue_raw = InvoiceItem.objects.filter(
+            invoice__payment_status='PAID',
+            created_at__date=target_date
+        ).values('dept').annotate(total=Sum('amount'))
+        
+        module_revenue = {item['dept']: float(item['total']) for item in module_revenue_raw}
+
         data = {
             "patients_today": visits_today, # Used to be new_patients_today, now tracks total visits
             "new_patients_today": new_patients_today,
@@ -68,7 +77,8 @@ class DashboardStatsView(APIView):
             "pharmacy_low_stock": low_stock_count,
             "pending_labs": pending_labs,
             "recent_visits": recent_visits_data,
-            "revenue_trend": [{ "date": item['date'], "amount": float(item['total']) } for item in weekly_revenue]
+            "revenue_trend": [{ "date": item['date'], "amount": float(item['total']) } for item in weekly_revenue],
+            "module_revenue": module_revenue
         }
 
         return Response(data)

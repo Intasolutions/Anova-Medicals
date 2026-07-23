@@ -23,6 +23,7 @@ const Billing = () => {
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [searchTerm, setSearchTerm] = useState("");
+    const [statusFilter, setStatusFilter] = useState("ALL");
     const [page, setPage] = useState(1);
     const [totalInvoices, setTotalInvoices] = useState(0);
     const globalSearch = searchTerm; // Map searchTerm to globalSearch for compatibility with the copied logic
@@ -1033,15 +1034,29 @@ const Billing = () => {
                     <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wide flex items-center gap-2">
                         <FileText size={16} className="text-slate-400" /> Recent Invoices
                     </h3>
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input
-                            type="text"
-                            placeholder="Search invoices..."
-                            className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none w-64 transition-all"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+                    <div className="flex items-center gap-3">
+                        <select
+                            value={statusFilter}
+                            onChange={(e) => setStatusFilter(e.target.value)}
+                            className="py-2 px-4 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-600 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all cursor-pointer"
+                        >
+                            <option value="ALL">All Status</option>
+                            <option value="PAID">Paid</option>
+                            <option value="PENDING">Pending</option>
+                            <option value="PARTIAL">Partial</option>
+                            <option value="CANCELLED">Cancelled</option>
+                            <option value="DRAFT">Draft</option>
+                        </select>
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                            <input
+                                type="text"
+                                placeholder="Search invoices..."
+                                className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none w-64 transition-all"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
                     </div>
                 </div>
 
@@ -1058,7 +1073,7 @@ const Billing = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {invoices.filter(inv => (inv.patient_name || "").toLowerCase().includes(searchTerm.toLowerCase()) || (inv.invoice_number || inv.id || "").toString().toLowerCase().includes(searchTerm.toLowerCase())).map((invoice) => (
+                            {invoices.filter(inv => { const matchesSearch = (inv.patient_name || "").toLowerCase().includes(searchTerm.toLowerCase()) || (inv.invoice_number || inv.id || "").toString().toLowerCase().includes(searchTerm.toLowerCase()); const matchesStatus = statusFilter === "ALL" || inv.payment_status === statusFilter; return matchesSearch && matchesStatus; }).map((invoice) => (
                                 <tr key={invoice.id} className="hover:bg-slate-50/80 transition-colors group">
                                     <td className="px-6 py-4 font-mono text-xs font-bold text-slate-500">{invoice.invoice_number || `#${invoice.id}`}</td>
                                     <td className="px-6 py-4 font-bold text-slate-900">{invoice.patient_name || "Guest"}</td>

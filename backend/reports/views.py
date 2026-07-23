@@ -102,12 +102,16 @@ class FinancialReportView(BaseReportView):
         start_date, end_date = self.get_date_range(request)
         
         # 1. REVENUE
-        # Main Billing Invoices
-        invoices = Invoice.objects.filter(
+        from billing.models import PaymentTransaction
+        payments = PaymentTransaction.objects.filter(
             created_at__date__gte=start_date,
-            created_at__date__lte=end_date,
-            payment_status='PAID'
-        ).select_related('visit__patient')
+            created_at__date__lte=end_date
+        )
+        
+        # Get invoices that were interacted with (paid/partially paid) during this period for the details list
+        invoices = Invoice.objects.filter(
+            payments__in=payments
+        ).distinct().select_related('visit__patient')
         
         print(f"DEBUG: FinancialReport {start_date} to {end_date}", flush=True)
         print(f"DEBUG: Invoices found: {invoices.count()}", flush=True)
@@ -121,11 +125,9 @@ class FinancialReportView(BaseReportView):
             visit__isnull=True
         )
 
-        billing_gross = invoices.aggregate(total=Sum('total_amount'))['total'] or 0
-        billing_refunds = invoices.aggregate(total=Sum('refund_amount'))['total'] or 0
-        billing_revenue = float(billing_gross) - float(billing_refunds)
+        billing_revenue = payments.aggregate(total=Sum('amount'))['total'] or 0
         
-        print(f"DEBUG: Billing Revenue: {billing_revenue}", flush=True)
+        print(f"DEBUG: Billing Revenue (Actual Collected): {billing_revenue}", flush=True)
 
         pharmacy_gross = pharmacy_sales.aggregate(total=Sum('total_amount'))['total'] or 0
         
@@ -195,13 +197,13 @@ class FinancialReportView(BaseReportView):
         net_profit = total_revenue - total_expense
 
         if request.query_params.get('export') == 'csv':
-            data = [[i.id, i.visit.patient.full_name if i.visit else i.patient_name, i.total_amount, i.payment_status, i.created_at] for i in invoices]
-            return self.export_csv("financial_report", ["Invoice ID", "Patient", "Amount", "Status", "Date"], data)
+            data = [[i.id, i.visit.patient.full_name if i.visit and i.visit.patient else i.patient_name, i.total_amount, sum(p.amount for p in i.payments.all()), i.payment_status, i.created_at] for i in invoices]
+            return self.export_csv("financial_report", ["Invoice ID", "Patient", "Total Amount", "Amount Paid", "Status", "Date"], data)
         
         details = [{
             "id": str(i.id)[:8],
-            "patient": i.visit.patient.full_name if i.visit else i.patient_name,
-            "amount": i.total_amount,
+            "patient": i.visit.patient.full_name if i.visit and i.visit.patient else (i.patient_name or "Walk-in"),
+            "amount": sum(p.amount for p in i.payments.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)), # Amount paid during this period
             "status": i.get_payment_status_display(),
             "date": i.created_at
         } for i in invoices]
