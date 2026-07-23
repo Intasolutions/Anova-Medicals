@@ -100,13 +100,21 @@ const Laboratory = () => {
 
         function buildGroup(items) {
             const first = items[0];
-            const allCancelled = items.every(i => i.status === 'CANCELLED');
-            const allCompleted = items.every(i => i.status === 'COMPLETED' || i.status === 'CANCELLED');
             
-            const anyPending = items.some(i => i.status === 'PENDING');
-            const anyDrawn = items.some(i => i.status === 'DRAWN');
-            const anyReceived = items.some(i => i.status === 'RECEIVED');
-            const anyVerification = items.some(i => i.status === 'VERIFICATION');
+            const actionableItems = items.filter(i => {
+                const catalogTest = labTests.find(t => t.name === i.test_name);
+                return !(catalogTest && catalogTest.is_package);
+            });
+            
+            const itemsToEvaluate = actionableItems.length > 0 ? actionableItems : items;
+
+            const allCancelled = itemsToEvaluate.every(i => i.status === 'CANCELLED');
+            const allCompleted = itemsToEvaluate.every(i => i.status === 'COMPLETED' || i.status === 'CANCELLED');
+            
+            const anyPending = itemsToEvaluate.some(i => i.status === 'PENDING');
+            const anyDrawn = itemsToEvaluate.some(i => i.status === 'DRAWN');
+            const anyReceived = itemsToEvaluate.some(i => i.status === 'RECEIVED');
+            const anyVerification = itemsToEvaluate.some(i => i.status === 'VERIFICATION');
 
             let status = 'CANCELLED';
             if (allCancelled) status = 'CANCELLED';
@@ -139,7 +147,7 @@ const Laboratory = () => {
 
         // Sort final groups by newest first (for display)
         return finalGroups.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    }, [chargesData.results]);
+    }, [chargesData.results, labTests]);
 
     // Supplier State
     const [showSupplierModal, setShowSupplierModal] = useState(false);
@@ -921,7 +929,7 @@ const Laboratory = () => {
                                 <table className="w-full text-left border-collapse">
                                     <thead className="bg-white sticky top-0 z-10 shadow-sm">
                                         <tr>
-                                            {['Patient Details', 'Test Requested', 'Age/Sex', 'Reference', 'Status', 'Cost', 'Actions'].map(h => (
+                                            {['Patient Details', 'Test Requested & Actions', 'Age/Sex', 'Reference', 'Status', 'Cost'].map(h => (
                                                 <th key={h} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/80 backdrop-blur-sm">{h}</th>
                                             ))}
                                         </tr>
@@ -1009,20 +1017,53 @@ const Laboratory = () => {
                                                     </div>
                                                 </td>
 
-                                                {/* Tests List */}
+                                                {/* Tests List & Actions */}
                                                 <td className="px-6 py-4">
-                                                    <div className="flex flex-col gap-1">
-                                                        {group.items.map((test, idx) => (
-                                                            <div key={test.lc_id} className="flex items-center gap-2">
-                                                                <div className={`w-1.5 h-1.5 rounded-full ${test.status === 'COMPLETED' ? 'bg-emerald-500' : test.status === 'CANCELLED' ? 'bg-red-500' : 'bg-amber-500'}`} />
-                                                                <span className={`font-bold text-xs ${test.status === 'COMPLETED' ? 'text-emerald-700' : test.status === 'CANCELLED' ? 'text-red-400 line-through' : 'text-slate-700'}`}>
-                                                                    {test.test_name}
-                                                                </span>
+                                                    <div className="flex flex-col gap-2">
+                                                        {group.items.map((test, idx) => {
+                                                            const isPkg = labTests.find(t => t.name === test.test_name)?.is_package;
+                                                            return (
+                                                            <div key={test.lc_id} className="flex flex-wrap items-center gap-3 border-b border-slate-100 pb-2 last:border-0 last:pb-0">
+                                                                <div className="flex items-center gap-2">
+                                                                    {!isPkg && <div className={`w-1.5 h-1.5 shrink-0 rounded-full ${test.status === 'COMPLETED' ? 'bg-emerald-500' : test.status === 'CANCELLED' ? 'bg-red-500' : 'bg-amber-500'}`} />}
+                                                                    <span className={`font-bold text-[11px] uppercase ${isPkg ? 'text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded-md text-[9px]' : test.status === 'COMPLETED' ? 'text-emerald-700' : test.status === 'CANCELLED' ? 'text-red-400 line-through' : 'text-slate-700'}`}>
+                                                                        {test.test_name} {isPkg && '(PACKAGE)'}
+                                                                    </span>
+                                                                </div>
+                                                                {!isPkg && (
+                                                                <div className="flex flex-wrap items-center gap-1.5 ml-2">
+                                                                    {test.status === 'PENDING' && (
+                                                                        <button onClick={() => handleUpdateStatus(test.lc_id, 'DRAWN')} className="px-2 py-0.5 bg-fuchsia-50 text-fuchsia-600 text-[10px] font-bold rounded shadow-sm border border-fuchsia-100 hover:bg-fuchsia-100">
+                                                                            Mark Drawn
+                                                                        </button>
+                                                                    )}
+                                                                    {test.status === 'DRAWN' && (
+                                                                        <button onClick={() => handleUpdateStatus(test.lc_id, 'RECEIVED')} className="px-2 py-0.5 bg-cyan-50 text-cyan-600 text-[10px] font-bold rounded shadow-sm border border-cyan-100 hover:bg-cyan-100">
+                                                                            Mark Received
+                                                                        </button>
+                                                                    )}
+                                                                    {['RECEIVED', 'VERIFICATION'].includes(test.status) && (
+                                                                        <button onClick={() => handleOpenResultEntry(test)} className={`px-2 py-0.5 text-[10px] font-bold rounded shadow-sm border ${test.status === 'VERIFICATION' ? 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'}`}>
+                                                                            {test.status === 'VERIFICATION' ? 'Verify' : 'Result'}
+                                                                        </button>
+                                                                    )}
+                                                                    {test.status === 'COMPLETED' && (
+                                                                        <button onClick={() => handleOpenPrintModal(test)} className="px-2 py-0.5 bg-slate-900 text-white text-[10px] font-bold rounded shadow-sm flex items-center gap-1 hover:bg-slate-700">
+                                                                            <Printer size={10} /> Print
+                                                                        </button>
+                                                                    )}
+                                                                    {!['COMPLETED', 'CANCELLED'].includes(test.status) && (
+                                                                        <button onClick={() => handleUpdateStatus(test.lc_id, 'CANCELLED')} className="px-2 py-0.5 bg-red-50 text-red-600 text-[10px] font-bold rounded shadow-sm border border-red-100 hover:bg-red-100">
+                                                                            Cancel
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                                )}
                                                             </div>
-                                                        ))}
+                                                        )})}
                                                     </div>
                                                 </td>
-
+                                                
                                                 {/* Age/Sex */}
                                                 <td className="px-6 py-4 text-sm font-medium text-slate-600">{group.patient_age}Y / {group.patient_sex}</td>
 
@@ -1036,80 +1077,32 @@ const Laboratory = () => {
 
                                                 {/* Group Status */}
                                                 <td className="px-6 py-4">
-                                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wide border ${group.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
-                                                        group.status === 'CANCELLED' ? 'bg-red-50 text-red-600 border-red-100' :
-                                                            group.status === 'VERIFICATION' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
-                                                                group.status === 'RECEIVED' ? 'bg-cyan-50 text-cyan-600 border-cyan-100' :
-                                                                    group.status === 'DRAWN' ? 'bg-fuchsia-50 text-fuchsia-600 border-fuchsia-100' :
-                                                                        'bg-amber-50 text-amber-600 border-amber-100'
-                                                        }`}>
-                                                        {group.status === 'COMPLETED' && <CheckCircle2 size={12} />}
-                                                        {group.status === 'PENDING' && <Clock size={12} />}
-                                                        {group.status === 'DRAWN' && <FlaskConical size={12} />}
-                                                        {group.status === 'RECEIVED' && <TestTube2 size={12} />}
-                                                        {group.status === 'VERIFICATION' && <CheckCircle2 size={12} />}
-                                                        {group.status}
-                                                    </span>
+                                                    <div className="flex flex-col gap-2 items-start">
+                                                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wide border ${group.status === 'COMPLETED' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                                                            group.status === 'CANCELLED' ? 'bg-red-50 text-red-600 border-red-100' :
+                                                                group.status === 'VERIFICATION' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
+                                                                    group.status === 'RECEIVED' ? 'bg-cyan-50 text-cyan-600 border-cyan-100' :
+                                                                        group.status === 'DRAWN' ? 'bg-fuchsia-50 text-fuchsia-600 border-fuchsia-100' :
+                                                                            'bg-amber-50 text-amber-600 border-amber-100'
+                                                            }`}>
+                                                            {group.status === 'COMPLETED' && <CheckCircle2 size={12} />}
+                                                            {group.status === 'PENDING' && <Clock size={12} />}
+                                                            {group.status === 'DRAWN' && <FlaskConical size={12} />}
+                                                            {group.status === 'RECEIVED' && <TestTube2 size={12} />}
+                                                            {group.status === 'VERIFICATION' && <CheckCircle2 size={12} />}
+                                                            {group.status}
+                                                        </span>
+                                                        {group.status === 'COMPLETED' && (
+                                                            <button onClick={() => handleOpenPrintModal(group)} className="flex items-center gap-1.5 px-2.5 py-1 bg-slate-900 text-white text-[10px] font-bold rounded shadow-sm hover:bg-slate-700 transition-all">
+                                                                <Printer size={12} /> Print All
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </td>
 
                                                 {/* Total Cost */}
                                                 <td className="px-6 py-4 font-bold text-slate-900">
                                                     ₹{group.items.reduce((sum, i) => sum + parseFloat(i.amount || 0), 0).toFixed(2)}
-                                                </td>
-
-                                                {/* Actions */}
-                                                <td className="px-6 py-4">
-                                                    <div className="flex flex-col gap-2">
-                                                        {/* Individual Actions if Not Completed */}
-                                                        {['PENDING', 'DRAWN', 'RECEIVED', 'VERIFICATION'].includes(group.status) && (
-                                                            <div className="flex gap-1 flex-wrap">
-                                                                {group.items.filter(i => ['PENDING', 'DRAWN', 'RECEIVED', 'VERIFICATION'].includes(i.status)).map(t => (
-                                                                    <React.Fragment key={t.lc_id}>
-                                                                        {t.status === 'PENDING' && (
-                                                                            <button
-                                                                                onClick={() => handleUpdateStatus(t.lc_id, 'DRAWN')}
-                                                                                className="px-2 py-1 bg-fuchsia-50 text-fuchsia-600 text-[10px] font-bold rounded hover:bg-fuchsia-100 transition-all border border-fuchsia-100"
-                                                                            >
-                                                                                Mark Drawn
-                                                                            </button>
-                                                                        )}
-                                                                        {t.status === 'DRAWN' && (
-                                                                            <button
-                                                                                onClick={() => handleUpdateStatus(t.lc_id, 'RECEIVED')}
-                                                                                className="px-2 py-1 bg-cyan-50 text-cyan-600 text-[10px] font-bold rounded hover:bg-cyan-100 transition-all border border-cyan-100"
-                                                                            >
-                                                                                Mark Received
-                                                                            </button>
-                                                                        )}
-                                                                        {['RECEIVED', 'VERIFICATION'].includes(t.status) && (
-                                                                            <button
-                                                                                onClick={() => handleOpenResultEntry(t)}
-                                                                                className={`px-2 py-1 text-[10px] font-bold rounded transition-all border ${t.status === 'VERIFICATION' ? 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'}`}
-                                                                                title={`${t.status === 'VERIFICATION' ? 'Verify' : 'Enter'} Result for ${t.test_name}`}
-                                                                            >
-                                                                                {t.status === 'VERIFICATION' ? 'Verify:' : 'Result:'} {t.test_name}
-                                                                            </button>
-                                                                        )}
-                                                                        <button
-                                                                            onClick={() => handleUpdateStatus(t.lc_id, 'CANCELLED')}
-                                                                            className="px-2 py-1 bg-red-50 text-red-600 text-[10px] font-bold rounded hover:bg-red-100 transition-all border border-red-100"
-                                                                            title={`Cancel ${t.test_name}`}
-                                                                        >
-                                                                            Cancel
-                                                                        </button>
-                                                                    </React.Fragment>
-                                                                ))}
-                                                            </div>
-                                                        )}
-
-                                                        {/* Consolidated Print Action */}
-                                                        {group.status === 'COMPLETED' && (
-                                                            <button onClick={() => handleOpenPrintModal(group)} className="flex items-center justify-center gap-2 px-3 py-1.5 bg-slate-900 text-white text-xs font-bold rounded-lg hover:bg-slate-700 shadow-md transition-all mt-1">
-                                                                <Printer size={14} />
-                                                                Print Report
-                                                            </button>
-                                                        )}
-                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -2315,7 +2308,12 @@ const Laboratory = () => {
                             
                             @page {
                                 size: A4;
-                                margin: 10mm;
+                                margin: 0;
+                            }
+                            
+                            .print-portal-content {
+                                padding: 10mm !important;
+                                box-sizing: border-box !important;
                             }
                             
                             .print-portal-content * {
@@ -2333,7 +2331,7 @@ const Laboratory = () => {
                         </style>
                         <div id="print-portal" className="print-portal-content">
                             {/* Header */}
-                            <div className="flex justify-between items-start mb-6 border-b-2 border-slate-900 pb-4">
+                            <div className="flex justify-between items-start mb-6 border-b border-slate-300 pb-4">
                                 <div className="flex items-center gap-3">
                                     <img src="/logo.png" alt="Logo" className="w-12 h-12 object-contain drop-shadow-sm" />
                                     <div>
@@ -2353,12 +2351,12 @@ const Laboratory = () => {
                             </div>
 
                             {/* Patient Info Header */}
-                            <div className="mb-6 border-b-2 border-slate-900 pb-4">
+                            <div className="mb-6 border-b border-slate-300 pb-4">
                                 <div className="grid grid-cols-3 gap-4">
                                     {/* Examinee Details */}
                                     <div>
-                                        <p className="text-sm font-bold text-black underline mb-3">Examinee Details:</p>
-                                        <p className="text-base font-black text-black mb-3 uppercase">{printCharge.patient_name}</p>
+                                        <p className="text-sm font-bold text-slate-500 mb-1">Examinee Details</p>
+                                        <p className="text-base font-black text-slate-900 mb-3 uppercase">{printCharge.patient_name}</p>
                                         <div className="grid grid-cols-[80px_1fr] gap-y-2 text-xs text-black">
                                             <span>Age/Sex</span>
                                             <span className="font-bold">: {printCharge.patient_age} Years / {printCharge.patient_sex}</span>
@@ -2372,8 +2370,8 @@ const Laboratory = () => {
                                     </div>
                                     
                                     {/* Referred by */}
-                                    <div className="border-l-2 border-slate-900 pl-4">
-                                        <p className="text-sm font-bold text-black underline mb-3">Referred by:</p>
+                                    <div className="border-l border-slate-200 pl-4">
+                                        <p className="text-sm font-bold text-slate-500 mb-1">Referred by</p>
                                         <p className="text-sm font-black text-black mb-3 uppercase">
                                             {printCharge.doctor_name && printCharge.doctor_name.toLowerCase() === 'self' 
                                                 ? 'SELF' 
@@ -2387,8 +2385,8 @@ const Laboratory = () => {
                                     </div>
 
                                     {/* Sample Details */}
-                                    <div className="border-l-2 border-slate-900 pl-4">
-                                        <p className="text-sm font-bold text-black underline mb-3">Sample Details:</p>
+                                    <div className="border-l border-slate-200 pl-4">
+                                        <p className="text-sm font-bold text-slate-500 mb-1">Sample Details</p>
                                         <div className="grid grid-cols-[90px_1fr] gap-y-2 text-xs text-black">
                                             <span>SID</span>
                                             <span className="font-bold">: {printCharge.registration_number || '--'}</span>
@@ -2436,83 +2434,92 @@ const Laboratory = () => {
                                         </tbody>
                                     </table>
                                 ) : (
-                                    Object.entries(
-                                        (printCharge.tests || [printCharge]).filter(t => t.status !== 'CANCELLED').reduce((acc, testItem) => {
-                                            const cat = labTests.find(t => t.name === testItem.test_name)?.category || 'UNCATEGORIZED';
-                                            if (!acc[cat]) acc[cat] = [];
-                                            acc[cat].push(testItem);
-                                            return acc;
-                                        }, {})
-                                    ).map(([category, testsInCategory]) => (
-                                        <div key={category} className="mb-6">
-                                            {category !== 'UNCATEGORIZED' && (
-                                                <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest text-center border-y-2 border-slate-900 py-2 mb-4 bg-slate-50">
-                                                    {category}
-                                                </h2>
-                                            )}
-                                            {testsInCategory.map((testItem, testIdx) => {
-                                                const catalogTest = labTests.find(t => t.name === testItem.test_name);
-                                                return (
-                                                <div key={testIdx} className="break-inside-avoid">
-                                                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest border-b border-slate-200 pb-2 mb-3 mt-4 text-left">
-                                                        {testItem.test_name}
-                                                        {testItem.sub_name && <span className="block text-[10px] font-bold text-slate-500 mt-0.5">{testItem.sub_name}</span>}
-                                                    </h3>
-                                                    {catalogTest?.description && (
-                                                        <div className="mb-3 text-[10px] font-medium text-slate-600 bg-slate-50 p-2 rounded-lg">
-                                                            {catalogTest.description}
-                                                        </div>
+                                    <table className="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr className="border-b-2 border-slate-300 text-slate-700">
+                                                <th className="px-2 py-2 text-[10px] font-bold uppercase tracking-widest w-[40%]">Parameter Name</th>
+                                                <th className="px-2 py-2 text-[10px] font-bold uppercase tracking-widest w-[20%]">Result Value</th>
+                                                <th className="px-2 py-2 text-[10px] font-bold uppercase tracking-widest w-[15%]">Unit</th>
+                                                <th className="px-2 py-2 text-[10px] font-bold uppercase tracking-widest w-[25%] text-right">Normal Range</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {Object.entries(
+                                                (printCharge.tests || [printCharge]).filter(t => t.status !== 'CANCELLED' && !labTests.find(ct => ct.name === t.test_name)?.is_package).reduce((acc, testItem) => {
+                                                    const cat = labTests.find(t => t.name === testItem.test_name)?.category || 'UNCATEGORIZED';
+                                                    if (!acc[cat]) acc[cat] = [];
+                                                    acc[cat].push(testItem);
+                                                    return acc;
+                                                }, {})
+                                            ).map(([category, testsInCategory]) => (
+                                                <React.Fragment key={category}>
+                                                    {category !== 'UNCATEGORIZED' && (
+                                                        <tr>
+                                                            <td colSpan="4" className="px-3 py-1.5 mt-2 text-xs font-black text-slate-700 bg-slate-100 uppercase tracking-widest text-left rounded-sm">
+                                                                {category}
+                                                            </td>
+                                                        </tr>
                                                     )}
-                                                    <table className="w-full text-left">
-                                                        <thead>
-                                                            <tr className="border-b border-slate-200">
-                                                                <th className="px-2 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4">Parameter Name</th>
-                                                                <th className="px-2 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4">Result Value</th>
-                                                                <th className="px-2 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4">Unit</th>
-                                                                <th className="px-2 py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/4 text-right">Normal Range</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody className="divide-y divide-slate-100">
-                                                            {(Array.isArray(testItem.results)
-                                                                ? testItem.results
-                                                                : Object.entries(testItem.results || {}).map(([key, val]) => ({ name: key, ...val }))
-                                                            ).map((val, idx) => {
-                                                                const paramDesc = catalogTest?.parameters?.find(p => p.name === val.name)?.description;
-                                                                return val.is_heading ? (
-                                                                    <tr key={idx}>
-                                                                        <td colSpan="4" className="px-2 py-3 font-black text-slate-900 text-sm uppercase tracking-wider bg-slate-50/50 border-y border-slate-100 text-center">{val.name}</td>
-                                                                    </tr>
-                                                                ) : (
-                                                                    <tr key={idx}>
-                                                                        <td className="px-2 py-1.5 font-bold text-slate-700 text-xs">
-                                                                            {val.name}
-                                                                            {paramDesc && <span className="block font-medium text-slate-500 text-[10px] mt-0.5 whitespace-pre-wrap">{paramDesc}</span>}
-                                                                            {val.note && <span className="block font-medium text-slate-500 text-[10px] mt-0.5 whitespace-pre-wrap">{val.note}</span>}
+                                                    {testsInCategory.map((testItem, testIdx) => {
+                                                        const catalogTest = labTests.find(t => t.name === testItem.test_name);
+                                                        return (
+                                                            <React.Fragment key={testIdx}>
+                                                                <tr>
+                                                                    <td colSpan="4" className="px-2 pt-2 pb-1 text-xs font-bold text-slate-800 uppercase tracking-widest text-left">
+                                                                        {testItem.test_name}
+                                                                        {testItem.sub_name && <span className="ml-2 text-[10px] font-medium text-slate-500 normal-case tracking-normal">({testItem.sub_name})</span>}
+                                                                    </td>
+                                                                </tr>
+                                                                {catalogTest?.description && (
+                                                                    <tr>
+                                                                        <td colSpan="4" className="px-2 pb-2 text-[10px] font-medium text-slate-500 italic">
+                                                                            {catalogTest.description}
                                                                         </td>
-                                                                        <td className="px-2 py-1.5 font-black text-slate-900 text-xs">{val.value}</td>
-                                                                        <td className="px-2 py-1.5 font-bold text-slate-900 text-xs">{val.unit || ''}</td>
-                                                                        <td className="px-2 py-1.5 font-bold text-slate-900 text-xs text-right whitespace-pre-wrap">{val.normal || val.normal_range || ''}</td>
                                                                     </tr>
-                                                                )
-                                                            })}
-                                                        </tbody>
-                                                    </table>
-                                                    {testItem.notes && (
-                                                        <div className="mt-4 border-t border-slate-200 pt-3">
-                                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Test Remarks / Notes</p>
-                                                            <p className="text-xs font-bold text-slate-700 whitespace-pre-wrap">{testItem.notes}</p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )})}
-                                        </div>
-                                    ))
+                                                                )}
+                                                                {(Array.isArray(testItem.results)
+                                                                    ? testItem.results
+                                                                    : Object.entries(testItem.results || {}).map(([key, val]) => ({ name: key, ...val }))
+                                                                ).map((val, idx) => {
+                                                                    const paramDesc = catalogTest?.parameters?.find(p => p.name === val.name)?.description;
+                                                                    return val.is_heading ? (
+                                                                        <tr key={`h-${idx}`}>
+                                                                            <td colSpan="4" className="px-2 py-0.5 font-bold text-slate-800 text-xs uppercase tracking-wider bg-slate-100/50 text-center">{val.name}</td>
+                                                                        </tr>
+                                                                    ) : (
+                                                                        <tr key={`r-${idx}`} className={idx % 2 !== 0 ? 'bg-slate-50' : 'bg-white'}>
+                                                                            <td className="pl-6 pr-2 py-1 font-medium text-slate-700 text-xs">
+                                                                                {val.name}
+                                                                                {paramDesc && <span className="block font-medium text-slate-400 text-[10px] whitespace-pre-wrap">{paramDesc}</span>}
+                                                                                {val.note && <span className="block font-medium text-slate-400 text-[10px] whitespace-pre-wrap">{val.note}</span>}
+                                                                            </td>
+                                                                            <td className="px-2 py-1 font-bold text-slate-900 text-[13px] font-mono tracking-tight">{val.value}</td>
+                                                                            <td className="px-2 py-1 font-medium text-slate-500 text-[11px]">{val.unit || ''}</td>
+                                                                            <td className="px-2 py-1 font-medium text-slate-500 text-[11px] text-right whitespace-pre-wrap">{val.normal || val.normal_range || ''}</td>
+                                                                        </tr>
+                                                                    )
+                                                                })}
+                                                                {testItem.notes && (
+                                                                    <tr>
+                                                                        <td colSpan="4" className="px-6 py-2 bg-slate-50">
+                                                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Test Remarks / Notes</p>
+                                                                            <p className="text-xs font-medium text-slate-700 whitespace-pre-wrap">{testItem.notes}</p>
+                                                                        </td>
+                                                                    </tr>
+                                                                )}
+                                                            </React.Fragment>
+                                                        )
+                                                    })}
+                                                </React.Fragment>
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 )}
 
                             </div>
 
                             {/* Footer */}
-                            <div className="flex justify-between items-end mt-auto pt-4 border-t border-slate-200">
+                            <div className="flex justify-between items-end mt-4 pt-4 border-t border-slate-200 print:break-inside-avoid" style={{ pageBreakInside: 'avoid' }}>
                                 <div className="text-[10px] font-medium text-slate-400">
                                     <p>Generated by Anova CMS</p>
                                     <p>{(() => {
@@ -2521,7 +2528,7 @@ const Laboratory = () => {
                                     })()}</p>
                                 </div>
                                 <div className="text-center">
-                                    <div className="h-8 w-24 mb-1 mx-auto"></div>
+                                    <div className="h-8 w-24 mb-1 mx-auto border-b border-dashed border-slate-300"></div>
                                     <p className="text-xs font-bold text-slate-900">{printCharge.technician_name}</p>
                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Lab Technician</p>
                                 </div>
