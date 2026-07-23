@@ -53,6 +53,9 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         visit_patient = self.request.query_params.get('visit__patient')
         if visit_patient:
             queryset = queryset.filter(visit__patient_id=visit_patient)
+            
+        queryset = queryset.select_related('visit', 'visit__patient', 'visit__doctor')
+        queryset = queryset.prefetch_related('items')
                 
         return queryset
 

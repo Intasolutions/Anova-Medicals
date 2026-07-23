@@ -183,6 +183,16 @@ class VisitViewSet(viewsets.ModelViewSet):
             Q(casualty_observations__isnull=False)
         ).order_by('-created_at').distinct()
         
+        visits = visits.select_related('patient', 'doctor', 'doctor_note').prefetch_related(
+            'lab_charges',
+            'pharmacy_sales',
+            'pharmacy_sales__items',
+            'casualty_services',
+            'casualty_observations',
+            'casualty_medicines',
+            'invoices'
+        )
+        
         page = self.paginate_queryset(visits)
         if page is not None:
             serializer = self.get_serializer(page, many=True)

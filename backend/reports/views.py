@@ -111,7 +111,7 @@ class FinancialReportView(BaseReportView):
         # Get invoices that were interacted with (paid/partially paid) during this period for the details list
         invoices = Invoice.objects.filter(
             payments__in=payments
-        ).distinct().select_related('visit__patient')
+        ).distinct().select_related('visit__patient').prefetch_related('payments')
         
         print(f"DEBUG: FinancialReport {start_date} to {end_date}", flush=True)
         print(f"DEBUG: Invoices found: {invoices.count()}", flush=True)
@@ -200,13 +200,20 @@ class FinancialReportView(BaseReportView):
             data = [[i.id, i.visit.patient.full_name if i.visit and i.visit.patient else i.patient_name, i.total_amount, sum(p.amount for p in i.payments.all()), i.payment_status, i.created_at] for i in invoices]
             return self.export_csv("financial_report", ["Invoice ID", "Patient", "Total Amount", "Amount Paid", "Status", "Date"], data)
         
-        details = [{
-            "id": str(i.id)[:8],
-            "patient": i.visit.patient.full_name if i.visit and i.visit.patient else (i.patient_name or "Walk-in"),
-            "amount": sum(p.amount for p in i.payments.filter(created_at__date__gte=start_date, created_at__date__lte=end_date)), # Amount paid during this period
-            "status": i.get_payment_status_display(),
-            "date": i.created_at
-        } for i in invoices]
+        details = []
+        for i in invoices:
+            # Filter prefetched payments in Python to avoid N+1 queries
+            period_payments = [
+                p.amount for p in i.payments.all() 
+                if str(p.created_at.date()) >= start_date and str(p.created_at.date()) <= end_date
+            ]
+            details.append({
+                "id": str(i.id)[:8],
+                "patient": i.visit.patient.full_name if i.visit and i.visit.patient else (i.patient_name or "Walk-in"),
+                "amount": sum(period_payments),
+                "status": i.get_payment_status_display(),
+                "date": i.created_at
+            })
 
         return Response({
             "start_date": start_date,
@@ -225,7 +232,7 @@ class PharmacySalesReportView(BaseReportView):
         sales = PharmacySale.objects.filter(
             created_at__date__gte=start_date,
             created_at__date__lte=end_date
-        )
+        ).select_related('visit', 'visit__patient')
 
         if request.query_params.get('export') == 'csv':
             data = [[s.id, s.patient_name, s.total_amount, s.created_at] for s in sales]

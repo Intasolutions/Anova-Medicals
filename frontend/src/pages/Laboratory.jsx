@@ -2331,19 +2331,19 @@ const Laboratory = () => {
                         </style>
                         <div id="print-portal" className="print-portal-content">
                             {/* Header */}
-                            <div className="flex justify-between items-start mb-6 border-b border-slate-300 pb-4">
-                                <div className="flex items-center gap-3">
-                                    <img src="/logo.png" alt="Logo" className="w-12 h-12 object-contain drop-shadow-sm" />
+                            <div className="flex justify-between items-start mb-3 border-b border-slate-300 pb-2">
+                                <div className="flex items-center gap-2">
+                                    <img src="/logo.png" alt="Logo" className="w-10 h-10 object-contain drop-shadow-sm" />
                                     <div>
-                                        <h1 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Anova Medical Center</h1>
-                                        <p className="text-xs font-bold text-slate-500 tracking-widest uppercase mt-0.5">
+                                        <h1 className="text-xl font-black text-slate-900 tracking-tighter uppercase">Anova Medical Center</h1>
+                                        <p className="text-[10px] font-bold text-slate-500 tracking-widest uppercase mt-0.5">
                                             {printCharge.groupStatus === 'PENDING' ? 'Lab Request / Receipt' : 'Laboratory Services'}
                                         </p>
-                                        <p className="text-[10px] font-bold text-slate-400 mt-0.5">144, Calicut Road, Kellur, 5th mile, Wayanad. Ph: 8304889381. Email: anovamedicalcentre29@gmail.com</p>
+                                        <p className="text-[9px] font-bold text-slate-400 mt-0.5">144, Calicut Road, Kellur, 5th mile, Wayanad. Ph: 8304889381. Email: anovamedicalcentre29@gmail.com</p>
                                     </div>
                                 </div>
                                 <div className="text-right space-y-0.5">
-                                    <p className="text-xs font-medium text-slate-500">{(() => {
+                                    <p className="text-[10px] font-medium text-slate-500">{(() => {
                                         const d = new Date();
                                         return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
                                     })()}</p>
@@ -2351,13 +2351,13 @@ const Laboratory = () => {
                             </div>
 
                             {/* Patient Info Header */}
-                            <div className="mb-2 border-b border-slate-300 pb-4">
+                            <div className="mb-2 border-b border-slate-300 pb-2">
                                 <div className="grid grid-cols-3 gap-4">
                                     {/* Examinee Details */}
                                     <div>
-                                        <p className="text-sm font-bold text-slate-500 mb-1">Examinee Details</p>
-                                        <p className="text-base font-black text-slate-900 mb-3 uppercase">{printCharge.patient_name}</p>
-                                        <div className="grid grid-cols-[80px_1fr] gap-y-2 text-xs text-black">
+                                        <p className="text-xs font-bold text-slate-500 mb-0.5">Examinee Details</p>
+                                        <p className="text-sm font-black text-slate-900 mb-1.5 uppercase">{printCharge.patient_name}</p>
+                                        <div className="grid grid-cols-[70px_1fr] gap-y-0.5 text-[10px] text-black">
                                             <span>Age/Sex</span>
                                             <span className="font-bold">: {printCharge.patient_age} Years / {printCharge.patient_sex}</span>
                                             <span>Telephone</span>
@@ -2370,24 +2370,24 @@ const Laboratory = () => {
                                     </div>
                                     
                                     {/* Referred by */}
-                                    <div className="border-l border-slate-200 pl-4">
-                                        <p className="text-sm font-bold text-slate-500 mb-1">Referred by</p>
-                                        <p className="text-sm font-black text-black mb-3 uppercase">
+                                    <div className="border-l border-slate-200 pl-3">
+                                        <p className="text-xs font-bold text-slate-500 mb-0.5">Referred by</p>
+                                        <p className="text-xs font-black text-black mb-1.5 uppercase">
                                             {printCharge.doctor_name && printCharge.doctor_name.toLowerCase() === 'self' 
                                                 ? 'SELF' 
                                                 : `Dr. ${printCharge.doctor_name || 'CONSULTANT'}`
                                             }
                                         </p>
-                                        <div className="text-xs text-black mt-4">
-                                            <p className="mb-1">Sample Collected At :</p>
+                                        <div className="text-[10px] text-black mt-2">
+                                            <p className="mb-0.5">Sample Collected At :</p>
                                             <p className="font-bold uppercase">Anova Medical Center</p>
                                         </div>
                                     </div>
 
                                     {/* Sample Details */}
-                                    <div className="border-l border-slate-200 pl-4">
-                                        <p className="text-sm font-bold text-slate-500 mb-1">Sample Details</p>
-                                        <div className="grid grid-cols-[90px_1fr] gap-y-2 text-xs text-black">
+                                    <div className="border-l border-slate-200 pl-3">
+                                        <p className="text-xs font-bold text-slate-500 mb-0.5">Sample Details</p>
+                                        <div className="grid grid-cols-[80px_1fr] gap-y-0.5 text-[10px] text-black">
                                             <span>SID</span>
                                             <span className="font-bold">: {printCharge.registration_number || '--'}</span>
                                             <span>Registered On</span>
@@ -2406,7 +2406,7 @@ const Laboratory = () => {
                             </div>
 
                             {/* Results Table OR Receipt Table */}
-                            <div className="mb-6 space-y-6">
+                            <div className="mb-4 space-y-3">
                                 {printCharge.groupStatus === 'PENDING' ? (
                                     <table className="w-full text-left">
                                         <thead>
@@ -2455,7 +2455,7 @@ const Laboratory = () => {
                                                 <React.Fragment key={category}>
                                                     {category !== 'UNCATEGORIZED' && (
                                                         <tr>
-                                                            <td colSpan="4" className="px-2 py-1 text-xs font-black text-slate-700 bg-slate-100 uppercase tracking-widest text-left">
+                                                            <td colSpan="4" className="px-1 py-0.5 text-[10px] font-black text-slate-700 bg-slate-100 uppercase tracking-widest text-left">
                                                                 {category}
                                                             </td>
                                                         </tr>
@@ -2465,14 +2465,14 @@ const Laboratory = () => {
                                                         return (
                                                             <React.Fragment key={testIdx}>
                                                                 <tr>
-                                                                    <td colSpan="4" className="px-2 py-1 text-xs font-bold text-slate-800 uppercase tracking-widest text-left">
+                                                                    <td colSpan="4" className="px-1 py-0.5 text-[10px] font-bold text-slate-800 uppercase tracking-widest text-left">
                                                                         {testItem.test_name}
-                                                                        {testItem.sub_name && <span className="ml-2 text-[10px] font-medium text-slate-500 normal-case tracking-normal">({testItem.sub_name})</span>}
+                                                                        {testItem.sub_name && <span className="ml-2 text-[9px] font-medium text-slate-500 normal-case tracking-normal">({testItem.sub_name})</span>}
                                                                     </td>
                                                                 </tr>
                                                                 {catalogTest?.description && (
                                                                     <tr>
-                                                                        <td colSpan="4" className="px-2 pb-2 text-[10px] font-medium text-slate-500 italic">
+                                                                        <td colSpan="4" className="px-1 pb-1 text-[9px] font-medium text-slate-500 italic">
                                                                             {catalogTest.description}
                                                                         </td>
                                                                     </tr>
@@ -2484,18 +2484,18 @@ const Laboratory = () => {
                                                                     const paramDesc = catalogTest?.parameters?.find(p => p.name === val.name)?.description;
                                                                     return val.is_heading ? (
                                                                         <tr key={`h-${idx}`}>
-                                                                            <td colSpan="4" className="px-2 py-0.5 font-bold text-slate-800 text-xs uppercase tracking-wider bg-slate-100/50 text-center">{val.name}</td>
+                                                                            <td colSpan="4" className="px-1 py-0 font-bold text-slate-800 text-[10px] uppercase tracking-wider bg-slate-100/50 text-center">{val.name}</td>
                                                                         </tr>
                                                                     ) : (
                                                                         <tr key={`r-${idx}`} className={idx % 2 !== 0 ? 'bg-slate-50' : 'bg-white'}>
-                                                                            <td className="pl-6 pr-2 py-1 font-medium text-slate-700 text-xs">
+                                                                            <td className="pl-4 pr-1 py-0 font-medium text-slate-700 text-[10px]">
                                                                                 {val.name}
-                                                                                {paramDesc && <span className="block font-medium text-slate-400 text-[10px] whitespace-pre-wrap">{paramDesc}</span>}
-                                                                                {val.note && <span className="block font-medium text-slate-400 text-[10px] whitespace-pre-wrap">{val.note}</span>}
+                                                                                {paramDesc && <span className="block font-medium text-slate-400 text-[8px] whitespace-pre-wrap leading-tight">{paramDesc}</span>}
+                                                                                {val.note && <span className="block font-medium text-slate-400 text-[8px] whitespace-pre-wrap leading-tight">{val.note}</span>}
                                                                             </td>
-                                                                            <td className="px-2 py-1 font-bold text-slate-900 text-[13px] font-mono tracking-tight">{val.value}</td>
-                                                                            <td className="px-2 py-1 font-medium text-slate-500 text-[11px]">{val.unit || ''}</td>
-                                                                            <td className="px-2 py-1 font-medium text-slate-500 text-[11px] text-right whitespace-pre-wrap">{val.normal || val.normal_range || ''}</td>
+                                                                            <td className="px-1 py-0 font-bold text-slate-900 text-[11px] font-mono tracking-tight">{val.value}</td>
+                                                                            <td className="px-1 py-0 font-medium text-slate-500 text-[10px]">{val.unit || ''}</td>
+                                                                            <td className="px-1 py-0 font-medium text-slate-500 text-[10px] text-right whitespace-pre-wrap leading-tight">{val.normal || val.normal_range || ''}</td>
                                                                         </tr>
                                                                     )
                                                                 })}

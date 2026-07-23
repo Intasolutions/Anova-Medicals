@@ -779,11 +779,11 @@ const Reception = () => {
                                                 onChange={(e) => setSelectedDate(e.target.value)}
                                                 className="px-3 py-2 bg-transparent text-sm font-bold text-slate-700 outline-none w-[140px] cursor-pointer appearance-none"
                                             />
-                                            {selectedDate !== getLocalDate() && (
+                                            {selectedDate && (
                                                 <button 
-                                                    onClick={() => setSelectedDate(getLocalDate())}
+                                                    onClick={() => setSelectedDate('')}
                                                     className="pr-3 pl-2 py-2 text-slate-400 hover:text-slate-600 bg-white"
-                                                    title="Reset to Today"
+                                                    title="Clear Filter"
                                                 >
                                                     <X size={14} />
                                                 </button>
@@ -1332,7 +1332,7 @@ const Reception = () => {
                                                     </div>
                                                     {doctors.filter(d => d.username.toLowerCase().includes(doctorSearchQ.toLowerCase())).length === 0 ? (
                                                         <p className="text-sm text-slate-400 text-center py-4">No doctors available.</p>
-                                                    ) : doctors.filter(d => d.username.toLowerCase().includes(doctorSearchQ.toLowerCase())).map(doc => (
+                                                    ) : doctors.filter(d => d.username.toLowerCase().includes(doctorSearchQ.toLowerCase())).slice(0, 50).map(doc => (
                                                         <div
                                                             key={doc.u_id}
                                                             onClick={() => setVisitForm({ ...visitForm, doctor: doc.u_id })}
@@ -1372,7 +1372,7 @@ const Reception = () => {
                                                         />
                                                         <datalist id="referring-doctors-list">
                                                             <option value="Self" />
-                                                            {referringDoctors.map((doc, i) => (
+                                                            {referringDoctors.slice(0, 50).map((doc, i) => (
                                                                 <option key={i} value={doc.name} />
                                                             ))}
                                                         </datalist>
@@ -1418,6 +1418,7 @@ const Reception = () => {
                                                                 <div className="flex-1 min-h-[300px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                                                                     {serviceDefinitions
                                                                         .filter(t => t.name.toLowerCase().includes(serviceSearchQ.toLowerCase()) && !selectedStartServices.includes(t.id))
+                                                                        .slice(0, 50)
                                                                         .map(test => {
                                                                         const isSelected = selectedStartServices.includes(test.id);
                                                                         return (
@@ -1472,6 +1473,7 @@ const Reception = () => {
                                                                 <div className="flex-1 min-h-[300px] overflow-y-auto space-y-2 pr-2 custom-scrollbar">
                                                                     {availableLabTests
                                                                         .filter(t => t.name.toLowerCase().includes(labTestSearchQ.toLowerCase()) && !selectedLabTests.includes(t.id))
+                                                                        .slice(0, 50)
                                                                         .map(test => {
                                                                     const isSelected = selectedLabTests.includes(test.id);
                                                                     return (
@@ -1894,7 +1896,7 @@ const Reception = () => {
                                         <p className="text-sm text-slate-400 text-center py-8">No services match your search.</p>
                                     ) : (
                                         <ul className="divide-y divide-slate-50">
-                                            {serviceDefinitions.filter(s => s.name.toLowerCase().includes(invoiceServiceSearch.toLowerCase())).map(service => (
+                                            {serviceDefinitions.filter(s => s.name.toLowerCase().includes(invoiceServiceSearch.toLowerCase())).slice(0, 50).map(service => (
                                                 <li key={service.id} className="flex justify-between items-center p-3 hover:bg-slate-50 transition-colors">
                                                     <div>
                                                         <p className="font-bold text-slate-800 text-sm">{service.name}</p>
@@ -1971,7 +1973,7 @@ const Reception = () => {
                                         </div>
                                         {doctors.filter(d => d.username.toLowerCase().includes(routeDoctorSearch.toLowerCase())).length === 0 ? (
                                             <p className="text-sm text-slate-400 text-center py-4">No doctors available.</p>
-                                        ) : doctors.filter(d => d.username.toLowerCase().includes(routeDoctorSearch.toLowerCase())).map(doc => (
+                                        ) : doctors.filter(d => d.username.toLowerCase().includes(routeDoctorSearch.toLowerCase())).slice(0, 50).map(doc => (
                                             <div
                                                 key={doc.u_id || doc.id}
                                                 onClick={() => setRouteForm({ ...routeForm, doctor: doc.u_id || doc.id })}
