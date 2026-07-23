@@ -659,6 +659,9 @@ const Billing = () => {
                 baseItems = baseItems.filter(i => i.dept !== 'CONSULTATION' && i.description !== 'General Consultation Fee');
             }
 
+            // Cleanup: remove auto-generated 0-rupee inner package lab tests
+            baseItems = baseItems.filter(i => !(i.dept === 'LAB' && parseFloat(i.amount) === 0));
+
             // Sync Pharmacy Items
             const visitPharmacyItems = ((visitData && visitData.pharmacy_items) || []).map(item => ({
                 dept: "PHARMACY",
@@ -1375,7 +1378,7 @@ const Billing = () => {
                                                         />
                                                     </td>
                                                     <td className="py-4 text-center">
-                                                        {(!formData.id || formData.payment_status === 'DRAFT') && (
+                                                        {(!formData.id || formData.payment_status === 'DRAFT' || formData.payment_status === 'PENDING') && (
                                                             <button onClick={() => {
                                                                 const newItems = formData.items.filter((_, i) => i !== idx);
                                                                 setFormData({ ...formData, items: newItems });
