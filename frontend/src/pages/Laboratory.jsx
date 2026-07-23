@@ -148,7 +148,7 @@ const Laboratory = () => {
     // Test Catalog Form
     const [showTestModal, setShowTestModal] = useState(false);
     const [editingTestId, setEditingTestId] = useState(null);
-    const [testCatalogForm, setTestCatalogForm] = useState({ name: '', sub_name: '', category: 'HAEMATOLOGY', price: '', gender: 'B', normal_range: '', parameters: [], required_items: [] });
+    const [testCatalogForm, setTestCatalogForm] = useState({ name: '', sub_name: '', category: 'HAEMATOLOGY', price: '', gender: 'B', normal_range: '', description: '', parameters: [], required_items: [], is_package: false, package_tests: [] });
 
     // Modals
     const [showModal, setShowModal] = useState(false); // Add Test Modal
@@ -411,7 +411,7 @@ const Laboratory = () => {
             }
             setShowTestModal(false);
             setEditingTestId(null);
-            setTestCatalogForm({ name: '', sub_name: '', category: 'HAEMATOLOGY', price: '', gender: 'B', normal_range: '', description: '', parameters: [], required_items: [] });
+            setTestCatalogForm({ name: '', sub_name: '', category: 'HAEMATOLOGY', price: '', gender: 'B', normal_range: '', description: '', parameters: [], required_items: [], is_package: false, package_tests: [] });
             fetchLabTests();
         } catch (err) { showToast('error', 'Failed to save test'); }
     };
@@ -426,7 +426,9 @@ const Laboratory = () => {
             normal_range: test.normal_range || '',
             description: test.description || '',
             parameters: test.parameters || [],
-            required_items: test.required_items || []
+            required_items: test.required_items || [],
+            is_package: test.is_package || false,
+            package_tests: test.package_tests || []
         });
         setEditingTestId(test.id);
         setShowTestModal(true);
@@ -877,7 +879,7 @@ const Laboratory = () => {
                                 </button>
                             </div>
                         ) : activeTab === 'test_catalog' ? (
-                            <button onClick={() => { setEditingTestId(null); setTestCatalogForm({ name: '', sub_name: '', category: 'HAEMATOLOGY', price: '', gender: 'B', normal_range: '', description: '', parameters: [], required_items: [] }); setShowTestModal(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all active:scale-95">
+                            <button onClick={() => { setEditingTestId(null); setTestCatalogForm({ name: '', sub_name: '', category: 'HAEMATOLOGY', price: '', gender: 'B', normal_range: '', description: '', parameters: [], required_items: [], is_package: false, package_tests: [] }); setShowTestModal(true); }} className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 transition-all active:scale-95">
                                 <Plus size={18} /> Add Test
                             </button>
                         ) : activeTab === 'suppliers' ? (
@@ -1384,23 +1386,60 @@ const Laboratory = () => {
                                             <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-slate-400 pointer-events-none" size={16} />
                                         </div>
                                     </div>
+                                    
+                                    <div className="space-y-2 flex items-center gap-3 bg-slate-50 border-2 border-slate-100 p-3 rounded-xl">
+                                        <input 
+                                            type="checkbox" 
+                                            id="is_package"
+                                            checked={testCatalogForm.is_package || false}
+                                            onChange={e => setTestCatalogForm({ ...testCatalogForm, is_package: e.target.checked })}
+                                            className="w-5 h-5 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                                        />
+                                        <label htmlFor="is_package" className="text-sm font-bold text-slate-700 cursor-pointer">This is a Test Package</label>
+                                    </div>
+
+                                    {testCatalogForm.is_package && (
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Select Tests for Package</label>
+                                            <div className="max-h-[200px] overflow-y-auto bg-slate-50 border-2 border-slate-100 rounded-xl p-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                {labTests.filter(t => !t.is_package && t.id !== testCatalogForm.id).map(test => (
+                                                    <label key={test.id} className="flex items-center gap-2 cursor-pointer hover:bg-slate-200 p-1.5 rounded-lg transition-colors">
+                                                        <input 
+                                                            type="checkbox" 
+                                                            checked={testCatalogForm.package_tests.includes(test.id)}
+                                                            onChange={(e) => {
+                                                                const newTests = e.target.checked 
+                                                                    ? [...testCatalogForm.package_tests, test.id]
+                                                                    : testCatalogForm.package_tests.filter(id => id !== test.id);
+                                                                setTestCatalogForm({...testCatalogForm, package_tests: newTests});
+                                                            }}
+                                                            className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-slate-300"
+                                                        />
+                                                        <span className="text-xs font-bold text-slate-700">{test.name}</span>
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Gender Field */}
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Gender</label>
-                                        <div className="relative">
-                                            <select
-                                                value={testCatalogForm.gender || 'B'}
-                                                onChange={e => setTestCatalogForm({ ...testCatalogForm, gender: e.target.value })}
-                                                className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-slate-800 focus:border-blue-500 outline-none transition-all appearance-none"
-                                            >
-                                                <option value="M">Male Only</option>
-                                                <option value="F">Female Only</option>
-                                                <option value="B">Both (Male & Female)</option>
-                                            </select>
-                                            <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-slate-400 pointer-events-none" size={16} />
+                                    {!testCatalogForm.is_package && (
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Gender</label>
+                                            <div className="relative">
+                                                <select
+                                                    value={testCatalogForm.gender || 'B'}
+                                                    onChange={e => setTestCatalogForm({ ...testCatalogForm, gender: e.target.value })}
+                                                    className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-slate-800 focus:border-blue-500 outline-none transition-all appearance-none"
+                                                >
+                                                    <option value="M">Male Only</option>
+                                                    <option value="F">Female Only</option>
+                                                    <option value="B">Both (Male & Female)</option>
+                                                </select>
+                                                <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-slate-400 pointer-events-none" size={16} />
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
                                     <div className="space-y-2">
                                         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Price (₹)</label>
                                         <Input type="number" value={testCatalogForm.price} onChange={e => setTestCatalogForm({ ...testCatalogForm, price: e.target.value })} required className="bg-slate-50 border-2 border-slate-100 rounded-xl font-bold" />
@@ -1411,8 +1450,10 @@ const Laboratory = () => {
                                         <textarea value={testCatalogForm.description || ''} onChange={e => setTestCatalogForm({ ...testCatalogForm, description: e.target.value })} className="bg-slate-50 border-2 border-slate-100 rounded-xl font-bold p-3 w-full min-h-[80px]" placeholder="Common description or interpretation for the whole test" />
                                     </div>
 
-                                    <div className="space-y-3 pt-4 border-t border-slate-100">
-                                        <div className="flex justify-between items-center mb-1">
+                                    {!testCatalogForm.is_package && (
+                                        <>
+                                            <div className="space-y-3 pt-4 border-t border-slate-100">
+                                                <div className="flex justify-between items-center mb-1">
                                             <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Test Parameters</label>
                                             <button
                                                 type="button"
@@ -1590,6 +1631,8 @@ const Laboratory = () => {
                                             ))}
                                         </div>
                                     </div>
+                                        </>
+                                    )}
                                 </div>
                                 <div className="flex justify-end gap-3 pt-4">
                                     <Button type="submit" className="w-full h-12 rounded-xl bg-emerald-600 text-white font-bold shadow-lg shadow-emerald-600/20">{editingTestId ? 'Update Test' : 'Add Test to Catalog'}</Button>

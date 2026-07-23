@@ -183,13 +183,24 @@ class VisitViewSet(viewsets.ModelViewSet):
             for test_id in lab_tests:
                 try:
                     test_obj = LabTest.objects.get(id=test_id)
-                    LabCharge.objects.create(
+                    parent_charge = LabCharge.objects.create(
                         visit=visit,
                         test_name=test_obj.name,
                         sub_name=test_obj.sub_name,
                         amount=test_obj.price,
                         status='PENDING'
                     )
+                    
+                    if test_obj.is_package:
+                        for sub_test in test_obj.package_tests.all():
+                            LabCharge.objects.create(
+                                visit=visit,
+                                test_name=sub_test.name,
+                                sub_name=sub_test.sub_name,
+                                amount=0, # Sub-tests are 0 cost, included in package
+                                status='PENDING',
+                                parent_charge=parent_charge
+                            )
                 except Exception as e:
                     print(f"Error assigning lab test {test_id} to visit {visit.id}: {e}")
 
@@ -277,13 +288,25 @@ class VisitViewSet(viewsets.ModelViewSet):
                     test_obj = LabTest.objects.get(id=test_id)
                     # Create only if it doesn't exist
                     if test_obj.name not in existing_charges:
-                        LabCharge.objects.create(
+                        parent_charge = LabCharge.objects.create(
                             visit=visit,
                             test_name=test_obj.name,
                             sub_name=test_obj.sub_name,
                             amount=test_obj.price,
                             status='PENDING'
                         )
+                        
+                        if test_obj.is_package:
+                            for sub_test in test_obj.package_tests.all():
+                                if sub_test.name not in existing_charges:
+                                    LabCharge.objects.create(
+                                        visit=visit,
+                                        test_name=sub_test.name,
+                                        sub_name=sub_test.sub_name,
+                                        amount=0,
+                                        status='PENDING',
+                                        parent_charge=parent_charge
+                                    )
                 except Exception as e:
                     print(f"Error assigning lab test {test_id} to visit {visit.id}: {e}")
 

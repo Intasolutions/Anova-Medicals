@@ -140,6 +140,7 @@ class LabCharge(BaseModel):
     sub_name = models.CharField(max_length=255, blank=True, null=True)
     amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+    parent_charge = models.ForeignKey('self', null=True, blank=True, on_delete=models.CASCADE, related_name='sub_charges')
     
     # Store dynamic test results (e.g. {"Cholesterol": {"value": "142", "unit": "mg/dl", "normal": "Up to 200 mg/dl"}})
     results = models.JSONField(null=True, blank=True)
@@ -170,6 +171,8 @@ class LabTest(BaseModel):
     gender = models.CharField(max_length=1, choices=[('M', 'Male'), ('F', 'Female'), ('B', 'Both')], default='B')
     normal_range = models.TextField(blank=True, null=True)
     description = models.TextField(blank=True, null=True, help_text="Common description/interpretation for the whole test")
+    is_package = models.BooleanField(default=False)
+    package_tests = models.ManyToManyField('self', symmetrical=False, blank=True, related_name='packages')
 
     def __str__(self):
         return f"{self.name} ({self.category})"

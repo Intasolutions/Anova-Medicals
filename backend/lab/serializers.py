@@ -41,16 +41,21 @@ class LabTestRequiredItemSerializer(serializers.ModelSerializer):
 class LabTestSerializer(serializers.ModelSerializer):
     parameters = LabTestParameterSerializer(many=True, required=False)
     required_items = LabTestRequiredItemSerializer(many=True, required=False)
+    package_tests = serializers.PrimaryKeyRelatedField(many=True, queryset=LabTest.objects.all(), required=False)
 
     class Meta:
         model = LabTest
-        fields = ['id', 'name', 'sub_name', 'category', 'price', 'gender', 'normal_range', 'description', 'parameters', 'required_items']
+        fields = ['id', 'name', 'sub_name', 'category', 'price', 'gender', 'normal_range', 'description', 'parameters', 'required_items', 'is_package', 'package_tests']
 
     def create(self, validated_data):
         parameters_data = validated_data.pop('parameters', [])
         required_items_data = validated_data.pop('required_items', [])
+        package_tests_data = validated_data.pop('package_tests', [])
         
         lab_test = LabTest.objects.create(**validated_data)
+        
+        if package_tests_data:
+            lab_test.package_tests.set(package_tests_data)
         
         for param_data in parameters_data:
             LabTestParameter.objects.create(test=lab_test, **param_data)
@@ -61,6 +66,7 @@ class LabTestSerializer(serializers.ModelSerializer):
         return lab_test
 
     def update(self, instance, validated_data):
+        package_tests_data = validated_data.pop('package_tests', None)
         parameters_data = validated_data.pop('parameters', None)
         required_items_data = validated_data.pop('required_items', None)
         
@@ -70,7 +76,11 @@ class LabTestSerializer(serializers.ModelSerializer):
         instance.price = validated_data.get('price', instance.price)
         instance.normal_range = validated_data.get('normal_range', instance.normal_range)
         instance.description = validated_data.get('description', instance.description)
+        instance.is_package = validated_data.get('is_package', instance.is_package)
         instance.save()
+
+        if package_tests_data is not None:
+            instance.package_tests.set(package_tests_data)
 
         if parameters_data is not None:
             instance.parameters.all().delete()
@@ -265,7 +275,7 @@ class LabChargeSerializer(serializers.ModelSerializer):
             'lc_id', 'visit', 'visit_id', 'patient_name', 'registration_number', 'patient_age', 'patient_sex',
             'patient_phone', 'patient_address', 'doctor_name', 'payment_status',
             'test_name', 'sub_name', 'amount', 'status', 'results', 'report_date', 'drawn_date', 'received_date', 'technician_name',
-            'specimen', 'created_at', 'updated_at'
+            'specimen', 'created_at', 'updated_at', 'parent_charge'
         ]
         read_only_fields = ['lc_id', 'created_at', 'updated_at']
 

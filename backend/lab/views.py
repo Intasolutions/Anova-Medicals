@@ -337,6 +337,32 @@ class LabChargeViewSet(viewsets.ModelViewSet):
                 
             invoice.save()
             
+            # Check if this was a sub-test, and if parent should be auto-completed
+            if instance.parent_charge:
+                pending_subs = instance.parent_charge.sub_charges.exclude(status__in=['COMPLETED', 'CANCELLED']).exists()
+                if not pending_subs and instance.parent_charge.status not in ['COMPLETED', 'CANCELLED']:
+                    parent = instance.parent_charge
+                    parent.status = 'COMPLETED'
+                    parent.save()
+                    
+                    existing_parent_item = InvoiceItem.objects.filter(
+                        invoice=invoice,
+                        dept='LAB',
+                        description=parent.test_name
+                    ).exists()
+                    
+                    if not existing_parent_item:
+                        InvoiceItem.objects.create(
+                            invoice=invoice,
+                            dept='LAB',
+                            description=parent.test_name,
+                            qty=1,
+                            unit_price=parent.amount,
+                            amount=parent.amount
+                        )
+                        invoice.total_amount = sum(item.amount for item in invoice.items.all())
+                        invoice.save()
+
         # Check if all tests for this visit are completed/cancelled
         if instance.status in ['COMPLETED', 'CANCELLED'] and old_status != instance.status:
             if instance.visit and instance.visit.assigned_role == 'LAB':
