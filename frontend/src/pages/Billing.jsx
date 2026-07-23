@@ -714,18 +714,20 @@ const Billing = () => {
             let uniqueLabItems = [];
 
             if (invoice.payment_status !== 'PAID' && invoice.payment_status !== 'CANCELLED') {
-                const visitLabItems = ((visitData && visitData.lab_charges_data) || []).map(item => ({
-                    dept: "LAB",
-                    description: item.test_name,
-                    qty: 1,
-                    unit_price: parseFloat(item.amount),
-                    amount: parseFloat(item.amount),
-                    hsn: "",
-                    batch: "",
-                    gst_percent: 0,
-                    stock_deducted: false,
-                    deducted_qty: 0
-                }));
+                const visitLabItems = ((visitData && visitData.lab_charges_data) || [])
+                    .filter(item => parseFloat(item.amount) > 0)
+                    .map(item => ({
+                        dept: "LAB",
+                        description: item.test_name,
+                        qty: 1,
+                        unit_price: parseFloat(item.amount),
+                        amount: parseFloat(item.amount),
+                        hsn: "",
+                        batch: "",
+                        gst_percent: 0,
+                        stock_deducted: false,
+                        deducted_qty: 0
+                    }));
 
                 const existingKeys = new Set(baseItems.map(i => `${i.description}-${i.batch || ''}`));
                 uniquePharmacyItems = visitPharmacyItems.filter(i => !existingKeys.has(`${i.description}-${i.batch || ''}`));
