@@ -182,11 +182,13 @@ const Reports = () => {
         }
         if (activeReport === 'pharmacy') {
             return {
-                headers: ['ID', 'Patient', 'Total Amount', 'Date'],
+                headers: ['ID', 'Patient', 'Total Amount', 'Cost (PTR)', 'Profit', 'Date'],
                 rows: paginatedDetails.map(row => [
                     String(row.id || '').substring(0, 8),
                     row.patient,
                     `₹${row.total}`,
+                    `₹${Number(row.cost || 0).toFixed(2)}`,
+                    <span className={`font-black ${row.profit >= 0 ? 'text-emerald-500' : 'text-amber-500'}`}>₹{Number(row.profit || 0).toFixed(2)}</span>,
                     (() => { const d = new Date(row.date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()
                 ])
             };
@@ -232,7 +234,7 @@ const Reports = () => {
         }
         if (activeReport === 'pharmacy-inventory') {
             return {
-                headers: ['ID', 'Item', 'Batch', 'Type', 'Qty', 'Rate', 'Date'],
+                headers: ['ID', 'Item', 'Batch', 'Type', 'Qty', 'Rate', 'Stock Value', 'Date'],
                 rows: paginatedDetails.map(row => [
                     row.id,
                     row.item_name,
@@ -240,19 +242,21 @@ const Reports = () => {
                     <span className={`px-2 py-1 rounded-full text-[10px] font-black ${row.type === 'STOCK_IN' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{row.type}</span>,
                     row.qty,
                     `₹${row.cost}`,
+                    `₹${Number(row.stock_value || 0).toFixed(2)}`,
                     (() => { const d = new Date(row.date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()
                 ])
             };
         }
         if (activeReport === 'expiry') {
             return {
-                headers: ['Item', 'Batch', 'Expiry', 'Qty Available', 'MRP'],
+                headers: ['Item', 'Batch', 'Expiry', 'Qty Available', 'MRP', 'Potential Loss'],
                 rows: paginatedDetails.map(row => [
                     row.item_name,
                     row.batch_no,
                     <span className={`font-bold ${new Date(row.expiry_date) < new Date() ? 'text-red-500' : 'text-amber-500'}`}>{(() => { const d = new Date(row.expiry_date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()}</span>,
                     row.qty,
-                    `₹${row.cost}`
+                    `₹${row.cost}`,
+                    <span className="text-rose-500 font-bold">₹{Number(row.loss_value || 0).toFixed(2)}</span>
                 ])
             };
         }
@@ -305,215 +309,192 @@ const Reports = () => {
             </style>
 
             <div className="p-8 h-screen bg-[#F8FAFC] font-sans text-slate-900 flex flex-col overflow-hidden">
-
-                {/* --- HEADER & TABS --- */}
-                <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-8 shrink-0">
+                
+                {/* --- HEADER & GLOBAL FILTERS --- */}
+                <div className="flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6 mb-6 shrink-0 bg-white p-6 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/40">
                     <div>
-                        <h1 className="text-3xl font-bold text-slate-900 tracking-tight font-outfit uppercase">Analytics</h1>
-                        <p className="text-slate-500 mt-1 font-medium text-sm">Performance metrics and financial insights.</p>
+                        <h1 className="text-3xl font-black text-slate-900 tracking-tighter font-outfit uppercase">Analytics</h1>
+                        <p className="text-slate-500 mt-1 font-bold text-xs uppercase tracking-widest">Performance metrics & insights</p>
                     </div>
 
-                    {/* Premium Glass Tabs - Scrollable but Hidden Bar */}
-                    <div className="w-full xl:w-auto overflow-x-auto no-scrollbar">
-                        <div className="flex bg-white/80 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200 shadow-sm min-w-max">
-                            {tabs.map(tab => (
-                                <button
-                                    key={tab.id}
-                                    onClick={() => setActiveReport(tab.id)}
-                                    className={`flex items-center gap-2 px-5 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 ${activeReport === tab.id
-                                        ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/20 scale-105'
-                                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
-                                        }`}
-                                >
-                                    {tab.icon}
-                                    {tab.name}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                {/* --- MAIN CONTENT GRID --- */}
-                <div className="flex-1 overflow-y-auto no-scrollbar space-y-8 pb-10">
-
-                    {/* Top Row: KPI + Chart */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-                        {/* 1. KPI Card */}
-                        <div className="lg:col-span-1 bg-gradient-to-br from-slate-900 to-slate-800 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-slate-900/30 flex flex-col justify-between relative overflow-hidden group">
-                            {/* Decor */}
-                            <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl group-hover:bg-white/10 transition-all duration-700"></div>
-
-                            <div className="relative z-10">
-                                <div className="flex items-center justify-between mb-8">
-                                    <div className="p-3 bg-white/10 rounded-2xl backdrop-blur-md border border-white/10">
-                                        <TrendingUp size={24} className="text-emerald-400" />
-                                    </div>
-                                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 bg-black/20 px-3 py-1 rounded-full border border-white/5">
-                                        {activeReport === 'financial' ? 'Financial' : 'Overview'}
-                                    </span>
-                                </div>
-
-                                {activeReport === 'financial' ? (
-                                    <div className="space-y-6">
-                                        <div>
-                                            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-1">Total Revenue</p>
-                                            <h3 className="text-5xl font-black font-outfit tracking-tight">₹{Number(data?.total_revenue || 0).toFixed(2)}</h3>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
-                                                <p className="text-slate-400 text-[10px] font-bold uppercase">Expense</p>
-                                                <p className="text-lg font-black text-rose-400">₹{Number(data?.total_expense || 0).toFixed(2)}</p>
-                                            </div>
-                                            <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
-                                                <p className="text-slate-400 text-[10px] font-bold uppercase">Profit</p>
-                                                <p className={`text-lg font-black ${data?.net_profit >= 0 ? 'text-emerald-400' : 'text-amber-400'}`}>₹{Number(data?.net_profit || 0).toFixed(2)}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="space-y-2">
-                                        <p className="text-slate-400 text-xs font-bold uppercase tracking-widest">Total Records</p>
-                                        <h3 className="text-6xl font-black font-outfit tracking-tighter">{data?.details?.length || 0}</h3>
-                                        <p className="text-emerald-400 text-xs font-bold flex items-center gap-1 mt-2">
-                                            <ArrowRight size={12} /> Data Updated Live
-                                        </p>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* 2. Chart Card */}
-                        <div className="lg:col-span-2 bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xl shadow-slate-200/50 flex flex-col">
-                            <div className="flex justify-between items-center mb-6">
-                                <h3 className="font-black text-slate-900 text-lg flex items-center gap-3">
-                                    <BarChart3 size={20} className="text-blue-500" /> Growth Trajectory
-                                </h3>
-                                <div className="flex gap-2">
-                                    <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-3 py-1 rounded-lg uppercase tracking-wide">Daily Trend</span>
-                                </div>
-                            </div>
-                            <div className="flex-1 w-full min-h-[200px]">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <AreaChart data={chartData}>
-                                        <defs>
-                                            <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.2} />
-                                                <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} />
-                                            </linearGradient>
-                                        </defs>
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 'bold' }} dy={10} />
-                                        <YAxis hide />
-                                        <Tooltip
-                                            contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '16px', fontFamily: 'sans-serif' }}
-                                            itemStyle={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a' }}
-                                            labelStyle={{ fontSize: '10px', color: '#64748b', fontWeight: 'bold', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}
-                                        />
-                                        <Area type="monotone" dataKey="value" stroke="#0ea5e9" strokeWidth={4} fillOpacity={1} fill="url(#colorValue)" />
-                                    </AreaChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Bottom Row: Table + Filter */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-
-                        {/* 3. Detailed Table */}
-                        <div className="lg:col-span-2 bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50 overflow-hidden flex flex-col">
-                            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
-
-                                <h3 className="font-black text-slate-900 uppercase tracking-wide text-sm flex items-center gap-2">
-                                    <ClipboardList size={16} className="text-slate-400" /> Detailed Breakdown
-                                </h3>
-                                <div className="flex items-center gap-4">
-                                    <div className="relative">
-                                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                                        <input
-                                            type="text"
-                                            placeholder="Search records..."
-                                            value={searchQuery}
-                                            onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all shadow-sm w-64"
-                                        />
-                                    </div>
-                                    <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm">
-                                        <Download size={14} /> Export CSV
-                                    </button>
-                                </div>
-
-                            </div>
-                            <div className="flex-1 overflow-x-auto no-scrollbar p-0">
-                                <Table
-                                    headers={tableConfig.headers}
-                                    rows={tableConfig.rows}
+                    <div className="flex flex-wrap items-center gap-4">
+                        <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-2xl border border-slate-100">
+                            <div className="flex items-center px-3">
+                                <Calendar size={16} className="text-slate-400 mr-2" />
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-2">From</span>
+                                <input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer"
                                 />
-                                {tableConfig.rows.length === 0 && !loading && (
-                                    <div className="p-16 text-center text-slate-300 flex flex-col items-center">
-                                        <div className="p-4 bg-slate-50 rounded-full mb-3"><X size={24} /></div>
-                                        <p className="text-xs font-bold uppercase tracking-widest">No records found</p>
-                                    </div>
-                                )}
-                                {loading && (
-                                    <div className="p-16 flex flex-col items-center justify-center gap-4">
-                                        <div className="w-8 h-8 border-4 border-slate-100 border-t-slate-900 rounded-full animate-spin" />
-                                        <p className="text-xs text-slate-400 font-bold uppercase tracking-widest animate-pulse">Syncing data...</p>
-                                    </div>
-                                )}
-                                {tableConfig.rows.length > 0 && (
-                                    <Pagination
-                                        current={currentPage}
-                                        total={totalPages}
-                                        onPageChange={setCurrentPage}
-                                        loading={loading}
-                                    />
-                                )}
+                            </div>
+                            <div className="w-px h-6 bg-slate-200"></div>
+                            <div className="flex items-center px-3">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-2">To</span>
+                                <input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer"
+                                />
                             </div>
                         </div>
+                        <button onClick={fetchReport} className="px-6 py-3.5 text-xs uppercase tracking-widest font-black bg-slate-900 text-white shadow-xl shadow-slate-900/20 hover:bg-blue-600 hover:shadow-blue-600/30 transition-all rounded-2xl flex items-center gap-2 active:scale-95">
+                            Apply <ArrowRight size={14} />
+                        </button>
+                    </div>
+                </div>
 
-                        {/* 4. Sticky Filter Sidebar */}
-                        <div className="space-y-6">
-                            <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50 sticky top-8">
-                                <div className="flex justify-between items-center mb-6">
-                                    <h3 className="font-black text-slate-900 text-sm uppercase tracking-widest">Filter Data</h3>
-                                    <div className="p-2 bg-slate-50 rounded-xl text-slate-400"><Calendar size={18} /></div>
-                                </div>
-                                <div className="space-y-5">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">From Date</label>
-                                        <input
-                                            type="date"
-                                            value={startDate}
-                                            onChange={(e) => setStartDate(e.target.value)}
-                                            className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-bold text-slate-700 outline-none focus:border-blue-500 focus:bg-white transition-all"
-                                        />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">To Date</label>
-                                        <input
-                                            type="date"
-                                            value={endDate}
-                                            onChange={(e) => setEndDate(e.target.value)}
-                                            className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-sm font-bold text-slate-700 outline-none focus:border-blue-500 focus:bg-white transition-all"
-                                        />
-                                    </div>
-                                </div>
-                                <button onClick={fetchReport} className="w-full mt-8 h-14 text-xs uppercase tracking-widest font-black bg-slate-900 text-white shadow-xl shadow-slate-900/20 hover:bg-blue-600 hover:shadow-blue-600/30 transition-all rounded-2xl flex items-center justify-center gap-2 active:scale-95">
-                                    Apply Filters <ArrowRight size={14} />
-                                </button>
+                {/* --- NAVIGATION TABS --- */}
+                <div className="w-full overflow-x-auto no-scrollbar mb-8 shrink-0">
+                    <div className="flex bg-white/80 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200 shadow-sm min-w-max">
+                        {tabs.map(tab => (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveReport(tab.id)}
+                                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 ${activeReport === tab.id
+                                    ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/20'
+                                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                                    }`}
+                            >
+                                {tab.icon}
+                                {tab.name}
+                            </button>
+                        ))}
+                    </div>
+                </div>
 
-                                <div className="mt-6 p-4 bg-blue-50/50 rounded-2xl border border-blue-100">
-                                    <p className="text-[10px] text-blue-700 font-bold leading-relaxed">
-                                        💡 Analytics help you track growth. Select a range and hit Apply.
-                                    </p>
+                {/* --- MAIN CONTENT SCROLL --- */}
+                <div className="flex-1 overflow-y-auto no-scrollbar space-y-8 pb-10">
+                    
+                    {/* KPIs ROW */}
+                    {data?.total_revenue !== undefined ? (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/50 flex flex-col justify-center">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="p-2 bg-emerald-50 text-emerald-500 rounded-xl"><TrendingUp size={18}/></div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Revenue</p>
                                 </div>
+                                <h3 className="text-4xl font-black font-outfit tracking-tight text-slate-900">₹{Number(data?.total_revenue || 0).toFixed(2)}</h3>
                             </div>
+                            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/50 flex flex-col justify-center">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="p-2 bg-rose-50 text-rose-500 rounded-xl"><TrendingUp size={18} className="rotate-180"/></div>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Expense</p>
+                                </div>
+                                <h3 className="text-4xl font-black font-outfit tracking-tight text-slate-900">₹{Number(data?.total_expense || 0).toFixed(2)}</h3>
+                            </div>
+                            <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 rounded-[2rem] shadow-xl shadow-slate-900/30 flex flex-col justify-center text-white relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-white/10 transition-all duration-700"></div>
+                                <div className="flex items-center gap-3 mb-2 relative z-10">
+                                    <div className="p-2 bg-white/10 text-white rounded-xl backdrop-blur-sm border border-white/10"><PieChart size={18}/></div>
+                                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Net Profit</p>
+                                </div>
+                                <h3 className={`text-4xl font-black font-outfit tracking-tight relative z-10 ${data?.net_profit >= 0 ? 'text-emerald-400' : 'text-amber-400'}`}>₹{Number(data?.net_profit || 0).toFixed(2)}</h3>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-8 rounded-[2.5rem] shadow-xl shadow-slate-900/30 flex flex-col justify-center text-white relative overflow-hidden group">
+                            <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl group-hover:bg-white/10 transition-all duration-700"></div>
+                            <div className="flex items-center gap-3 mb-4 relative z-10">
+                                <div className="p-3 bg-white/10 text-white rounded-2xl backdrop-blur-sm border border-white/10"><ClipboardList size={24}/></div>
+                                <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Total Records</p>
+                            </div>
+                            <div className="flex items-end gap-4 relative z-10">
+                                <h3 className="text-6xl font-black font-outfit tracking-tighter text-white">{data?.details?.length || 0}</h3>
+                                <p className="text-emerald-400 text-xs font-bold flex items-center gap-1 mb-2">
+                                    <ArrowRight size={12} /> Data Updated Live
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* CHART ROW */}
+                    <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xl shadow-slate-200/50 flex flex-col">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="font-black text-slate-900 text-lg flex items-center gap-3 uppercase tracking-tighter">
+                                <BarChart3 size={20} className="text-blue-500" /> Growth Trajectory
+                            </h3>
+                            <div className="flex gap-2">
+                                <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-3 py-1 rounded-lg uppercase tracking-wide">Daily Trend</span>
+                            </div>
+                        </div>
+                        <div className="w-full h-[250px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={chartData}>
+                                    <defs>
+                                        <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.2} />
+                                            <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 'bold' }} dy={10} />
+                                    <YAxis hide />
+                                    <Tooltip
+                                        contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '16px', fontFamily: 'sans-serif' }}
+                                        itemStyle={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a' }}
+                                        labelStyle={{ fontSize: '10px', color: '#64748b', fontWeight: 'bold', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}
+                                    />
+                                    <Area type="monotone" dataKey="value" stroke="#0ea5e9" strokeWidth={4} fillOpacity={1} fill="url(#colorValue)" />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* TABLE ROW */}
+                    <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50 overflow-hidden flex flex-col">
+                        <div className="p-6 border-b border-slate-100 flex flex-wrap gap-4 justify-between items-center bg-slate-50/30">
+                            <h3 className="font-black text-slate-900 uppercase tracking-widest text-sm flex items-center gap-2">
+                                <ClipboardList size={16} className="text-slate-400" /> Detailed Breakdown
+                            </h3>
+                            <div className="flex items-center gap-4">
+                                <div className="relative">
+                                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search records..."
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                        className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all shadow-sm w-64"
+                                    />
+                                </div>
+                                <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm">
+                                    <Download size={14} /> Export CSV
+                                </button>
+                            </div>
+                        </div>
+                        <div className="w-full overflow-x-auto no-scrollbar p-0">
+                            <Table
+                                headers={tableConfig.headers}
+                                rows={tableConfig.rows}
+                            />
+                            {tableConfig.rows.length === 0 && !loading && (
+                                <div className="p-16 text-center text-slate-300 flex flex-col items-center">
+                                    <div className="p-4 bg-slate-50 rounded-full mb-3"><X size={24} /></div>
+                                    <p className="text-xs font-bold uppercase tracking-widest">No records found</p>
+                                </div>
+                            )}
+                            {loading && (
+                                <div className="p-16 flex flex-col items-center justify-center gap-4">
+                                    <div className="w-8 h-8 border-4 border-slate-100 border-t-slate-900 rounded-full animate-spin" />
+                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest animate-pulse">Syncing data...</p>
+                                </div>
+                            )}
+                            {tableConfig.rows.length > 0 && (
+                                <Pagination
+                                    current={currentPage}
+                                    total={totalPages}
+                                    onPageChange={setCurrentPage}
+                                    loading={loading}
+                                />
+                            )}
                         </div>
                     </div>
                 </div>
 
-                {/* Case Sheet Modal */}
+                {/* Case Sheet Modal */}                {/* Case Sheet Modal */}
                 <AnimatePresence>
                     {selectedNote && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm no-scrollbar">

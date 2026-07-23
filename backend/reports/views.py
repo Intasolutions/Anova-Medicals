@@ -232,23 +232,40 @@ class PharmacySalesReportView(BaseReportView):
         sales = PharmacySale.objects.filter(
             created_at__date__gte=start_date,
             created_at__date__lte=end_date
-        ).select_related('visit', 'visit__patient')
+        ).select_related('visit', 'visit__patient').prefetch_related('items__med_stock')
+
+        details = []
+        total_revenue = 0
+        total_cost = 0
+        
+        for s in sales:
+            sale_cost = sum([item.qty * (item.med_stock.ptr if item.med_stock.ptr else 0) for item in s.items.all()])
+            sale_revenue = s.total_amount
+            total_revenue += float(sale_revenue)
+            total_cost += float(sale_cost)
+            
+            details.append({
+                "id": s.id,
+                "patient": s.visit.patient.full_name if s.visit and hasattr(s.visit, 'patient') and s.visit.patient else getattr(s, 'patient_name', 'Walk-in'),
+                "total": sale_revenue,
+                "cost": sale_cost,
+                "profit": float(sale_revenue) - float(sale_cost),
+                "date": s.created_at
+            })
+
+        net_profit = total_revenue - total_cost
 
         if request.query_params.get('export') == 'csv':
-            data = [[s.id, s.patient_name, s.total_amount, s.created_at] for s in sales]
-            return self.export_csv("pharmacy_sales", ["Sale ID", "Patient", "Total", "Date"], data)
-
-        details = [{
-            "id": s.id,
-            "patient": s.visit.patient.full_name if s.visit else "Walk-in", # Fix for pharmacy sale
-            "total": s.total_amount,
-            "date": s.created_at
-        } for s in sales]
+            data = [[d["id"], d["patient"], d["cost"], d["total"], d["profit"], d["date"]] for d in details]
+            return self.export_csv("pharmacy_sales", ["Sale ID", "Patient", "Cost (PTR)", "Revenue (MRP)", "Profit", "Date"], data)
 
         return Response({
             "start_date": start_date,
             "end_date": end_date,
             "report_type": "Pharmacy Sales",
+            "total_revenue": total_revenue,
+            "total_expense": total_cost,
+            "net_profit": net_profit,
             "details": details
         })
 
@@ -260,14 +277,18 @@ class LabTestReportView(BaseReportView):
             created_at__date__gte=start_date,
             created_at__date__lte=end_date
         ).select_related('visit__patient')
+        
+        total_revenue = tests.aggregate(total=Sum('amount'))['total'] or 0
+        total_expense = 0
+        net_profit = total_revenue
 
         if request.query_params.get('export') == 'csv':
-            data = [[t.id, t.visit.patient.name, t.test_name, t.amount, t.created_at] for t in tests]
+            data = [[t.id, t.visit.patient.full_name if t.visit and t.visit.patient else 'Unknown', t.test_name, t.amount, t.created_at] for t in tests]
             return self.export_csv("lab_report", ["Test ID", "Patient", "Test Name", "Amount", "Date"], data)
 
         details = [{
             "id": t.id,
-            "patient": t.visit.patient.full_name,
+            "patient": t.visit.patient.full_name if t.visit and t.visit.patient else 'Unknown',
             "test_name": t.test_name,
             "amount": t.amount,
             "date": t.created_at
@@ -277,6 +298,9 @@ class LabTestReportView(BaseReportView):
             "start_date": start_date,
             "end_date": end_date,
             "report_type": "Lab Tests",
+            "total_revenue": float(total_revenue),
+            "total_expense": total_expense,
+            "net_profit": float(net_profit),
             "details": details
         })
 
@@ -448,18 +472,15 @@ class PharmacyInventoryReportView(BaseReportView):
         sales = PharmacySaleItem.objects.filter(
             created_at__date__gte=start_date,
             created_at__date__lte=end_date
-        ).values('med_stock__name', 'med_stock__batch_no', 'qty', 'created_at', 'unit_price')
-
-        if request.query_params.get('export') == 'csv':
-            data = []
-            for p in purchases:
-                data.append([p['created_at'], p['product_name'], p['batch_no'], 'IN', p['qty'], p['purchase_rate']])
-            for s in sales:
-                data.append([s['created_at'], s['med_stock__name'], s['med_stock__batch_no'], 'OUT', s['qty'], s['unit_price']])
-            return self.export_csv("inventory_logs", ["Date", "Item", "Batch", "Type", "Qty", "Rate"], data)
+        ).values('med_stock__name', 'med_stock__batch_no', 'qty', 'created_at', 'unit_price', 'med_stock__ptr')
 
         details = []
+        total_in_value = 0
+        total_out_value = 0
+        
         for p in purchases:
+            val = float(p['qty'] or 0) * float(p['purchase_rate'] or 0)
+            total_in_value += val
             details.append({
                 "id": f"IN-{p['batch_no']}",
                 "item_name": p['product_name'],
@@ -467,51 +488,70 @@ class PharmacyInventoryReportView(BaseReportView):
                 "type": "STOCK_IN",
                 "qty": p['qty'],
                 "cost": p['purchase_rate'],
+                "stock_value": val,
                 "date": p['created_at']
             })
         for s in sales:
+            ptr = float(s['med_stock__ptr'] or 0)
+            val = float(s['qty'] or 0) * ptr
+            total_out_value += val
             details.append({
                 "id": f"OUT-{s['med_stock__batch_no']}",
                 "item_name": s['med_stock__name'],
                 "batch_no": s['med_stock__batch_no'],
                 "type": "STOCK_OUT",
                 "qty": s['qty'],
-                "cost": s['unit_price'],
+                "cost": ptr,
+                "stock_value": val,
                 "date": s['created_at']
             })
             
         details.sort(key=lambda x: x['date'], reverse=True)
 
+        if request.query_params.get('export') == 'csv':
+            data = [[d["date"], d["item_name"], d["batch_no"], d["type"], d["qty"], d["cost"], d["stock_value"]] for d in details]
+            return self.export_csv("inventory_logs", ["Date", "Item", "Batch", "Type", "Qty", "Cost Rate", "Stock Value"], data)
+
         return Response({
             "start_date": start_date,
             "end_date": end_date,
             "report_type": "Stock IN/OUT Report",
+            "total_revenue": total_in_value,
+            "total_expense": total_out_value,
+            "net_profit": 0,
             "details": details
         })
 
 class ExpiryReportView(BaseReportView):
     def get(self, request):
-        # Expiry report doesn't necessarily need a date range filter for creation, 
-        # but rather a filter for things expiring SOON or ALREADY EXPIRED.
-        target_date = timezone.now().date() + timedelta(days=90) # Expiring in 90 days
+        target_date = timezone.now().date() + timedelta(days=90)
         stocks = PharmacyStock.objects.filter(expiry_date__lte=target_date, is_deleted=False).order_by('expiry_date')
 
-        if request.query_params.get('export') == 'csv':
-            data = [[s.name, s.batch_no, s.expiry_date, s.qty_available, s.mrp] for s in stocks]
-            return self.export_csv("expiry_report", ["Item", "Batch", "Expiry", "Qty Available", "MRP"], data)
+        total_loss = 0
+        details = []
+        for s in stocks:
+            loss_val = float(s.qty_available or 0) * float(s.ptr or 0)
+            total_loss += loss_val
+            details.append({
+                "id": str(s.id),
+                "item_name": s.name,
+                "batch_no": s.batch_no,
+                "expiry_date": s.expiry_date,
+                "qty": s.qty_available,
+                "cost": s.mrp,
+                "loss_value": loss_val,
+                "date": s.expiry_date
+            })
 
-        details = [{
-            "id": str(s.id),
-            "item_name": s.name,
-            "batch_no": s.batch_no,
-            "expiry_date": s.expiry_date,
-            "qty": s.qty_available,
-            "cost": s.mrp,
-            "date": s.expiry_date # Using expiry date as primary date for sorting/display
-        } for s in stocks]
+        if request.query_params.get('export') == 'csv':
+            data = [[d["item_name"], d["batch_no"], d["expiry_date"], d["qty"], d["cost"], d["loss_value"]] for d in details]
+            return self.export_csv("expiry_report", ["Item", "Batch", "Expiry", "Qty Available", "MRP", "Loss Value"], data)
 
         return Response({
             "report_type": "Expiry Report (Expiring within 90 days)",
+            "total_revenue": 0,
+            "total_expense": total_loss,
+            "net_profit": -total_loss,
             "details": details
         })
 

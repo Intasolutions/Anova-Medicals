@@ -92,13 +92,13 @@ const Billing = () => {
             socket.off('pharmacy_sale_update', onPharmacySale);
         };
 
-    }, [page, globalSearch, selectedDate]);
+    }, [page, globalSearch, selectedDate, statusFilter]);
 
     // --- API Calls ---
     const fetchInvoices = async (showLoading = true) => {
         if (showLoading) setLoading(true);
         try {
-            const { data } = await api.get(`/billing/invoices/?page=${page}${globalSearch ? `&search=${encodeURIComponent(globalSearch)}` : ''}${selectedDate ? `&date=${selectedDate}` : ''}`);
+            const { data } = await api.get(`/billing/invoices/?page=${page}${globalSearch ? `&search=${encodeURIComponent(globalSearch)}` : ''}${selectedDate ? `&date=${selectedDate}` : ''}${statusFilter !== 'ALL' ? `&payment_status=${statusFilter}` : ''}`);
             setInvoices(data.results || (Array.isArray(data) ? data : []));
             setTotalInvoices(data.count || (Array.isArray(data) ? data.length : 0));
         } catch (err) {
@@ -1078,7 +1078,7 @@ const Billing = () => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
-                            {invoices.filter(inv => { const matchesSearch = (inv.patient_name || "").toLowerCase().includes(searchTerm.toLowerCase()) || (inv.invoice_number || inv.id || "").toString().toLowerCase().includes(searchTerm.toLowerCase()); const matchesStatus = statusFilter === "ALL" || inv.payment_status === statusFilter; return matchesSearch && matchesStatus; }).map((invoice) => (
+                            {invoices.map((invoice) => (
                                 <tr key={invoice.id} className="hover:bg-slate-50/80 transition-colors group">
                                     <td className="px-6 py-4 font-mono text-xs font-bold text-slate-500">{invoice.invoice_number || `#${invoice.id}`}</td>
                                     <td className="px-6 py-4 font-bold text-slate-900">{invoice.patient_name || "Guest"}</td>
