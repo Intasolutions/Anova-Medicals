@@ -31,7 +31,10 @@ class PatientViewSet(viewsets.ModelViewSet):
     permission_classes = [IsHospitalStaff]
     pagination_class = StandardResultsSetPagination
 
-    filter_backends = [filters.SearchFilter]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = {
+        'created_at': ['date', 'gte', 'lte', 'exact'],
+    }
     search_fields = ['full_name', 'phone', 'registration_number']
 
     def get_queryset(self):
@@ -108,7 +111,8 @@ class VisitViewSet(viewsets.ModelViewSet):
         'status': ['exact', 'in'],
         'patient': ['exact'], 
         'doctor': ['exact'],
-        'assigned_role': ['exact', 'in']
+        'assigned_role': ['exact', 'in'],
+        'created_at': ['date', 'gte', 'lte', 'exact']
     }
     search_fields = ['patient__full_name', 'patient__phone', 'patient__registration_number']
     ordering_fields = ['created_at', 'updated_at']

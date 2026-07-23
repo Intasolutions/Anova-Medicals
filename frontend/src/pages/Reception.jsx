@@ -5,7 +5,7 @@ import {
     UserPlus, Phone, User as UserIcon, ArrowRight, X,
     Activity, Thermometer, Heart, Scale, Stethoscope,
     MapPin, ChevronRight, Search, CheckCircle2, AlertCircle, FileText, IndianRupee, Edit, Trash2,
-    Users, Info, Wallet, Sparkles, CreditCard, AlertTriangle
+    Users, Info, Wallet, Sparkles, CreditCard, AlertTriangle, Calendar
 } from 'lucide-react';
 import { useSearch } from '../context/SearchContext';
 import { useAuth } from '../context/AuthContext';
@@ -69,6 +69,11 @@ const Reception = () => {
     const [activeTab, setActiveTab] = useState('front-desk'); // 'front-desk' | 'billing'
     const [frontDeskTab, setFrontDeskTab] = useState('active'); // 'all' | 'active'
     const [editingPatientId, setEditingPatientId] = useState(null);
+    const getLocalDate = () => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    const [selectedDate, setSelectedDate] = useState(getLocalDate());
 
     // Modals
     const [showAddModal, setShowAddModal] = useState(false);
@@ -181,7 +186,7 @@ const Reception = () => {
     useEffect(() => {
         fetchPatients(true);
         fetchStats();
-    }, [page, globalSearch, patientSearch, pageSize, frontDeskTab]);
+    }, [page, globalSearch, patientSearch, pageSize, frontDeskTab, selectedDate]);
 
     // Add 4-second automatic refresh
     useEffect(() => {
@@ -191,7 +196,7 @@ const Reception = () => {
         }, 4000);
 
         return () => clearInterval(interval);
-    }, [page, globalSearch, patientSearch, pageSize, frontDeskTab]);
+    }, [page, globalSearch, patientSearch, pageSize, frontDeskTab, selectedDate]);
 
     useEffect(() => {
         fetchStats();
@@ -244,6 +249,11 @@ const Reception = () => {
             if (frontDeskTab === 'active') {
                 url += `&only_active=true`;
             }
+            
+            // Add date filter to patients/visits fetch
+            if (selectedDate) {
+                url += `&created_at__date=${selectedDate}`;
+            }
 
             url += `${patientSearch ? `&search=${encodeURIComponent(patientSearch)}` : globalSearch ? `&search=${encodeURIComponent(globalSearch)}` : ''}`;
 
@@ -263,14 +273,12 @@ const Reception = () => {
     const fetchStats = async () => {
         setStatsLoading(true);
         try {
-            const today = new Date().toISOString().split('T')[0];
-
-            // Fetch stats from various endpoints
+            // Fetch stats from various endpoints based on selected date
             const [patientsRes, visitsRes, invoicesRes, dashboardStatsRes] = await Promise.all([
-                api.get(`/reception/patients/?created_at__date=${today}`),
-                api.get(`/reception/visits/?status__in=OPEN,IN_PROGRESS`),
-                api.get(`/billing/invoices/?created_at__date=${today}`),
-                api.get(`/core/dashboard/stats/`)
+                api.get(`/reception/patients/?created_at__date=${selectedDate}`),
+                api.get(`/reception/visits/?status__in=OPEN,IN_PROGRESS&created_at__date=${selectedDate}`),
+                api.get(`/billing/invoices/?created_at__date=${selectedDate}`),
+                api.get(`/core/dashboard/stats/?date=${selectedDate}`)
             ]);
 
             const newPatients = patientsRes.data.count || patientsRes.data.results?.length || 0;
@@ -750,13 +758,37 @@ const Reception = () => {
                                         <input
                                             type="text"
                                             placeholder="Search by name, phone, or ID..."
+                                            className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none w-64 transition-all"
                                             value={patientSearch}
-                                            onChange={(e) => {
-                                                setPatientSearch(e.target.value);
-                                                setPage(1); // Reset page on search
-                                            }}
-                                            className="w-64 pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                                            onChange={(e) => setPatientSearch(e.target.value)}
                                         />
+                                        {patientSearch && (
+                                            <button onClick={() => setPatientSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                                <X size={14} />
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="relative ml-2 flex items-center">
+                                        <div className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all">
+                                            <div className="pl-3 pr-2 py-2 text-slate-400 bg-slate-50 border-r border-slate-200">
+                                                <Calendar size={14} />
+                                            </div>
+                                            <input
+                                                type="date"
+                                                value={selectedDate}
+                                                onChange={(e) => setSelectedDate(e.target.value)}
+                                                className="px-3 py-2 bg-transparent text-sm font-bold text-slate-700 outline-none w-[140px] cursor-pointer appearance-none"
+                                            />
+                                            {selectedDate !== getLocalDate() && (
+                                                <button 
+                                                    onClick={() => setSelectedDate(getLocalDate())}
+                                                    className="pr-3 pl-2 py-2 text-slate-400 hover:text-slate-600 bg-white"
+                                                    title="Reset to Today"
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </div>

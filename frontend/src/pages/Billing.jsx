@@ -28,7 +28,11 @@ const Billing = () => {
     const globalSearch = searchTerm; // Map searchTerm to globalSearch for compatibility with the copied logic
 
     // --- Date Filter State ---
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+    const getLocalDate = () => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    const [selectedDate, setSelectedDate] = useState(getLocalDate());
 
     // --- Forms ---
     const [doctors, setDoctors] = useState([]);
@@ -837,6 +841,23 @@ const Billing = () => {
             </span>
         );
     };
+    const totalPages = Math.ceil(totalInvoices / 10) || 1;
+
+    // --- Unified Billing Queue ---
+    const unpaidInvoices = invoices.filter(inv => inv.payment_status === 'PENDING' || inv.payment_status === 'PARTIAL');
+    const unpaidInvoiceVisitIds = new Set(
+        unpaidInvoices
+            .map(inv => (typeof inv.visit === 'object' ? inv.visit?.id : inv.visit))
+            .filter(Boolean)
+    );
+    
+    // Filter out pending visits that already have an unpaid invoice to avoid duplicates in the top queue
+    const filteredPendingVisits = pendingVisits.filter(visit => !unpaidInvoiceVisitIds.has(visit.id));
+
+    const unifiedQueue = [
+        ...filteredPendingVisits.map(v => ({ ...v, queue_type: 'visit' })),
+        ...unpaidInvoices.map(i => ({ ...i, queue_type: 'invoice' }))
+    ];
 
     return (
         <div className="p-6 md:p-8 max-w-[1600px] mx-auto min-h-screen bg-[#F8FAFC] font-sans text-slate-900 relative print:p-0 print:m-0 print:min-h-0 print:bg-white print:overflow-visible print:max-w-none">
@@ -883,73 +904,111 @@ const Billing = () => {
 
             {/* --- Pending Queue (Always Visible) --- */}
             <div className="mb-10 no-print">
-                <div className="flex items-center gap-2 mb-4 px-1">
-                    <div className="p-1.5 bg-indigo-100 text-indigo-600 rounded-lg"><Sparkles size={16} /></div>
-                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wide">Ready for Billing</h3>
-                    <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 text-[10px] font-black rounded-full border border-indigo-100">{pendingVisits.length}</span>
+                <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-blue-50/30">
+                    <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wide flex items-center gap-2">
+                        <AlertCircle size={16} className="text-blue-500" /> Action Required: Pending Bills & Visits
+                    </h3>
+                    <div className="flex items-center gap-2">
+                        <span className="px-2.5 py-1 bg-white border border-slate-200 rounded-md text-[10px] font-black text-slate-500 shadow-sm">
+                            TOTAL: {unifiedQueue.length}
+                        </span>
+                    </div>
                 </div>
 
-                {pendingVisits.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                        {pendingVisits.map(visit => (
-                            <div key={visit.id} onClick={() => handleBillNow(visit)} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:border-blue-400 hover:shadow-md cursor-pointer transition-all group relative overflow-hidden">
-                                <div className="absolute top-0 right-0 w-16 h-16 bg-blue-50 rounded-bl-[3rem] -mr-8 -mt-8 z-0"></div>
+                {unifiedQueue.length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 p-5">
+                        {unifiedQueue.map(item => (
+                            <div 
+                                key={`${item.queue_type}-${item.id}`} 
+                                onClick={() => item.queue_type === 'invoice' ? handleMarkAsPaid(item) : handleBillNow(item)} 
+                                className={`bg-white p-5 rounded-2xl border shadow-sm cursor-pointer transition-all group relative overflow-hidden ${item.queue_type === 'invoice' ? 'border-orange-200 hover:border-orange-400 hover:shadow-orange-100' : 'border-slate-200 hover:border-blue-400 hover:shadow-blue-50'}`}
+                            >
+                                <div className={`absolute top-0 right-0 w-16 h-16 rounded-bl-[3rem] -mr-8 -mt-8 z-0 ${item.queue_type === 'invoice' ? 'bg-orange-50' : 'bg-blue-50'}`}></div>
                                 <div className="relative z-10">
                                     <div className="flex justify-between items-start mb-2">
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center font-bold text-sm">
-                                                {visit.patient_name?.[0] || "?"}
+                                                {item.patient_name?.[0] || "?"}
                                             </div>
                                             <div>
-                                                <h4 className="font-bold text-slate-900 text-sm line-clamp-1">{visit.patient_name}</h4>
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase">ID: {(visit.id || "")}</p>
+                                                <h4 className="font-bold text-slate-900 text-sm line-clamp-1">{item.patient_name || "Guest"}</h4>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase">
+                                                    {item.queue_type === 'invoice' ? `INV: ${item.invoice_number || item.id}` : `VISIT: ${item.id}`}
+                                                </p>
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="space-y-1 mt-3">
-                                        {(visit.consultation_fee && parseFloat(visit.consultation_fee) > 0) ? (
+                                    
+                                    {item.queue_type === 'invoice' ? (
+                                        <div className="space-y-1 mt-3">
                                             <div className="flex justify-between text-xs">
-                                                <span className="text-slate-500 font-medium">Consultation</span>
-                                                <span className="font-bold text-slate-700">₹{parseFloat(visit.consultation_fee).toFixed(2)}</span>
+                                                <span className="text-slate-500 font-medium">Total Amount</span>
+                                                <span className="font-bold text-slate-700">₹{parseFloat(item.total_amount || 0).toFixed(2)}</span>
                                             </div>
-                                        ) : (visit.doctor ? (
-                                            <div className="flex justify-between text-xs">
-                                                <span className="text-slate-500 font-medium">Consultation</span>
-                                                <span className="font-bold text-slate-700 text-[10px]">TBD</span>
+                                            {item.payment_status === 'PARTIAL' && (
+                                                <div className="flex justify-between text-xs">
+                                                    <span className="text-slate-500 font-medium">Balance Due</span>
+                                                    <span className="font-bold text-orange-600">₹{parseFloat(item.balance_due || 0).toFixed(2)}</span>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-between text-xs mt-2">
+                                                <span className="text-slate-500 font-medium text-[10px]">Date Generated</span>
+                                                <span className="font-bold text-slate-400 text-[10px]">{new Date(item.created_at).toLocaleDateString()}</span>
                                             </div>
-                                        ) : null)}
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-1 mt-3">
+                                            {(item.consultation_fee && parseFloat(item.consultation_fee) > 0) ? (
+                                                <div className="flex justify-between text-xs">
+                                                    <span className="text-slate-500 font-medium">Consultation</span>
+                                                    <span className="font-bold text-slate-700">₹{parseFloat(item.consultation_fee).toFixed(2)}</span>
+                                                </div>
+                                            ) : (item.doctor ? (
+                                                <div className="flex justify-between text-xs">
+                                                    <span className="text-slate-500 font-medium">Consultation</span>
+                                                    <span className="font-bold text-slate-700 text-[10px]">TBD</span>
+                                                </div>
+                                            ) : null)}
 
-                                        {(visit.pharmacy_items && visit.pharmacy_items.length > 0) && (
-                                            <div className="flex justify-between text-xs">
-                                                <span className="text-slate-500 font-medium">Pharmacy</span>
-                                                <span className="font-bold text-slate-700">
-                                                    ₹{visit.pharmacy_items.reduce((sum, i) => sum + (parseFloat(i.amount) || parseFloat(i.total_price) || 0), 0).toFixed(2)}
-                                                </span>
-                                            </div>
-                                        )}
+                                            {(item.pharmacy_items && item.pharmacy_items.length > 0) && (
+                                                <div className="flex justify-between text-xs">
+                                                    <span className="text-slate-500 font-medium">Pharmacy</span>
+                                                    <span className="font-bold text-slate-700">
+                                                        ₹{item.pharmacy_items.reduce((sum, i) => sum + (parseFloat(i.amount) || parseFloat(i.total_price) || 0), 0).toFixed(2)}
+                                                    </span>
+                                                </div>
+                                            )}
 
-                                        {(visit.lab_charges_data && visit.lab_charges_data.length > 0) && (
-                                            <div className="flex justify-between text-xs">
-                                                <span className="text-slate-500 font-medium">Lab Tests</span>
-                                                <span className="font-bold text-slate-700">
-                                                    ₹{visit.lab_charges_data.reduce((sum, i) => sum + parseFloat(i.amount || 0), 0).toFixed(2)}
-                                                </span>
-                                            </div>
-                                        )}
+                                            {(item.lab_charges_data && item.lab_charges_data.length > 0) && (
+                                                <div className="flex justify-between text-xs">
+                                                    <span className="text-slate-500 font-medium">Lab Tests</span>
+                                                    <span className="font-bold text-slate-700">
+                                                        ₹{item.lab_charges_data.reduce((sum, i) => sum + parseFloat(i.amount || 0), 0).toFixed(2)}
+                                                    </span>
+                                                </div>
+                                            )}
 
-                                        {(visit.casualty_services && visit.casualty_services.length > 0) && (
-                                            <div className="flex justify-between text-xs">
-                                                <span className="text-slate-500 font-medium">Services</span>
-                                                <span className="font-bold text-slate-700">
-                                                    ₹{visit.casualty_services.reduce((sum, i) => sum + parseFloat(i.total_charge || 0), 0).toFixed(2)}
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
+                                            {(item.casualty_services && item.casualty_services.length > 0) && (
+                                                <div className="flex justify-between text-xs">
+                                                    <span className="text-slate-500 font-medium">Services</span>
+                                                    <span className="font-bold text-slate-700">
+                                                        ₹{item.casualty_services.reduce((sum, i) => sum + parseFloat(i.total_charge || 0), 0).toFixed(2)}
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
                                     <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center">
-                                        <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded">PENDING</span>
-                                        <div className="flex items-center gap-1 text-slate-400 group-hover:text-blue-500 text-xs font-bold">
-                                            <span>Bill Now</span>
+                                        {item.queue_type === 'invoice' ? (
+                                            <span className={`text-[10px] font-black px-2 py-1 rounded ${item.payment_status === 'PARTIAL' ? 'text-orange-600 bg-orange-50' : 'text-rose-600 bg-rose-50'}`}>
+                                                {item.payment_status}
+                                            </span>
+                                        ) : (
+                                            <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded">WAITING</span>
+                                        )}
+                                        <div className={`flex items-center gap-1 text-xs font-bold ${item.queue_type === 'invoice' ? 'text-orange-400 group-hover:text-orange-600' : 'text-slate-400 group-hover:text-blue-500'}`}>
+                                            <span>{item.queue_type === 'invoice' ? 'Collect Payment' : 'Bill Now'}</span>
                                             <ChevronRight size={14} />
                                         </div>
                                     </div>

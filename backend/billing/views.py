@@ -19,7 +19,12 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     queryset = Invoice.objects.all().order_by('-created_at')
     serializer_class = InvoiceSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
-    filterset_fields = ['visit__patient', 'payment_status', 'visit']
+    filterset_fields = {
+        'visit__patient': ['exact'],
+        'payment_status': ['exact'],
+        'visit': ['exact'],
+        'created_at': ['date', 'gte', 'lte', 'exact']
+    }
     search_fields = ['id', 'invoice_number', 'visit__patient__full_name', 'visit__patient__phone', 'visit__patient__registration_number', 'patient_name']
 
     def get_queryset(self):

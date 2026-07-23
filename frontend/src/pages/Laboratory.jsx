@@ -2351,7 +2351,7 @@ const Laboratory = () => {
                             </div>
 
                             {/* Patient Info Header */}
-                            <div className="mb-6 border-b border-slate-300 pb-4">
+                            <div className="mb-2 border-b border-slate-300 pb-4">
                                 <div className="grid grid-cols-3 gap-4">
                                     {/* Examinee Details */}
                                     <div>
@@ -2437,10 +2437,10 @@ const Laboratory = () => {
                                     <table className="w-full text-left border-collapse">
                                         <thead>
                                             <tr className="border-b-2 border-slate-300 text-slate-700">
-                                                <th className="px-2 py-2 text-[10px] font-bold uppercase tracking-widest w-[40%]">Parameter Name</th>
-                                                <th className="px-2 py-2 text-[10px] font-bold uppercase tracking-widest w-[20%]">Result Value</th>
-                                                <th className="px-2 py-2 text-[10px] font-bold uppercase tracking-widest w-[15%]">Unit</th>
-                                                <th className="px-2 py-2 text-[10px] font-bold uppercase tracking-widest w-[25%] text-right">Normal Range</th>
+                                                <th className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest w-[40%]">Parameter Name</th>
+                                                <th className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest w-[20%]">Result Value</th>
+                                                <th className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest w-[15%]">Unit</th>
+                                                <th className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest w-[25%] text-right">Normal Range</th>
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
@@ -2455,7 +2455,7 @@ const Laboratory = () => {
                                                 <React.Fragment key={category}>
                                                     {category !== 'UNCATEGORIZED' && (
                                                         <tr>
-                                                            <td colSpan="4" className="px-3 py-1.5 mt-2 text-xs font-black text-slate-700 bg-slate-100 uppercase tracking-widest text-left rounded-sm">
+                                                            <td colSpan="4" className="px-2 py-1 text-xs font-black text-slate-700 bg-slate-100 uppercase tracking-widest text-left">
                                                                 {category}
                                                             </td>
                                                         </tr>
@@ -2465,7 +2465,7 @@ const Laboratory = () => {
                                                         return (
                                                             <React.Fragment key={testIdx}>
                                                                 <tr>
-                                                                    <td colSpan="4" className="px-2 pt-2 pb-1 text-xs font-bold text-slate-800 uppercase tracking-widest text-left">
+                                                                    <td colSpan="4" className="px-2 py-1 text-xs font-bold text-slate-800 uppercase tracking-widest text-left">
                                                                         {testItem.test_name}
                                                                         {testItem.sub_name && <span className="ml-2 text-[10px] font-medium text-slate-500 normal-case tracking-normal">({testItem.sub_name})</span>}
                                                                     </td>
