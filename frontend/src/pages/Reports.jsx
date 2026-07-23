@@ -100,12 +100,36 @@ const Reports = () => {
 
     const getChartData = () => {
         if (!data?.details) return [];
+        
         const daily = {};
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        
+        // Pre-fill days to ensure we always have points for a line
+        let current = new Date(start);
+        let daysCount = 0;
+        while (current <= end && daysCount < 31) {
+            const dateStr = current.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            daily[dateStr] = 0;
+            current.setDate(current.getDate() + 1);
+            daysCount++;
+        }
+
         data.details.forEach(item => {
-            const day = new Date(item.date).toLocaleDateString(undefined, { weekday: 'short' });
-            daily[day] = (daily[day] || 0) + (item.amount || item.total || 1);
+            const day = new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+            const val = parseFloat(item.amount) || parseFloat(item.total) || 1;
+            if (daily[day] !== undefined) {
+                daily[day] += val;
+            } else {
+                daily[day] = val;
+            }
         });
-        return Object.keys(daily).map(day => ({ name: day, value: daily[day] }));
+        
+        const result = Object.keys(daily).map(day => ({ name: day, value: daily[day] }));
+        if (result.length === 1) {
+            result.unshift({ name: 'Start', value: 0 });
+        }
+        return result;
     };
 
     const chartData = getChartData();
@@ -355,14 +379,6 @@ const Reports = () => {
                                             <ArrowRight size={12} /> Data Updated Live
                                         </p>
                                     </div>
-                                )}
-                                {tableConfig.rows.length > 0 && (
-                                    <Pagination
-                                        current={currentPage}
-                                        total={totalPages}
-                                        onPageChange={setCurrentPage}
-                                        loading={loading}
-                                    />
                                 )}
                             </div>
                         </div>
