@@ -69,6 +69,7 @@ const Reception = () => {
     const [activeTab, setActiveTab] = useState('front-desk'); // 'front-desk' | 'billing'
     const [frontDeskTab, setFrontDeskTab] = useState('active'); // 'all' | 'active'
     const [editingPatientId, setEditingPatientId] = useState(null);
+    const [isRegistering, setIsRegistering] = useState(false);
     const getLocalDate = () => {
         const d = new Date();
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -155,6 +156,7 @@ const Reception = () => {
 
         setRouteSubmitting(true);
         try {
+            setIsRegistering(true);
             const payload = {
                 assigned_role: routeForm.assigned_role
             };
@@ -358,12 +360,15 @@ const Reception = () => {
     const handleRegister = async (e) => {
         e.preventDefault();
 
+        if (isRegistering) return;
+
         if (!validateForm()) {
             showToast('error', 'Please fix the errors highlighted in the form.');
             return;
         }
 
         try {
+            setIsRegistering(true);
             const payload = {
                 ...form,
                 age: form.age ? parseInt(form.age) : 0,
@@ -1171,7 +1176,7 @@ const Reception = () => {
                                                     </div>
                                                 </div>
                                             </div>
-                                            <button
+                                            <button disabled={isRegistering}
                                                 onClick={handleRegister}
                                                 className="w-full py-5 bg-slate-950 text-white rounded-2xl font-bold text-lg shadow-xl shadow-slate-900/20 hover:bg-blue-600 hover:shadow-blue-600/20 transition-all active:scale-[0.98] flex items-center justify-center gap-3"
                                             >

@@ -239,7 +239,7 @@ class PharmacySalesReportView(BaseReportView):
         total_cost = 0
         
         for s in sales:
-            sale_cost = sum([item.qty * (item.med_stock.ptr if item.med_stock.ptr else 0) for item in s.items.all()])
+            sale_cost = sum([item.qty * ((item.med_stock.ptr or 0) / (item.med_stock.tablets_per_strip or 1)) for item in s.items.all()])
             sale_revenue = s.total_amount
             total_revenue += float(sale_revenue)
             total_cost += float(sale_cost)
@@ -472,7 +472,7 @@ class PharmacyInventoryReportView(BaseReportView):
         sales = PharmacySaleItem.objects.filter(
             created_at__date__gte=start_date,
             created_at__date__lte=end_date
-        ).values('med_stock__name', 'med_stock__batch_no', 'qty', 'created_at', 'unit_price', 'med_stock__ptr')
+        ).values('med_stock__name', 'med_stock__batch_no', 'qty', 'created_at', 'unit_price', 'med_stock__ptr', 'med_stock__tablets_per_strip')
 
         details = []
         total_in_value = 0
@@ -492,7 +492,8 @@ class PharmacyInventoryReportView(BaseReportView):
                 "date": p['created_at']
             })
         for s in sales:
-            ptr = float(s['med_stock__ptr'] or 0)
+            tps = float(s['med_stock__tablets_per_strip'] or 1)
+            ptr = float(s['med_stock__ptr'] or 0) / tps
             val = float(s['qty'] or 0) * ptr
             total_out_value += val
             details.append({
@@ -530,7 +531,8 @@ class ExpiryReportView(BaseReportView):
         total_loss = 0
         details = []
         for s in stocks:
-            loss_val = float(s.qty_available or 0) * float(s.ptr or 0)
+            tps = float(s.tablets_per_strip or 1)
+            loss_val = float(s.qty_available or 0) * (float(s.ptr or 0) / tps)
             total_loss += loss_val
             details.append({
                 "id": str(s.id),
