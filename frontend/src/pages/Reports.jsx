@@ -9,8 +9,10 @@ import {
 } from 'recharts';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Card, Button, Input, Table } from '../components/UI';
+import Pagination from '../components/Pagination';
 import api from '../api/axios';
 import { socket } from '../socket';
+import { Search } from 'lucide-react';
 
 const Reports = () => {
     const [activeReport, setActiveReport] = useState('financial');
@@ -18,7 +20,17 @@ const Reports = () => {
     const [loading, setLoading] = useState(true);
     const [startDate, setStartDate] = useState(new Date().toISOString().slice(0, 7) + '-01');
     const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+
     const [selectedNote, setSelectedNote] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const ITEMS_PER_PAGE = 15;
+
+    // Reset pagination on tab/data change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [activeReport, data, searchQuery]);
+
 
     // --- LOGIC (Preserved 100%) ---
     const fetchReport = async () => {
@@ -89,13 +101,33 @@ const Reports = () => {
 
     const chartData = getChartData();
 
+
+    // --- Data Processing (Search & Pagination) ---
+    const filteredDetails = (data?.details || []).filter(row => {
+        if (!searchQuery) return true;
+        const q = searchQuery.toLowerCase();
+        return (
+            String(row.id || '').toLowerCase().includes(q) ||
+            String(row.patient || '').toLowerCase().includes(q) ||
+            String(row.doctor || '').toLowerCase().includes(q) ||
+            String(row.test_name || '').toLowerCase().includes(q) ||
+            String(row.item_name || '').toLowerCase().includes(q) ||
+            String(row.status || '').toLowerCase().includes(q) ||
+            String(row.type || '').toLowerCase().includes(q)
+        );
+    });
+
+    const totalPages = Math.ceil(filteredDetails.length / ITEMS_PER_PAGE);
+    const paginatedDetails = filteredDetails.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
     // --- Table Configuration ---
     const getTableConfig = () => {
+
         if (activeReport === 'financial') {
             return {
                 headers: ['ID', 'Patient', 'Amount', 'Status', 'Date'],
-                rows: (data?.details || []).map(row => [
-                    row.id.substring(0, 8),
+                rows: paginatedDetails.map(row => [
+                    String(row.id || '').substring(0, 8),
                     row.patient,
                     `₹${row.amount}`,
                     <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-black">{row.status}</span>,
@@ -106,8 +138,8 @@ const Reports = () => {
         if (activeReport === 'opd') {
             return {
                 headers: ['ID', 'Patient', 'Doctor', 'Status', 'Date'],
-                rows: (data?.details || []).map(row => [
-                    row.id.substring(0, 8),
+                rows: paginatedDetails.map(row => [
+                    String(row.id || '').substring(0, 8),
                     row.patient,
                     row.doctor,
                     <span className="px-2 py-1 bg-sky-100 text-sky-700 rounded-full text-[10px] font-black">{row.status}</span>,
@@ -118,8 +150,8 @@ const Reports = () => {
         if (activeReport === 'pharmacy') {
             return {
                 headers: ['ID', 'Patient', 'Total Amount', 'Date'],
-                rows: (data?.details || []).map(row => [
-                    row.id.substring(0, 8),
+                rows: paginatedDetails.map(row => [
+                    String(row.id || '').substring(0, 8),
                     row.patient,
                     `₹${row.total}`,
                     (() => { const d = new Date(row.date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()
@@ -129,8 +161,8 @@ const Reports = () => {
         if (activeReport === 'lab') {
             return {
                 headers: ['ID', 'Patient', 'Test Name', 'Amount', 'Date'],
-                rows: (data?.details || []).map(row => [
-                    row.id.substring(0, 8),
+                rows: paginatedDetails.map(row => [
+                    String(row.id || '').substring(0, 8),
                     row.patient,
                     row.test_name,
                     `₹${row.amount}`,
@@ -141,8 +173,8 @@ const Reports = () => {
         if (activeReport === 'inventory') {
             return {
                 headers: ['Log ID', 'Item', 'Transaction', 'Qty', 'Cost', 'User', 'Date'],
-                rows: (data?.details || []).map(row => [
-                    row.id.substring(0, 8),
+                rows: paginatedDetails.map(row => [
+                    String(row.id || '').substring(0, 8),
                     row.item_name,
                     <span className={`px-2 py-1 rounded-full text-[10px] font-black ${row.type === 'STOCK_IN' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>{row.type}</span>,
                     row.qty,
@@ -155,8 +187,8 @@ const Reports = () => {
         if (activeReport === 'doctor') {
             return {
                 headers: ['ID', 'Doctor', 'Patient', 'Diagnosis', 'Date', 'Action'],
-                rows: (data?.details || []).map(row => [
-                    row.id.substring(0, 8),
+                rows: paginatedDetails.map(row => [
+                    String(row.id || '').substring(0, 8),
                     row.doctor,
                     row.patient,
                     row.diagnosis,
@@ -168,7 +200,7 @@ const Reports = () => {
         if (activeReport === 'pharmacy-inventory') {
             return {
                 headers: ['ID', 'Item', 'Batch', 'Type', 'Qty', 'Rate', 'Date'],
-                rows: (data?.details || []).map(row => [
+                rows: paginatedDetails.map(row => [
                     row.id,
                     row.item_name,
                     row.batch_no,
@@ -182,7 +214,7 @@ const Reports = () => {
         if (activeReport === 'expiry') {
             return {
                 headers: ['Item', 'Batch', 'Expiry', 'Qty Available', 'MRP'],
-                rows: (data?.details || []).map(row => [
+                rows: paginatedDetails.map(row => [
                     row.item_name,
                     row.batch_no,
                     <span className={`font-bold ${new Date(row.expiry_date) < new Date() ? 'text-red-500' : 'text-amber-500'}`}>{(() => { const d = new Date(row.expiry_date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()}</span>,
@@ -194,7 +226,7 @@ const Reports = () => {
         if (activeReport === 'supplier-purchase') {
             return {
                 headers: ['Invoice No', 'Supplier', 'Total', 'Type', 'Date'],
-                rows: (data?.details || []).map(row => [
+                rows: paginatedDetails.map(row => [
                     row.id,
                     row.supplier,
                     `₹${row.total}`,
@@ -206,7 +238,7 @@ const Reports = () => {
         if (activeReport === 'billing-summary') {
             return {
                 headers: ['Inv ID', 'Patient', 'Dept', 'Description', 'Qty', 'Amount', 'Date'],
-                rows: (data?.details || []).map(row => [
+                rows: paginatedDetails.map(row => [
                     row.id,
                     row.patient,
                     <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-lg text-[10px] font-black uppercase tracking-widest">{row.dept}</span>,
@@ -217,7 +249,7 @@ const Reports = () => {
                 ])
             };
         }
-        return { headers: ['ID', 'Details', 'Date'], rows: (data?.details || []).map(row => [row.id.substring(0, 8), row.patient || 'Internal', (() => { const d = new Date(row.date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()]) };
+        return { headers: ['ID', 'Details', 'Date'], rows: paginatedDetails.map(row => [String(row.id || '').substring(0, 8), row.patient || 'Internal', (() => { const d = new Date(row.date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()]) };
     };
 
     const tableConfig = getTableConfig();
@@ -315,6 +347,14 @@ const Reports = () => {
                                         </p>
                                     </div>
                                 )}
+                                {tableConfig.rows.length > 0 && (
+                                    <Pagination
+                                        current={currentPage}
+                                        total={totalPages}
+                                        onPageChange={setCurrentPage}
+                                        loading={loading}
+                                    />
+                                )}
                             </div>
                         </div>
 
@@ -358,12 +398,26 @@ const Reports = () => {
                         {/* 3. Detailed Table */}
                         <div className="lg:col-span-2 bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50 overflow-hidden flex flex-col">
                             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
+
                                 <h3 className="font-black text-slate-900 uppercase tracking-wide text-sm flex items-center gap-2">
                                     <ClipboardList size={16} className="text-slate-400" /> Detailed Breakdown
                                 </h3>
-                                <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm">
-                                    <Download size={14} /> Export CSV
-                                </button>
+                                <div className="flex items-center gap-4">
+                                    <div className="relative">
+                                        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                        <input
+                                            type="text"
+                                            placeholder="Search records..."
+                                            value={searchQuery}
+                                            onChange={(e) => setSearchQuery(e.target.value)}
+                                            className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all shadow-sm w-64"
+                                        />
+                                    </div>
+                                    <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm">
+                                        <Download size={14} /> Export CSV
+                                    </button>
+                                </div>
+
                             </div>
                             <div className="flex-1 overflow-x-auto no-scrollbar p-0">
                                 <Table
@@ -381,6 +435,14 @@ const Reports = () => {
                                         <div className="w-8 h-8 border-4 border-slate-100 border-t-slate-900 rounded-full animate-spin" />
                                         <p className="text-xs text-slate-400 font-bold uppercase tracking-widest animate-pulse">Syncing data...</p>
                                     </div>
+                                )}
+                                {tableConfig.rows.length > 0 && (
+                                    <Pagination
+                                        current={currentPage}
+                                        total={totalPages}
+                                        onPageChange={setCurrentPage}
+                                        loading={loading}
+                                    />
                                 )}
                             </div>
                         </div>
@@ -443,7 +505,7 @@ const Reports = () => {
                                         </div>
                                         <div>
                                             <h2 className="text-xl font-black text-slate-900 font-outfit uppercase tracking-tighter leading-none">Clinical Case Sheet</h2>
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Ref ID: {selectedNote.id.substring(0, 8)}</p>
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Ref ID: {String(selectedNote.id || '').substring(0, 8)}</p>
                                         </div>
                                     </div>
                                     <button className="p-3 hover:bg-white rounded-full text-slate-400 hover:text-red-500 transition-all shadow-sm" onClick={() => setSelectedNote(null)}>
