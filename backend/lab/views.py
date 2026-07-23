@@ -310,7 +310,7 @@ class LabChargeViewSet(viewsets.ModelViewSet):
                 description=instance.test_name
             ).exists()
             
-            if not existing_item:
+            if not existing_item and float(instance.amount) > 0:
                 InvoiceItem.objects.create(
                     invoice=invoice,
                     dept='LAB',
