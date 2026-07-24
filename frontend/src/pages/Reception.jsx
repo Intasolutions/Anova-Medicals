@@ -386,6 +386,7 @@ const Reception = () => {
                 // Backend returns 200 OK if patient exists, 201 CREATED if new
                 if (response.status === 200) {
                     showToast('error', 'The patient is already there with this number');
+                    setIsRegistering(false);
                     return;
                 }
                 showToast('success', 'New patient registered successfully!');
@@ -405,6 +406,8 @@ const Reception = () => {
             } else {
                 showToast('error', 'Operation failed. Please check network connection.');
             }
+        } finally {
+            setIsRegistering(false);
         }
     };
 
