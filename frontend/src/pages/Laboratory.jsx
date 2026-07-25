@@ -407,8 +407,11 @@ const Laboratory = () => {
         } catch (err) { showToast('error', 'Failed to delete supplier'); }
     };
 
+    const [testSubmitting, setTestSubmitting] = useState(false);
     const handleSaveTest = async (e) => {
         e.preventDefault();
+        if (testSubmitting) return;
+        setTestSubmitting(true);
         try {
             if (editingTestId) {
                 await api.patch(`lab/tests/${editingTestId}/`, testCatalogForm);
@@ -693,8 +696,11 @@ const Laboratory = () => {
         setShowResultModal(true);
     };
 
+    const [resSubmitting, setResSubmitting] = useState(false);
     const handleSubmitResults = async (e, finalStatus = 'COMPLETED') => {
         e?.preventDefault();
+        if (resSubmitting) return;
+        setResSubmitting(true);
         
         if (finalStatus === 'VERIFICATION' || finalStatus === 'COMPLETED') {
             const hasEmptyValues = resultData.results.some(r => !r.is_heading && (!r.value || r.value.trim() === ''));
@@ -762,8 +768,11 @@ const Laboratory = () => {
         } catch (err) { showToast('error', "Failed to update status"); }
     };
 
+    const [itemSubmitting, setItemSubmitting] = useState(false);
     const handleSaveItem = async (e) => {
         e.preventDefault();
+        if (itemSubmitting) return;
+        setItemSubmitting(true);
         try {
             // Calculate final Qty if packs are used
             const finalQty = inventoryForm.num_packs > 0
@@ -937,7 +946,7 @@ const Laboratory = () => {
                                     <tbody className="divide-y divide-slate-50">
                                         {/* Pending Visits (Assigned to Lab) */}
                                         {pendingVisits.length > 0 && statusFilter === 'ALL' && page === 1 && (
-                                            pendingVisits.filter(v => !groupedCharges.some(g => g.visitId === (v.id || v.v_id))).map(v => (
+                                            pendingVisits.filter(v => !groupedCharges.some(g => String(g.visitId) === String(v.id || v.v_id))).map(v => (
                                                 <tr key={v.id} className="bg-blue-50/30 hover:bg-blue-50 transition-colors group">
                                                     <td className="px-6 py-4">
                                                         <div className="flex items-center gap-3">
@@ -2436,7 +2445,7 @@ const Laboratory = () => {
                                 ) : (
                                     <table className="w-full text-left border-collapse">
                                         <thead>
-                                            <tr className="border-b-2 border-slate-300 text-slate-700">
+                                            <tr className="border-b-2 border-slate-300 text-black">
                                                 <th className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest w-[40%]">Parameter Name</th>
                                                 <th className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest w-[20%]">Result Value</th>
                                                 <th className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest w-[15%]">Unit</th>
@@ -2455,7 +2464,7 @@ const Laboratory = () => {
                                                 <React.Fragment key={category}>
                                                     {category !== 'UNCATEGORIZED' && (
                                                         <tr>
-                                                            <td colSpan="4" className="px-1 py-0.5 text-[10px] font-black text-slate-700 bg-slate-100 uppercase tracking-widest text-left">
+                                                            <td colSpan="4" className="px-1 py-0.5 text-xs font-black text-black bg-slate-100 uppercase tracking-widest text-left">
                                                                 {category}
                                                             </td>
                                                         </tr>
@@ -2465,14 +2474,14 @@ const Laboratory = () => {
                                                         return (
                                                             <React.Fragment key={testIdx}>
                                                                 <tr>
-                                                                    <td colSpan="4" className="px-1 py-0.5 text-[10px] font-bold text-slate-800 uppercase tracking-widest text-left">
+                                                                    <td colSpan="4" className="px-1 py-0.5 text-sm font-bold text-black uppercase tracking-widest text-left">
                                                                         {testItem.test_name}
-                                                                        {testItem.sub_name && <span className="ml-2 text-[9px] font-medium text-slate-500 normal-case tracking-normal">({testItem.sub_name})</span>}
+                                                                        {testItem.sub_name && <span className="ml-2 text-xs font-medium text-black normal-case tracking-normal">({testItem.sub_name})</span>}
                                                                     </td>
                                                                 </tr>
                                                                 {catalogTest?.description && (
                                                                     <tr>
-                                                                        <td colSpan="4" className="px-1 pb-1 text-[9px] font-medium text-slate-500 italic">
+                                                                        <td colSpan="4" className="px-1 pb-1 text-[10px] font-medium text-black italic">
                                                                             {catalogTest.description}
                                                                         </td>
                                                                     </tr>
@@ -2484,26 +2493,34 @@ const Laboratory = () => {
                                                                     const paramDesc = catalogTest?.parameters?.find(p => p.name === val.name)?.description;
                                                                     return val.is_heading ? (
                                                                         <tr key={`h-${idx}`}>
-                                                                            <td colSpan="4" className="px-1 py-0 font-bold text-slate-800 text-[10px] uppercase tracking-wider bg-slate-100/50 text-center">{val.name}</td>
+                                                                            <td colSpan="4" className="px-1 py-0 font-bold text-black text-xs uppercase tracking-wider bg-slate-100/50 text-center">{val.name}</td>
                                                                         </tr>
                                                                     ) : (
-                                                                        <tr key={`r-${idx}`} className={idx % 2 !== 0 ? 'bg-slate-50' : 'bg-white'}>
-                                                                            <td className="pl-4 pr-1 py-0 font-medium text-slate-700 text-[10px]">
-                                                                                {val.name}
-                                                                                {paramDesc && <span className="block font-medium text-slate-400 text-[8px] whitespace-pre-wrap leading-tight">{paramDesc}</span>}
-                                                                                {val.note && <span className="block font-medium text-slate-400 text-[8px] whitespace-pre-wrap leading-tight">{val.note}</span>}
-                                                                            </td>
-                                                                            <td className="px-1 py-0 font-bold text-slate-900 text-[11px] font-mono tracking-tight">{val.value}</td>
-                                                                            <td className="px-1 py-0 font-medium text-slate-500 text-[10px]">{val.unit || ''}</td>
-                                                                            <td className="px-1 py-0 font-medium text-slate-500 text-[10px] text-right whitespace-pre-wrap leading-tight">{val.normal || val.normal_range || ''}</td>
-                                                                        </tr>
+                                                                        <React.Fragment key={`r-${idx}`}>
+                                                                            <tr className={idx % 2 !== 0 ? 'bg-slate-50' : 'bg-white'}>
+                                                                                <td className="pl-4 pr-1 py-1 font-medium text-black text-xs">
+                                                                                    {val.name}
+                                                                                </td>
+                                                                                <td className="px-1 py-1 font-bold text-black text-xs font-mono tracking-tight">{val.value}</td>
+                                                                                <td className="px-1 py-1 font-medium text-black text-xs">{val.unit || ''}</td>
+                                                                                <td className="px-1 py-1 font-medium text-black text-xs text-right whitespace-pre-wrap leading-tight">{val.normal || val.normal_range || ''}</td>
+                                                                            </tr>
+                                                                            {(paramDesc || val.note) && (
+                                                                                <tr className={idx % 2 !== 0 ? 'bg-slate-50' : 'bg-white'}>
+                                                                                    <td colSpan="4" className="pl-6 pr-1 pb-1 pt-0 font-medium text-black text-[11px] whitespace-pre-wrap leading-tight">
+                                                                                        {paramDesc && <span className="block italic">{paramDesc}</span>}
+                                                                                        {val.note && <span className="block">{val.note}</span>}
+                                                                                    </td>
+                                                                                </tr>
+                                                                            )}
+                                                                        </React.Fragment>
                                                                     )
                                                                 })}
                                                                 {testItem.notes && (
                                                                     <tr>
                                                                         <td colSpan="4" className="px-6 py-2 bg-slate-50">
-                                                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Test Remarks / Notes</p>
-                                                                            <p className="text-xs font-medium text-slate-700 whitespace-pre-wrap">{testItem.notes}</p>
+                                                                            <p className="text-[10px] font-bold text-black uppercase tracking-widest mb-0.5">Test Remarks / Notes</p>
+                                                                            <p className="text-xs font-medium text-black whitespace-pre-wrap">{testItem.notes}</p>
                                                                         </td>
                                                                     </tr>
                                                                 )}
