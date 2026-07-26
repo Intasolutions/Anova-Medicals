@@ -169,6 +169,7 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
                     'expiry_date': item.expiry_date,
                     'supplier': invoice.supplier,
                     'barcode': item.barcode or '',
+                    'content': item.content or '',
                     'mrp': item.mrp,
                     'selling_price': item.mrp, 
                     'purchase_rate': effective_purch_rate,
@@ -188,6 +189,7 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
                 stock.qty_available = stock.qty_available + qty_in
                 stock.tablets_per_strip = tps 
                 if item.barcode: stock.barcode = item.barcode
+                if item.content: stock.content = item.content
                 stock.mrp = item.mrp
                 # stock.selling_price = item.mrp # Don't overwrite SP if exists? User pref? 
                 # Let's keep existing SP if not created, unless MRP changed drastically? 
@@ -256,17 +258,24 @@ class PharmacySaleItemSerializer(serializers.ModelSerializer):
     expiry_date = serializers.DateField(source='med_stock.expiry_date', read_only=True)
     dosage = serializers.CharField(required=False, allow_blank=True)
     timing = serializers.CharField(required=False, allow_blank=True)
+    returned_qty = serializers.SerializerMethodField()
 
     class Meta:
         model = PharmacySaleItem
         fields = '__all__'
         read_only_fields = ['item_id', 'created_at', 'updated_at', 'amount', 'sale']
 
+    def get_returned_qty(self, obj):
+        from django.db.models import Sum
+        result = obj.returned_items.aggregate(total=Sum('qty_returned'))
+        return result['total'] or 0
+
 
 class PharmacySaleSerializer(serializers.ModelSerializer):
     sale_id = serializers.IntegerField(source='id', read_only=True)
     patient_name = serializers.CharField(source='patient.full_name', read_only=True)
     patient_registration_number = serializers.CharField(source='patient.registration_number', read_only=True)
+    invoice_number = serializers.SerializerMethodField()
     # allow creating items in same request
     items = PharmacySaleItemSerializer(many=True)
 
@@ -274,6 +283,19 @@ class PharmacySaleSerializer(serializers.ModelSerializer):
         model = PharmacySale
         fields = '__all__'
         read_only_fields = ['sale_id', 'sale_date', 'created_at', 'updated_at', 'total_amount']
+
+    def get_invoice_number(self, obj):
+        from billing.models import InvoiceItem, Invoice
+        # Try direct link first
+        invoice_item = InvoiceItem.objects.filter(item_id=obj.id, dept='PHARMACY').first()
+        if invoice_item and invoice_item.invoice:
+            return invoice_item.invoice.invoice_number
+        # Fallback to visit link
+        if obj.visit:
+            invoice = Invoice.objects.filter(visit=obj.visit).order_by('-created_at').first()
+            if invoice:
+                return invoice.invoice_number
+        return None
 
     @transaction.atomic
     def create(self, validated_data):
@@ -424,6 +446,14 @@ class PharmacyReturnSerializer(serializers.ModelSerializer):
         items_payload = validated_data.pop('items_data', [])
         request = self.context.get('request')
         user = getattr(request, 'user', None) if request else None
+
+        # 0. Validate 7-day limit
+        sale = validated_data.get('sale')
+        if sale:
+            from django.utils import timezone
+            days_since_sale = (timezone.now().date() - sale.sale_date.date()).days
+            if days_since_sale > 7:
+                raise serializers.ValidationError("Return period of 7 days has expired for this invoice.")
 
         # 1. Create Return Record
         ret_record = PharmacyReturn.objects.create(

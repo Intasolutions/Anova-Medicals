@@ -31,12 +31,13 @@ import { useDialog } from "../context/DialogContext";
 import { socket } from "../socket";
 import Pagination from "../components/Pagination";
 
-const Billing = () => {
+const Billing = ({ dateRange: externalDateRange }) => {
   const { showToast } = useToast();
   const { confirm } = useDialog();
 
   // --- State ---
   const [invoices, setInvoices] = useState([]);
+  const [unpaidInvoices, setUnpaidInvoices] = useState([]);
   const [pendingVisits, setPendingVisits] = useState([]);
   const [stats, setStats] = useState({
     revenue_today: 0,
@@ -52,11 +53,54 @@ const Billing = () => {
   const globalSearch = searchTerm; // Map searchTerm to globalSearch for compatibility with the copied logic
 
   // --- Date Filter State ---
-  const getLocalDate = () => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const [localDateRange, setLocalDateRange] = useState({ 
+    start: new Date().toISOString().split('T')[0], 
+    end: new Date().toISOString().split('T')[0] 
+  });
+  
+  const dateRange = externalDateRange || localDateRange;
+  const isEmbedded = !!externalDateRange;
+
+  const setPresetRange = (preset) => {
+    const today = new Date();
+    const end = today.toISOString().split('T')[0];
+    let start = end;
+
+    if (preset === 'week') {
+      const lastWeek = new Date(today);
+      lastWeek.setDate(today.getDate() - 7);
+      start = lastWeek.toISOString().split('T')[0];
+    } else if (preset === 'month') {
+      const lastMonth = new Date(today);
+      lastMonth.setMonth(today.getMonth() - 1);
+      start = lastMonth.toISOString().split('T')[0];
+    } else if (preset === 'all') {
+      start = '2000-01-01';
+    }
+    
+    setLocalDateRange({ start, end });
   };
-  const [selectedDate, setSelectedDate] = useState(getLocalDate());
+
+  const isPresetActive = (preset) => {
+    const today = new Date();
+    const endStr = today.toISOString().split('T')[0];
+    
+    if (preset === 'all') return dateRange.start === '2000-01-01';
+    if (dateRange.end !== endStr) return false;
+    
+    if (preset === 'today') {
+      return dateRange.start === endStr;
+    } else if (preset === 'week') {
+      const d = new Date(today);
+      d.setDate(today.getDate() - 7);
+      return dateRange.start === d.toISOString().split('T')[0];
+    } else if (preset === 'month') {
+      const d = new Date(today);
+      d.setMonth(today.getMonth() - 1);
+      return dateRange.start === d.toISOString().split('T')[0];
+    }
+    return false;
+  };
 
   // --- Forms ---
   const [doctors, setDoctors] = useState([]);
@@ -68,6 +112,8 @@ const Billing = () => {
   const [stockSearch, setStockSearch] = useState({ index: -1, term: "" });
 
   const [formData, setFormData] = useState({
+    id: null,
+    invoice_number: null,
     patient_name: "",
     doctor_display_name: "",
     visit: null,
@@ -105,6 +151,7 @@ const Billing = () => {
     const fetchData = async () => {
       await Promise.all([
         fetchInvoices(true),
+        fetchUnpaidInvoices(false),
         fetchStats(false),
         fetchPendingVisits(false),
       ]);
@@ -115,6 +162,7 @@ const Billing = () => {
     // Polling - 4 seconds
     const interval = setInterval(() => {
       fetchInvoices(false);
+      fetchUnpaidInvoices(false);
       fetchStats(false);
       fetchPendingVisits(false);
     }, 4000);
@@ -123,6 +171,7 @@ const Billing = () => {
     const onPharmacySale = (data) => {
       console.log("Socket: Pharmacy Sale Update", data);
       fetchPendingVisits(false);
+      fetchUnpaidInvoices(false);
       fetchStats(false);
       showToast("info", "New billing entry available");
     };
@@ -133,14 +182,14 @@ const Billing = () => {
       clearInterval(interval);
       socket.off("pharmacy_sale_update", onPharmacySale);
     };
-  }, [page, globalSearch, selectedDate]);
+  }, [page, globalSearch, dateRange]);
 
   // --- API Calls ---
   const fetchInvoices = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
       const { data } = await api.get(
-        `/billing/invoices/?page=${page}${globalSearch ? `&search=${encodeURIComponent(globalSearch)}` : ""}${selectedDate ? `&date=${selectedDate}` : ""}`,
+        `/billing/invoices/?page=${page}${globalSearch ? `&search=${encodeURIComponent(globalSearch)}` : ""}${dateRange.start ? `&created_at__date__gte=${dateRange.start}&created_at__date__lte=${dateRange.end}` : ""}`,
       );
       setInvoices(data.results || (Array.isArray(data) ? data : []));
       setTotalInvoices(data.count || (Array.isArray(data) ? data.length : 0));
@@ -150,6 +199,18 @@ const Billing = () => {
       if (showLoading) {
         setTimeout(() => setLoading(false), 500);
       }
+    }
+  };
+
+  const fetchUnpaidInvoices = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    try {
+      const { data } = await api.get("/billing/invoices/?unpaid=true");
+      setUnpaidInvoices(data.results || (Array.isArray(data) ? data : []));
+    } catch (err) {
+      console.error("Failed to load unpaid invoices", err);
+    } finally {
+      if (showLoading) setLoading(false);
     }
   };
 
@@ -170,7 +231,7 @@ const Billing = () => {
     if (showLoading) setLoading(true);
     try {
       const { data } = await api.get(
-        `/billing/invoices/stats/?${selectedDate ? `date=${selectedDate}` : ""}`,
+        `/billing/invoices/stats/?${dateRange.start ? `start_date=${dateRange.start}&end_date=${dateRange.end}` : ""}`,
       );
       setStats(data);
     } catch (err) {
@@ -556,8 +617,13 @@ const Billing = () => {
   };
 
   const handleImportPrescription = async (overridePatientId = null) => {
+    if (submitLock.current) return;
+    submitLock.current = true;
     const patId = overridePatientId || selectedPatientId;
-    if (!patId) return showToast("error", "No patient selected.");
+    if (!patId) {
+        submitLock.current = false;
+        return showToast("error", "No patient selected.");
+    }
 
     try {
       const vId =
@@ -659,6 +725,7 @@ const Billing = () => {
             amount = (unitPrice * qty).toFixed(2);
 
             newItems.push({
+              item_id: pharmacyRecord ? pharmacyRecord.sale_id : null,
               dept: "PHARMACY",
               description: medName,
               qty: qty,
@@ -690,6 +757,7 @@ const Billing = () => {
           if (addedMedNames.has(medName.toLowerCase())) return; // Already added via prescription match
 
           newItems.push({
+            item_id: item.sale_id || null,
             dept: "PHARMACY",
             description: medName,
             qty: item.qty,
@@ -845,6 +913,7 @@ const Billing = () => {
       }
 
       fetchInvoices(false);
+      fetchUnpaidInvoices(false);
       fetchStats(false);
       fetchPendingVisits(false);
 
@@ -855,6 +924,8 @@ const Billing = () => {
       } else {
         setShowModal(false);
         setFormData({
+          id: null,
+          invoice_number: null,
           patient_name: "",
           patient: null,
           visit: null,
@@ -928,6 +999,7 @@ const Billing = () => {
         (visitData && visitData.pharmacy_items) ||
         []
       ).map((item) => ({
+        item_id: item.sale_id || null,
         dept: "PHARMACY",
         description: item.name,
         qty: item.qty,
@@ -947,6 +1019,7 @@ const Billing = () => {
         (visitData && visitData.casualty_medicines) ||
         []
       ).map((item) => ({
+        item_id: item.sale_id || null,
         dept: "PHARMACY",
         description: item.name,
         qty: item.qty,
@@ -1024,6 +1097,7 @@ const Billing = () => {
 
       setFormData({
         id: invoice.id,
+        invoice_number: invoice.invoice_number,
         patient_name: invoice.patient_name,
         patient: invoice.patient_id || null,
         visit: invoice.visit,
@@ -1156,10 +1230,7 @@ const Billing = () => {
   const totalPages = Math.ceil(totalInvoices / 10) || 1;
 
   // --- Unified Billing Queue ---
-  const unpaidInvoices = invoices.filter(
-    (inv) =>
-      inv.payment_status === "PENDING" || inv.payment_status === "PARTIAL",
-  );
+  // unpaidInvoices is fetched separately from invoices
   const unpaidInvoiceVisitIds = new Set(
     unpaidInvoices
       .map((inv) => (typeof inv.visit === "object" ? inv.visit?.id : inv.visit))
@@ -1182,24 +1253,7 @@ const Billing = () => {
         {/* --- Header Actions --- */}
         <div className="flex justify-end items-center gap-3 mb-6">
           <div className="flex gap-3 items-center">
-            {/* Date Filter Controls */}
-            <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm h-[42px]">
-              <Calendar size={16} className="text-slate-400" />
-              <input
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer uppercase"
-              />
-              {selectedDate && (
-                <button
-                  onClick={() => setSelectedDate("")}
-                  className="text-slate-400 hover:text-slate-600 ml-1"
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
+            {/* Date Filter Controls moved to Recent Invoices section */}
 
             <button className="flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 font-bold text-xs uppercase tracking-wider transition-colors shadow-sm h-[42px]">
               <Download size={16} /> Reports
@@ -1207,6 +1261,8 @@ const Billing = () => {
             <button
               onClick={() => {
                 setFormData({
+                  id: null,
+                  invoice_number: null,
                   patient_name: "",
                   visit: null,
                   doctor: "",
@@ -1237,7 +1293,7 @@ const Billing = () => {
         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-blue-50/30">
           <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wide flex items-center gap-2">
             <AlertCircle size={16} className="text-blue-500" /> Action Required:
-            Pending Bills & Visits
+            Pending Bills & Visits <span className="normal-case text-xs text-slate-500 ml-2 font-medium">(Shows all pending regardless of date)</span>
           </h3>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-1 bg-white border border-slate-200 rounded-md text-[10px] font-black text-slate-500 shadow-sm">
@@ -1440,6 +1496,48 @@ const Billing = () => {
             <FileText size={16} className="text-slate-400" /> Recent Invoices
           </h3>
           <div className="flex items-center gap-3">
+            {/* Date Range Selection - Hidden if embedded since parent provides it */}
+            {!isEmbedded && (
+              <div className="flex items-center gap-2 mr-2">
+                  <div className="flex bg-slate-100/50 rounded-lg p-1 border border-slate-200/50">
+                      {['Today', 'Week', 'Month', 'All'].map(preset => (
+                          <button
+                              key={preset}
+                              onClick={() => setPresetRange(preset.toLowerCase())}
+                              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                                  isPresetActive(preset.toLowerCase())
+                                      ? 'bg-white text-slate-800 shadow-sm border border-slate-200/60'
+                                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                              }`}
+                          >
+                              {preset}
+                          </button>
+                      ))}
+                  </div>
+
+                  <div className="flex items-center bg-white border border-slate-200/60 rounded-lg overflow-hidden shadow-sm h-[32px]">
+                      <div className="px-3 bg-slate-50 border-r border-slate-200/60 text-slate-400 h-full flex items-center justify-center">
+                          <Calendar size={14} />
+                      </div>
+                      <input 
+                          type="date"
+                          value={dateRange.start}
+                          onChange={(e) => setLocalDateRange(prev => ({ ...prev, start: e.target.value }))}
+                          className="px-2 bg-transparent text-xs font-bold text-slate-700 outline-none w-[110px] cursor-pointer"
+                          max={dateRange.end}
+                      />
+                      <span className="text-slate-300 font-bold">-</span>
+                      <input 
+                          type="date"
+                          value={dateRange.end}
+                          onChange={(e) => setLocalDateRange(prev => ({ ...prev, end: e.target.value }))}
+                          className="px-2 bg-transparent text-xs font-bold text-slate-700 outline-none w-[110px] cursor-pointer"
+                          max={new Date().toISOString().split('T')[0]}
+                      />
+                  </div>
+              </div>
+            )}
+
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
@@ -1670,10 +1768,10 @@ const Billing = () => {
               <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                 <div>
                   <h2 className="text-xl font-black text-slate-900 font-outfit uppercase tracking-tight">
-                    {formData.id ? "Edit Invoice" : "New Invoice"}
+                    {formData.id ? (formData.invoice_number ? `INV: ${formData.invoice_number}` : "Edit Invoice") : "New Invoice"}
                   </h2>
                   <p className="text-xs text-slate-500 font-bold mt-1">
-                    Ref: {formData.id ? `#${formData.id}` : "Draft"}
+                    {formData.id ? (formData.invoice_number ? "Generated Invoice" : `Ref: #${formData.id}`) : "Draft"}
                   </p>
                 </div>
                 <div className="flex gap-2">

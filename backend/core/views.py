@@ -16,21 +16,34 @@ class DashboardStatsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
+        start_date_str = request.query_params.get('start_date')
+        end_date_str = request.query_params.get('end_date')
+        
+        # Fallback for old clients
         date_str = request.query_params.get('date')
-        if date_str:
-            from datetime import datetime
-            try:
-                target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-            except ValueError:
-                target_date = timezone.now().date()
-        else:
-            target_date = timezone.now().date()
+        if not start_date_str and date_str:
+            start_date_str = date_str
+            end_date_str = date_str
 
-        last_week = target_date - timedelta(days=7)
+        from datetime import datetime
+        start_date = timezone.now().date()
+        end_date = timezone.now().date()
+        
+        if start_date_str:
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                pass
+        
+        if end_date_str:
+            try:
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                end_date = start_date
 
         # 1. Patient & Visit Stats
-        new_patients_today = Patient.objects.filter(created_at__date=target_date).count()
-        visits_today = Visit.objects.filter(created_at__date=target_date).count()
+        new_patients_today = Patient.objects.filter(created_at__date__gte=start_date, created_at__date__lte=end_date).count()
+        visits_today = Visit.objects.filter(created_at__date__gte=start_date, created_at__date__lte=end_date).count()
         active_visits = Visit.objects.filter(status__in=['OPEN', 'IN_PROGRESS']).count()
         
         # 2. Recent Activity (Visits)
@@ -42,15 +55,17 @@ class DashboardStatsView(APIView):
             "id": v.id
         } for v in recent_visits]
 
-        # 3. Financials (Today & Weekly Trend)
+        # 3. Financials (Range & Trend)
         from billing.models import PaymentTransaction
         
         revenue_today = PaymentTransaction.objects.filter(
-            created_at__date=target_date
+            created_at__date__gte=start_date,
+            created_at__date__lte=end_date
         ).aggregate(Sum('amount'))['amount__sum'] or 0
 
         weekly_revenue = PaymentTransaction.objects.filter(
-            created_at__date__gte=last_week
+            created_at__date__gte=start_date,
+            created_at__date__lte=end_date
         ).annotate(date=TruncDate('created_at')).values('date').annotate(total=Sum('amount')).order_by('date')
 
         # 4. Lab Stats
@@ -64,7 +79,8 @@ class DashboardStatsView(APIView):
         from billing.models import InvoiceItem
         module_revenue_raw = InvoiceItem.objects.filter(
             invoice__payment_status='PAID',
-            created_at__date=target_date
+            created_at__date__gte=start_date,
+            created_at__date__lte=end_date
         ).values('dept').annotate(total=Sum('amount'))
         
         module_revenue = {item['dept']: float(item['total']) for item in module_revenue_raw}

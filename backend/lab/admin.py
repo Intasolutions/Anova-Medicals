@@ -38,7 +38,9 @@ class LabInventoryAdmin(admin.ModelAdmin):
 
 @admin.register(LabCharge)
 class LabChargeAdmin(admin.ModelAdmin):
-    list_display = ('test_name', 'amount', 'visit', 'created_at')
+    list_display = ('test_name', 'amount', 'visit', 'status', 'created_at')
+    search_fields = ('test_name', 'visit__patient__full_name', 'visit__patient__phone')
+    list_filter = ('status', 'test_name')
 
 @admin.register(LabTest)
 class LabTestAdmin(admin.ModelAdmin):

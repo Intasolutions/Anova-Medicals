@@ -171,6 +171,7 @@ class PurchaseInvoice(BaseModel):
 
 class PharmacyStock(BaseModel):
     name = models.CharField(max_length=255)
+    content = models.TextField(blank=True, null=True)
     barcode = models.CharField(max_length=100, blank=True)
     batch_no = models.CharField(max_length=50)
     expiry_date = models.DateField()
@@ -234,6 +235,7 @@ class PurchaseItem(BaseModel):
     purchase = models.ForeignKey(PurchaseInvoice, on_delete=models.CASCADE, related_name='items')
 
     product_name = models.CharField(max_length=255)
+    content = models.TextField(blank=True, null=True)
     barcode = models.CharField(max_length=100, blank=True)
     batch_no = models.CharField(max_length=50)
     expiry_date = models.DateField()

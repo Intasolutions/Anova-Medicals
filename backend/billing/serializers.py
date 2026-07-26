@@ -97,8 +97,21 @@ class InvoiceSerializer(serializers.ModelSerializer):
         else:
             # Create new invoice
             invoice = Invoice.objects.create(**validated_data)
+            
+            created_items_tracker = set()
             for item_data in items_data:
-                InvoiceItem.objects.create(invoice=invoice, **item_data)
+                desc = item_data.get('description')
+                batch = item_data.get('batch', '')
+                
+                # Check tracker to prevent duplicate items from being created in a new invoice
+                tracker_key = f"{desc}_{batch}"
+                if tracker_key not in created_items_tracker:
+                    InvoiceItem.objects.create(invoice=invoice, **item_data)
+                    created_items_tracker.add(tracker_key)
+            
+            # Recalculate total amount to ensure accuracy after deduplication
+            invoice.total_amount = sum(item.amount for item in invoice.items.all())
+            invoice.save()
                 
             if invoice.payment_status == 'PAID' and invoice.total_amount > 0:
                 PaymentTransaction.objects.create(

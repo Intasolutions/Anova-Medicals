@@ -70,11 +70,52 @@ const Reception = () => {
     const [frontDeskTab, setFrontDeskTab] = useState('active'); // 'all' | 'active'
     const [editingPatientId, setEditingPatientId] = useState(null);
     const [isRegistering, setIsRegistering] = useState(false);
-    const getLocalDate = () => {
-        const d = new Date();
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const getLocalDate = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
+    const [dateRange, setDateRange] = useState({ 
+        start: getLocalDate(), 
+        end: getLocalDate() 
+    });
+
+    const setPresetRange = (preset) => {
+        const today = new Date();
+        const end = today.toISOString().split('T')[0];
+        let start = end;
+
+        if (preset === 'week') {
+            const lastWeek = new Date(today);
+            lastWeek.setDate(today.getDate() - 7);
+            start = lastWeek.toISOString().split('T')[0];
+        } else if (preset === 'month') {
+            const lastMonth = new Date(today);
+            lastMonth.setMonth(today.getMonth() - 1);
+            start = lastMonth.toISOString().split('T')[0];
+        } else if (preset === 'all') {
+            start = '2000-01-01';
+        }
+        
+        setDateRange({ start, end });
     };
-    const [selectedDate, setSelectedDate] = useState(getLocalDate());
+
+    const isPresetActive = (preset) => {
+        const today = new Date();
+        const endStr = today.toISOString().split('T')[0];
+        
+        if (preset === 'all') return dateRange.start === '2000-01-01';
+        if (dateRange.end !== endStr) return false;
+        
+        if (preset === 'today') {
+            return dateRange.start === endStr;
+        } else if (preset === 'week') {
+            const d = new Date(today);
+            d.setDate(today.getDate() - 7);
+            return dateRange.start === d.toISOString().split('T')[0];
+        } else if (preset === 'month') {
+            const d = new Date(today);
+            d.setMonth(today.getMonth() - 1);
+            return dateRange.start === d.toISOString().split('T')[0];
+        }
+        return false;
+    };
 
     // Modals
     const [showAddModal, setShowAddModal] = useState(false);
@@ -118,6 +159,7 @@ const Reception = () => {
         referred_by: 'Self',
         vitals: { temp: '', bp: '', pulse: '', weight: '', spo2: '' }
     });
+    const [visitSubmitting, setVisitSubmitting] = useState(false);
 
     // Dashboard Stats
     const [stats, setStats] = useState({
@@ -139,7 +181,7 @@ const Reception = () => {
 
     const handleRoutePatient = async (e) => {
         e.preventDefault();
-        if (!routingVisitId) return;
+        if (!routingVisitId || routeSubmitting) return;
         
         if (routeForm.assigned_role === 'CASUALTY' && routeForm.casualty_services.length === 0) {
             showToast('error', 'Please select at least one service to route.');
@@ -188,17 +230,7 @@ const Reception = () => {
     useEffect(() => {
         fetchPatients(true);
         fetchStats();
-    }, [page, globalSearch, patientSearch, pageSize, frontDeskTab, selectedDate]);
-
-    // Add 4-second automatic refresh
-    useEffect(() => {
-        const interval = setInterval(() => {
-            fetchPatients(false); // Background refresh without skeleton
-            fetchStats();
-        }, 4000);
-
-        return () => clearInterval(interval);
-    }, [page, globalSearch, patientSearch, pageSize, frontDeskTab, selectedDate]);
+    }, [page, globalSearch, patientSearch, pageSize, frontDeskTab, dateRange]);
 
     useEffect(() => {
         fetchStats();
@@ -253,8 +285,8 @@ const Reception = () => {
             }
             
             // Add date filter to patients/visits fetch
-            if (selectedDate) {
-                url += `&created_at__date=${selectedDate}`;
+            if (dateRange.start && dateRange.end) {
+                url += `&created_at__date__gte=${dateRange.start}&created_at__date__lte=${dateRange.end}`;
             }
 
             url += `${patientSearch ? `&search=${encodeURIComponent(patientSearch)}` : globalSearch ? `&search=${encodeURIComponent(globalSearch)}` : ''}`;
@@ -277,10 +309,10 @@ const Reception = () => {
         try {
             // Fetch stats from various endpoints based on selected date
             const [patientsRes, visitsRes, invoicesRes, dashboardStatsRes] = await Promise.all([
-                api.get(`/reception/patients/?created_at__date=${selectedDate}`),
-                api.get(`/reception/visits/?status__in=OPEN,IN_PROGRESS&created_at__date=${selectedDate}`),
-                api.get(`/billing/invoices/?created_at__date=${selectedDate}`),
-                api.get(`/core/dashboard/stats/?date=${selectedDate}`)
+                api.get(`/reception/patients/?created_at__date__gte=${dateRange.start}&created_at__date__lte=${dateRange.end}`),
+                api.get(`/reception/visits/?status__in=OPEN,IN_PROGRESS&created_at__date__gte=${dateRange.start}&created_at__date__lte=${dateRange.end}`),
+                api.get(`/billing/invoices/?created_at__date__gte=${dateRange.start}&created_at__date__lte=${dateRange.end}`),
+                api.get(`/core/dashboard/stats/?start_date=${dateRange.start}&end_date=${dateRange.end}`)
             ]);
 
             const newPatients = patientsRes.data.count || patientsRes.data.results?.length || 0;
@@ -366,7 +398,7 @@ const Reception = () => {
             showToast('error', 'Please fix the errors highlighted in the form.');
             return;
         }
-
+        setVisitSubmitting(true);
         try {
             setIsRegistering(true);
             const payload = {
@@ -489,7 +521,7 @@ const Reception = () => {
             showToast('error', 'Please select at least one service to bill.');
             return;
         }
-
+        setVisitSubmitting(true);
         try {
             await api.post('/reception/visits/', {
                 patient: selectedPatient.p_id || selectedPatient.id,
@@ -546,7 +578,7 @@ const Reception = () => {
             showToast('error', `Payment cannot exceed balance due (₹${parseFloat(due).toFixed(2)}).`);
             return;
         }
-
+        setVisitSubmitting(true);
         try {
             await api.post(`billing/invoices/${paymentData.invoice.id}/add_payment/`, {
                 payments: paymentsList,
@@ -660,6 +692,49 @@ const Reception = () => {
                 </div>
             </div>
 
+            {/* --- Global Date Filter --- */}
+            <div className="bg-white/80 backdrop-blur-md border-b border-slate-200 px-8 py-3 flex items-center justify-end z-20 sticky top-16 print:hidden shadow-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold text-slate-500 mr-2">FILTER BY DATE:</span>
+                    <div className="flex bg-slate-100/50 rounded-lg p-1 border border-slate-200/50">
+                        {['Today', 'Week', 'Month', 'All'].map(preset => (
+                            <button
+                                key={preset}
+                                onClick={() => setPresetRange(preset.toLowerCase())}
+                                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                                    isPresetActive(preset.toLowerCase())
+                                        ? 'bg-white text-slate-800 shadow-sm border border-slate-200/60'
+                                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                                }`}
+                            >
+                                {preset}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="flex items-center bg-white border border-slate-200/60 rounded-lg overflow-hidden shadow-sm h-[32px]">
+                        <div className="px-3 bg-slate-50 border-r border-slate-200/60 text-slate-400 h-full flex items-center justify-center">
+                            <Calendar size={14} />
+                        </div>
+                        <input 
+                            type="date"
+                            value={dateRange.start}
+                            onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                            className="px-2 bg-transparent text-xs font-bold text-slate-700 outline-none w-[110px] cursor-pointer"
+                            max={dateRange.end}
+                        />
+                        <span className="text-slate-300 font-bold">-</span>
+                        <input 
+                            type="date"
+                            value={dateRange.end}
+                            onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                            className="px-2 bg-transparent text-xs font-bold text-slate-700 outline-none w-[110px] cursor-pointer"
+                            max={new Date().toISOString().split('T')[0]}
+                        />
+                    </div>
+                </div>
+            </div>
+
             {/* --- Main Content Area --- */}
             <div className="flex-1 overflow-hidden relative bg-slate-50/50 print:overflow-visible print:bg-white">
 
@@ -671,7 +746,7 @@ const Reception = () => {
                 ) : activeTab === 'billing' ? (
                     /* --- BILLING TAB --- */
                     <div className="h-full overflow-y-auto custom-scrollbar p-6 print:p-0 print:overflow-visible">
-                        <Billing />
+                        <Billing dateRange={dateRange} />
                     </div>
                 ) : (
                     /* --- FRONT DESK TAB (Original Reception Content) --- */
@@ -745,70 +820,56 @@ const Reception = () => {
                         </div>
 
                         {/* Header Section */}
-                        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
-                            <div>
+                        <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
+                            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                                 <h1 className="text-3xl font-bold tracking-tight text-slate-950">Patient Management</h1>
-                                <div className="flex items-center gap-4 mt-4">
+                                <button
+                                    onClick={handleAddNewPatient}
+                                    className="group flex items-center gap-3 px-6 py-3 bg-slate-950 text-white rounded-2xl font-bold shadow-xl shadow-slate-900/20 hover:bg-blue-600 hover:shadow-blue-600/20 transition-all active:scale-[0.98]"
+                                >
+                                    <div className="p-1 rounded-lg bg-white/20 group-hover:bg-white/30 transition-colors">
+                                        <UserPlus size={18} />
+                                    </div>
+                                    <span>Register New Patient</span>
+                                </button>
+                            </div>
+                            
+                            <div className="flex flex-wrap items-center gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
+                                <div className="flex bg-slate-100/50 p-1 rounded-lg border border-slate-200/50">
                                     <button 
                                         onClick={() => { setFrontDeskTab('all'); setPage(1); }}
-                                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${frontDeskTab === 'all' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}
+                                        className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${frontDeskTab === 'all' ? 'bg-white text-slate-800 shadow-sm border border-slate-200/60' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
                                     >
                                         All Patients
                                     </button>
                                     <button 
                                         onClick={() => { setFrontDeskTab('active'); setPage(1); }}
-                                        className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${frontDeskTab === 'active' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}
+                                        className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${frontDeskTab === 'active' ? 'bg-white text-slate-800 shadow-sm border border-slate-200/60' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'}`}
                                     >
                                         Active Patients
                                     </button>
-                                    <div className="relative ml-4">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                        <input
-                                            type="text"
-                                            placeholder="Search by name, phone, or ID..."
-                                            className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none w-64 transition-all"
-                                            value={patientSearch}
-                                            onChange={(e) => setPatientSearch(e.target.value)}
-                                        />
-                                        {patientSearch && (
-                                            <button onClick={() => setPatientSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                                                <X size={14} />
-                                            </button>
-                                        )}
-                                    </div>
-                                    <div className="relative ml-2 flex items-center">
-                                        <div className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all">
-                                            <div className="pl-3 pr-2 py-2 text-slate-400 bg-slate-50 border-r border-slate-200">
-                                                <Calendar size={14} />
-                                            </div>
-                                            <input
-                                                type="date"
-                                                value={selectedDate}
-                                                onChange={(e) => setSelectedDate(e.target.value)}
-                                                className="px-3 py-2 bg-transparent text-sm font-bold text-slate-700 outline-none w-[140px] cursor-pointer appearance-none"
-                                            />
-                                            {selectedDate && (
-                                                <button 
-                                                    onClick={() => setSelectedDate('')}
-                                                    className="pr-3 pl-2 py-2 text-slate-400 hover:text-slate-600 bg-white"
-                                                    title="Clear Filter"
-                                                >
-                                                    <X size={14} />
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
                                 </div>
+                                
+                                <div className="relative flex-grow max-w-sm">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search by name, phone, or ID..."
+                                        className="pl-9 pr-4 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-medium focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none w-full transition-all"
+                                        value={patientSearch}
+                                        onChange={(e) => setPatientSearch(e.target.value)}
+                                    />
+                                    {patientSearch && (
+                                        <button onClick={() => setPatientSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                            <X size={14} />
+                                        </button>
+                                    )}
+                                </div>
+
+                                <div className="h-6 w-[1px] bg-slate-200 hidden md:block mx-1"></div>
+
+                                {/* Date Range Selection moved to global header */}
                             </div>
-                            <button
-                                onClick={handleAddNewPatient}
-                                className="group flex items-center gap-3 px-6 py-3.5 bg-slate-950 text-white rounded-2xl font-bold shadow-xl shadow-slate-900/20 hover:bg-blue-600 hover:shadow-blue-600/20 transition-all active:scale-[0.98]"
-                            >
-                                <div className="p-1 rounded-lg bg-white/20 group-hover:bg-white/30 transition-colors">
-                                    <UserPlus size={18} />
-                                </div>
-                                <span>Register New Patient</span>
-                            </button>
                         </div>
 
                         {/* Main Data Card */}

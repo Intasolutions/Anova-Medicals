@@ -126,7 +126,8 @@ const TriageModal = ({ visit, onClose, onSave, doctors = [], pharmacyStock = [],
     };
 
     const handleSubmit = async () => {
-        if (readOnly) return;
+        if (readOnly || submitting) return;
+        setSubmitting(true);
         // Validation removed as per request
         // const { bp, temp, pulse, spo2 } = formData.vitals;
         // if (!bp || !temp || !pulse || !spo2) {

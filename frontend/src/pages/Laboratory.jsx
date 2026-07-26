@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -18,7 +18,7 @@ import {
     FileText,
     Printer,
     Trash2,
-    MapPin, Phone, Microscope, Pencil, AlertTriangle, User
+    MapPin, Phone, Microscope, Pencil, AlertTriangle, User, Calendar
 } from 'lucide-react';
 import { Card, Button, Input, Table } from '../components/UI';
 import Pagination from '../components/Pagination';
@@ -59,6 +59,60 @@ const Laboratory = () => {
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
     const [labTests, setLabTests] = useState([]);
+    const [labSearchQuery, setLabSearchQuery] = useState('');
+    const [debouncedLabSearchQuery, setDebouncedLabSearchQuery] = useState('');
+    const searchTimeoutRef = React.useRef(null);
+    
+    // --- Date Filter State ---
+    const getLocalDate = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
+    const [dateRange, setDateRange] = useState({ 
+        start: getLocalDate(), 
+        end: getLocalDate() 
+    });
+
+    const setPresetRange = (preset) => {
+        const end = getLocalDate();
+        let start = end;
+
+        if (preset === 'week') {
+            const today = new Date();
+            const lastWeek = new Date(today);
+            lastWeek.setDate(today.getDate() - 7);
+            start = new Date(lastWeek.getTime() - lastWeek.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+        } else if (preset === 'month') {
+            const today = new Date();
+            const lastMonth = new Date(today);
+            lastMonth.setMonth(today.getMonth() - 1);
+            start = new Date(lastMonth.getTime() - lastMonth.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+        } else if (preset === 'all') {
+            start = '2000-01-01';
+        }
+        
+        setDateRange({ start, end });
+    };
+
+    const isPresetActive = (preset) => {
+        const end = getLocalDate();
+        
+        if (dateRange.end !== end) return false;
+        
+        if (preset === 'today') return dateRange.start === end;
+        if (preset === 'all') return dateRange.start === '2000-01-01';
+        
+        if (preset === 'week') {
+            const today = new Date();
+            const lastWeek = new Date(today);
+            lastWeek.setDate(today.getDate() - 7);
+            return dateRange.start === new Date(lastWeek.getTime() - lastWeek.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+        }
+        if (preset === 'month') {
+            const today = new Date();
+            const lastMonth = new Date(today);
+            lastMonth.setMonth(today.getMonth() - 1);
+            return dateRange.start === new Date(lastMonth.getTime() - lastMonth.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+        }
+        return false;
+    };
 
     // Group charges by visit AND distinct request times (Session-based grouping)
     const groupedCharges = React.useMemo(() => {
@@ -127,6 +181,10 @@ const Laboratory = () => {
             // Unique Key: VisitID + Time of first item (ensures uniqueness for separate batches)
             const uniqueKey = `${first.visit?.id || first.visit}_${new Date(first.created_at).getTime()}`;
 
+            const maxDrawn = items.reduce((max, i) => i.drawn_date && new Date(i.drawn_date) > new Date(max || 0) ? i.drawn_date : max, null);
+            const maxReceived = items.reduce((max, i) => i.received_date && new Date(i.received_date) > new Date(max || 0) ? i.received_date : max, null);
+            const maxReport = items.reduce((max, i) => i.report_date && new Date(i.report_date) > new Date(max || 0) ? i.report_date : max, null);
+
             return {
                 uniqueKey,
                 visitId: first.visit?.id || first.visit,
@@ -140,6 +198,9 @@ const Laboratory = () => {
                 patient_address: first.patient_address,
                 payment_status: first.payment_status,
                 created_at: first.created_at,
+                drawn_date: maxDrawn || first.drawn_date,
+                received_date: maxReceived || first.received_date,
+                report_date: maxReport || first.report_date,
                 status,
                 items
             };
@@ -169,6 +230,7 @@ const Laboratory = () => {
     // Selected Items
     const [selectedCharge, setSelectedCharge] = useState(null);
     const [printCharge, setPrintCharge] = useState(null);
+    const submitLock = useRef(false);
     const [selectedVisit, setSelectedVisit] = useState(null);
 
     // Forms
@@ -207,11 +269,9 @@ const Laboratory = () => {
             fetchPendingVisits(false);
             fetchLabTests();
 
-            // Polling - 4 seconds
-            const interval = setInterval(() => {
-                fetchCharges(false);
-                fetchPendingVisits(false);
-            }, 4000);
+            // Removed 4-second polling to reduce server load
+            fetchCharges(false);
+            fetchPendingVisits(false);
 
             // Socket Listeners
             const onDoctorUpdate = (data) => {
@@ -230,7 +290,8 @@ const Laboratory = () => {
             socket.on('lab_update', onLabUpdate);
 
             return () => {
-                clearInterval(interval);
+                socket.off('lab_update', fetchCharges);
+                socket.off('reception_update', fetchPendingVisits);
                 socket.off('doctor_notes_update', onDoctorUpdate);
                 socket.off('lab_update', onLabUpdate);
             };
@@ -248,7 +309,7 @@ const Laboratory = () => {
         } else {
             fetchInventory();
         }
-    }, [activeTab, page, globalSearch, statusFilter, pageSize]);
+    }, [activeTab, page, globalSearch, debouncedLabSearchQuery, statusFilter, pageSize, dateRange]);
 
     useEffect(() => {
         if (selectedVisit) {
@@ -311,7 +372,8 @@ const Laboratory = () => {
         if (showLoading) setLoading(true);
         try {
             const statusQuery = statusFilter !== 'ALL' ? `&status=${statusFilter}` : '';
-            let url = `lab/charges/?page=${page}&search=${globalSearch || ''}${statusQuery}`;
+            const finalSearch = debouncedLabSearchQuery || globalSearch || '';
+            let url = `lab/charges/?page=${page}&search=${finalSearch}${statusQuery}&start_date=${dateRange.start}&end_date=${dateRange.end}`;
 
             if (pageSize === 'all') {
                 url += `&page_size=10000`;
@@ -596,8 +658,10 @@ const Laboratory = () => {
     // --- Actions ---
     const handleAddTest = async (e) => {
         e.preventDefault();
-        if (!selectedVisit) return showToast('error', "Select a patient first");
-        if (selectedTests.length === 0) return showToast('error', "Select at least one test");
+        if (submitLock.current) return;
+        submitLock.current = true;
+        if (!selectedVisit) { submitLock.current = false; return showToast('error', "Select a patient first"); }
+        if (selectedTests.length === 0) { submitLock.current = false; return showToast('error', "Select at least one test"); }
 
         try {
             // Sequential or Parallel? Parallel is faster.
@@ -621,7 +685,11 @@ const Laboratory = () => {
             setTestForm({ test_name: '', amount: '' });
             setSelectedVisit(null);
             showToast('success', `${selectedTests.length} test request(s) created`);
-        } catch (err) { showToast('error', "Failed to create test request"); }
+        } catch (err) {
+            console.error(err);
+            const msg = typeof err.response?.data === 'string' ? err.response.data : JSON.stringify(err.response?.data) || err.message;
+            showToast('error', `Failed to create request: ${msg}`);
+        } finally { submitLock.current = false; }
     };
 
     const handleOpenResultEntry = (charge) => {
@@ -702,15 +770,15 @@ const Laboratory = () => {
         if (resSubmitting) return;
         setResSubmitting(true);
         
-        if (finalStatus === 'VERIFICATION' || finalStatus === 'COMPLETED') {
-            const hasEmptyValues = resultData.results.some(r => !r.is_heading && (!r.value || r.value.trim() === ''));
-            if (hasEmptyValues) {
-                showToast('error', 'Please enter all parameter values before submitting');
-                return;
-            }
-        }
-        
         try {
+            if (finalStatus === 'VERIFICATION' || finalStatus === 'COMPLETED') {
+                const hasEmptyValues = resultData.results.some(r => !r.is_heading && (!r.value || r.value.trim() === ''));
+                if (hasEmptyValues) {
+                    showToast('error', 'Please enter all parameter values before submitting');
+                    return;
+                }
+            }
+            
             await api.patch(`/lab/charges/${selectedCharge.lc_id}/`, {
                 results: resultData.results,
                 notes: resultData.notes,
@@ -721,14 +789,18 @@ const Laboratory = () => {
                 report_date: new Date().toISOString()
             });
             setShowResultModal(false);
-            fetchCharges();
+            fetchCharges(); // Called concurrently without awaiting
             
             let successMessage = 'Results verified and published';
             if (finalStatus === 'VERIFICATION') successMessage = 'Results submitted for verification';
             else if (['PENDING', 'DRAWN', 'RECEIVED'].includes(finalStatus)) successMessage = 'Draft saved successfully';
             
             showToast('success', successMessage);
-        } catch (err) { showToast('error', "Failed to save results"); }
+        } catch (err) { 
+            showToast('error', "Failed to save results"); 
+        } finally {
+            setResSubmitting(false);
+        }
     };
 
     const handleStockTransaction = async (e) => {
@@ -844,12 +916,19 @@ const Laboratory = () => {
                 : [groupOrCharge.items];
 
             const firstItem = flatItems[0] || groupOrCharge;
+            
+            const maxDrawn = flatItems.reduce((max, i) => i.drawn_date && new Date(i.drawn_date) > new Date(max || 0) ? i.drawn_date : max, null);
+            const maxReceived = flatItems.reduce((max, i) => i.received_date && new Date(i.received_date) > new Date(max || 0) ? i.received_date : max, null);
+            const maxReport = flatItems.reduce((max, i) => i.report_date && new Date(i.report_date) > new Date(max || 0) ? i.report_date : max, null);
 
             setPrintCharge({
                 ...firstItem, // Use first item for patient details
                 tests: flatItems, // All tests in group (flattened)
                 isGroup: true,
-                groupStatus: groupOrCharge.status
+                groupStatus: groupOrCharge.status,
+                drawn_date: maxDrawn || firstItem.drawn_date,
+                received_date: maxReceived || firstItem.received_date,
+                report_date: maxReport || firstItem.report_date
             });
         } else {
             // It's a single charge (fallback) or from a different context
@@ -857,10 +936,17 @@ const Laboratory = () => {
                 ...groupOrCharge,
                 tests: [groupOrCharge],
                 isGroup: false,
-                groupStatus: groupOrCharge.status
+                groupStatus: groupOrCharge.status,
+                drawn_date: groupOrCharge.drawn_date,
+                received_date: groupOrCharge.received_date,
+                report_date: groupOrCharge.report_date
             });
         }
         setShowPrintModal(true);
+    };
+
+    const hasExistingCharges = (visitId) => {
+        return (chargesData.results || []).some(c => (c.visit?.id || c.visit) === visitId);
     };
 
     return (
@@ -917,7 +1003,65 @@ const Laboratory = () => {
                     {/* 1. QUEUE TAB */}
                     {activeTab === 'queue' && (
                         <>
-                            <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex gap-2 overflow-x-auto shrink-0">
+                            <div className="p-4 border-b border-slate-100 bg-white flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center shrink-0">
+                                <div className="flex items-center gap-2">
+                                    <div className="flex bg-white rounded-lg p-1 border border-slate-200">
+                                        {['Today', 'Week', 'Month', 'All'].map(preset => (
+                                            <button
+                                                key={preset}
+                                                onClick={() => setPresetRange(preset.toLowerCase())}
+                                                className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                                                    isPresetActive(preset.toLowerCase())
+                                                        ? 'bg-blue-50 text-blue-700 shadow-sm border border-blue-100'
+                                                        : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                                                }`}
+                                            >
+                                                {preset}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <div className="flex items-center bg-white border border-slate-200 rounded-lg overflow-hidden shadow-sm h-[32px]">
+                                        <div className="px-3 bg-slate-50 border-r border-slate-200 text-slate-400 h-full flex items-center justify-center">
+                                            <Calendar size={14} />
+                                        </div>
+                                        <input 
+                                            type="date"
+                                            value={dateRange.start}
+                                            onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                                            className="px-2 bg-transparent text-xs font-bold text-slate-700 outline-none w-[110px] cursor-pointer"
+                                            max={dateRange.end}
+                                        />
+                                        <span className="text-slate-300 font-bold">-</span>
+                                        <input 
+                                            type="date"
+                                            value={dateRange.end}
+                                            onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                                            className="px-2 bg-transparent text-xs font-bold text-slate-700 outline-none w-[110px] cursor-pointer"
+                                            max={new Date().toISOString().split('T')[0]}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="relative w-full sm:w-72 shrink-0">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                        <Search size={16} className="text-slate-400" />
+                                    </div>
+                                    <input
+                                        type="text"
+                                        placeholder="Search patient, phone, test..."
+                                        value={labSearchQuery}
+                                        onChange={(e) => {
+                                            setLabSearchQuery(e.target.value);
+                                            if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+                                            searchTimeoutRef.current = setTimeout(() => {
+                                                setDebouncedLabSearchQuery(e.target.value);
+                                                setPage(1);
+                                            }, 500);
+                                        }}
+                                        className="w-full pl-10 pr-4 py-2 bg-white border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all placeholder:font-medium"
+                                    />
+                                </div>
+                            </div>
+                            <div className="p-4 border-b border-slate-100 bg-slate-50/50 flex gap-2 overflow-x-auto shrink-0 hide-scrollbar">
                                 {['ALL', 'PENDING', 'DRAWN', 'RECEIVED', 'VERIFICATION', 'COMPLETED', 'CANCELLED'].map(s => (
                                     <button
                                         key={s}
@@ -946,7 +1090,7 @@ const Laboratory = () => {
                                     <tbody className="divide-y divide-slate-50">
                                         {/* Pending Visits (Assigned to Lab) */}
                                         {pendingVisits.length > 0 && statusFilter === 'ALL' && page === 1 && (
-                                            pendingVisits.filter(v => !groupedCharges.some(g => String(g.visitId) === String(v.id || v.v_id))).map(v => (
+                                            pendingVisits.filter(v => v.status === 'OPEN' && !hasExistingCharges(v.id)).map(v => (
                                                 <tr key={v.id} className="bg-blue-50/30 hover:bg-blue-50 transition-colors group">
                                                     <td className="px-6 py-4">
                                                         <div className="flex items-center gap-3">
@@ -2065,15 +2209,15 @@ const Laboratory = () => {
                                 <Button variant="secondary" className="rounded-xl px-6 font-bold" onClick={() => setShowResultModal(false)}>Cancel</Button>
                                 {['PENDING', 'DRAWN', 'RECEIVED'].includes(selectedCharge.status) && (
                                     <>
-                                        <Button type="button" onClick={(e) => handleSubmitResults(e, selectedCharge.status)} className="rounded-xl px-6 font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-lg shadow-amber-500/30">Save as Draft</Button>
-                                        <Button type="button" onClick={(e) => handleSubmitResults(e, 'VERIFICATION')} className="rounded-xl px-6 font-bold bg-indigo-600 shadow-lg shadow-indigo-500/30">Submit for Verification</Button>
+                                        <Button type="button" disabled={resSubmitting} onClick={(e) => handleSubmitResults(e, selectedCharge.status)} className="rounded-xl px-6 font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-lg shadow-amber-500/30">Save as Draft</Button>
+                                        <Button type="button" disabled={resSubmitting} onClick={(e) => handleSubmitResults(e, 'VERIFICATION')} className="rounded-xl px-6 font-bold bg-indigo-600 shadow-lg shadow-indigo-500/30">Submit for Verification</Button>
                                     </>
                                 )}
                                 {selectedCharge.status === 'VERIFICATION' && (
-                                    <Button type="button" onClick={(e) => handleSubmitResults(e, 'COMPLETED')} className="rounded-xl px-8 font-bold bg-emerald-600 shadow-lg shadow-emerald-500/30">Verify & Complete</Button>
+                                    <Button type="button" disabled={resSubmitting} onClick={(e) => handleSubmitResults(e, 'COMPLETED')} className="rounded-xl px-8 font-bold bg-emerald-600 shadow-lg shadow-emerald-500/30">Verify & Complete</Button>
                                 )}
                                 {selectedCharge.status === 'COMPLETED' && (
-                                    <Button type="button" onClick={(e) => handleSubmitResults(e, 'COMPLETED')} className="rounded-xl px-8 font-bold bg-emerald-600 shadow-lg shadow-emerald-500/30">Save Changes</Button>
+                                    <Button type="button" disabled={resSubmitting} onClick={(e) => handleSubmitResults(e, 'COMPLETED')} className="rounded-xl px-8 font-bold bg-emerald-600 shadow-lg shadow-emerald-500/30">Save Changes</Button>
                                 )}
                             </div>
                         </motion.div>
@@ -2402,9 +2546,9 @@ const Laboratory = () => {
                                             <span>Registered On</span>
                                             <span className="font-bold">: {new Date(printCharge.created_at || Date.now()).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}).replace(/ /g, '-')}</span>
                                             <span>Drawn On</span>
-                                            <span className="font-bold">: {printCharge.tests?.[0]?.drawn_date ? new Date(printCharge.tests[0].drawn_date).toLocaleString('en-IN', {day:'2-digit', month:'short', year:'numeric', hour:'numeric', minute:'2-digit', hour12:true}).replace(/, /g, ' - ') : '--'}</span>
+                                            <span className="font-bold">: {printCharge.drawn_date ? new Date(printCharge.drawn_date).toLocaleString('en-IN', {day:'2-digit', month:'short', year:'numeric', hour:'numeric', minute:'2-digit', hour12:true}).replace(/, /g, ' - ') : '--'}</span>
                                             <span>Received On</span>
-                                            <span className="font-bold">: {printCharge.tests?.[0]?.received_date ? new Date(printCharge.tests[0].received_date).toLocaleString('en-IN', {day:'2-digit', month:'short', year:'numeric', hour:'numeric', minute:'2-digit', hour12:true}).replace(/, /g, ' - ') : '--'}</span>
+                                            <span className="font-bold">: {printCharge.received_date ? new Date(printCharge.received_date).toLocaleString('en-IN', {day:'2-digit', month:'short', year:'numeric', hour:'numeric', minute:'2-digit', hour12:true}).replace(/, /g, ' - ') : '--'}</span>
                                             <span>Reported On</span>
                                             <span className="font-bold">: {printCharge.report_date ? new Date(printCharge.report_date).toLocaleDateString('en-IN', {day:'2-digit', month:'short', year:'numeric'}).replace(/ /g, '-') : '--'}</span>
                                             <span>Printed On</span>

@@ -133,14 +133,9 @@ class VisitViewSet(viewsets.ModelViewSet):
         billing_queue = self.request.query_params.get('billing_queue')
         if billing_queue == 'true':
             from django.db.models import Q
-            from django.utils import timezone
-            today = timezone.now().date()
             qs = qs.filter(
-                Q(created_at__date=today) &
-                (
-                    Q(assigned_role='BILLING', status='OPEN') | 
-                    Q(invoices__payment_status__in=['DRAFT', 'PENDING', 'PARTIAL'])
-                )
+                Q(assigned_role='BILLING', status='OPEN') | 
+                Q(invoices__payment_status__in=['DRAFT', 'PENDING', 'PARTIAL'])
             ).distinct()
             
         qs = qs.select_related('patient', 'doctor', 'doctor_note')

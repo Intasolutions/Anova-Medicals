@@ -61,7 +61,52 @@ const Dashboard = () => {
     const navigate = useNavigate();
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+    const getLocalDate = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
+    const [dateRange, setDateRange] = useState({ 
+        start: getLocalDate(), 
+        end: getLocalDate() 
+    });
+
+    const setPresetRange = (preset) => {
+        const today = new Date();
+        const end = today.toISOString().split('T')[0];
+        let start = end;
+
+        if (preset === 'week') {
+            const lastWeek = new Date(today);
+            lastWeek.setDate(today.getDate() - 7);
+            start = lastWeek.toISOString().split('T')[0];
+        } else if (preset === 'month') {
+            const lastMonth = new Date(today);
+            lastMonth.setMonth(today.getMonth() - 1);
+            start = lastMonth.toISOString().split('T')[0];
+        } else if (preset === 'all') {
+            start = '2000-01-01'; // Effectively all time
+        }
+        
+        setDateRange({ start, end });
+    };
+
+    const isPresetActive = (preset) => {
+        const today = new Date();
+        const endStr = today.toISOString().split('T')[0];
+        
+        if (preset === 'all') return dateRange.start === '2000-01-01';
+        if (dateRange.end !== endStr) return false;
+        
+        if (preset === 'today') {
+            return dateRange.start === endStr;
+        } else if (preset === 'week') {
+            const d = new Date(today);
+            d.setDate(today.getDate() - 7);
+            return dateRange.start === d.toISOString().split('T')[0];
+        } else if (preset === 'month') {
+            const d = new Date(today);
+            d.setMonth(today.getMonth() - 1);
+            return dateRange.start === d.toISOString().split('T')[0];
+        }
+        return false;
+    };
 
     useEffect(() => {
         if (user && user.role !== 'ADMIN') {
@@ -77,8 +122,8 @@ const Dashboard = () => {
 
         const fetchStats = async () => {
             try {
-                // Real API call
-                const { data } = await api.get(`/core/dashboard/stats/?date=${selectedDate}`);
+                // Real API call with date range
+                const { data } = await api.get(`/core/dashboard/stats/?start_date=${dateRange.start}&end_date=${dateRange.end}`);
                 setStats(data);
             } catch (err) {
                 console.error("Dashboard data fetch failed, using fallback for UI demo");
@@ -88,7 +133,7 @@ const Dashboard = () => {
         };
 
         if (user?.role === 'ADMIN') fetchStats();
-    }, [user, navigate, selectedDate]);
+    }, [user, navigate, dateRange]);
 
     // --- Chart Data Processing (The Fix) ---
     const processedChartData = useMemo(() => {
@@ -128,19 +173,44 @@ const Dashboard = () => {
                     </h1>
                     <p className="text-slate-500 font-medium">Here's your hospital's performance overview for today.</p>
                 </div>
-                <div className="flex items-center gap-3 bg-white px-5 py-3 rounded-2xl border border-slate-200 shadow-sm">
-                    <div className="p-2 bg-slate-100 rounded-lg text-slate-500">
-                        <Calendar size={18} />
+                <div className="flex flex-wrap items-center gap-2">
+                    {/* Preset Buttons */}
+                    <div className="flex bg-white border border-slate-200 rounded-[1.5rem] p-1 shadow-sm mr-2">
+                        {['Today', 'Week', 'Month', 'All'].map(preset => (
+                            <button
+                                key={preset}
+                                onClick={() => setPresetRange(preset.toLowerCase())}
+                                className={`px-4 py-2 rounded-2xl text-xs font-bold transition-all ${
+                                    isPresetActive(preset.toLowerCase())
+                                        ? 'bg-slate-900 text-white shadow-md'
+                                        : 'text-slate-500 hover:text-slate-900 hover:bg-slate-50'
+                                }`}
+                            >
+                                {preset}
+                            </button>
+                        ))}
                     </div>
-                    <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select Date</p>
-                        <input 
-                            type="date"
-                            value={selectedDate}
-                            onChange={(e) => setSelectedDate(e.target.value)}
-                            className="text-sm font-bold text-slate-700 bg-transparent border-none outline-none cursor-pointer p-0 m-0"
-                            max={new Date().toISOString().split('T')[0]}
-                        />
+
+                    {/* Custom Range */}
+                    <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-[1.5rem] border border-slate-200 shadow-sm">
+                        <Calendar size={16} className="text-slate-400" />
+                        <div className="flex items-center gap-2">
+                            <input 
+                                type="date"
+                                value={dateRange.start}
+                                onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                                className="text-xs font-bold text-slate-700 bg-transparent border-none outline-none cursor-pointer p-0 m-0 w-[110px]"
+                                max={dateRange.end}
+                            />
+                            <span className="text-slate-300 font-bold">-</span>
+                            <input 
+                                type="date"
+                                value={dateRange.end}
+                                onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                                className="text-xs font-bold text-slate-700 bg-transparent border-none outline-none cursor-pointer p-0 m-0 w-[110px]"
+                                max={new Date().toISOString().split('T')[0]}
+                            />
+                        </div>
                     </div>
                 </div>
             </div>
@@ -148,7 +218,7 @@ const Dashboard = () => {
             {/* --- Key Metrics Grid --- */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <StatCard
-                    label="Patients Today"
+                    label="Total Patients"
                     value={stats?.patients_today ?? 0}
                     change={stats?.patients_change ? `${stats.patients_change}%` : null}
                     trend={stats?.patients_change >= 0 ? 'up' : 'down'}
@@ -164,7 +234,7 @@ const Dashboard = () => {
                     color="amber"
                 />
                 <StatCard
-                    label="Today's Revenue"
+                    label="Total Revenue"
                     value={`₹${(stats?.revenue_today ?? 0).toLocaleString()}`}
                     change={stats?.revenue_change ? `${stats.revenue_change}%` : null}
                     trend={stats?.revenue_change >= 0 ? 'up' : 'down'}

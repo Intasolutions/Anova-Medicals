@@ -107,6 +107,7 @@ const Pharmacy = () => {
             const id = editingStockItem.med_id || editingStockItem.id;
             const payload = {
                 name: editingStockItem.name,
+                content: editingStockItem.content || '',
                 manufacturer: editingStockItem.manufacturer,
                 category: editingStockItem.category,
                 medicine_type: editingStockItem.medicine_type,
@@ -135,6 +136,7 @@ const Pharmacy = () => {
 
     // POS
     const [cart, setCart] = useState([]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [gstRate, setGstRate] = useState(0); // Default to 0% GST
     const [patientSearch, setPatientSearch] = useState('');
     const [patients, setPatients] = useState([]);
@@ -147,7 +149,11 @@ const Pharmacy = () => {
     const [lastSale, setLastSale] = useState(null);
     const [showPrintModal, setShowPrintModal] = useState(false);
     const [pendingVisits, setPendingVisits] = useState([]);
+    const [pageQueue, setPageQueue] = useState(1);
+    const [totalQueueCount, setTotalQueueCount] = useState(0);
     const [salesHistory, setSalesHistory] = useState([]);
+    const [pageDispense, setPageDispense] = useState(1);
+    const [totalDispenseCount, setTotalDispenseCount] = useState(0);
     const [heldCarts, setHeldCarts] = useState([]);
     const [showVerificationModal, setShowVerificationModal] = useState(false);
     const [posQueueSearch, setPosQueueSearch] = useState('');
@@ -169,6 +175,7 @@ const Pharmacy = () => {
     const [recentImports, setRecentImports] = useState([]);
     const [pageRecent, setPageRecent] = useState(1);
     const [totalRecentCount, setTotalRecentCount] = useState(0);
+    const [importSearch, setImportSearch] = useState('');
     const [selectedImport, setSelectedImport] = useState(null);
     const [showManualPurchaseModal, setShowManualPurchaseModal] = useState(false);
     const [manualInvoice, setManualInvoice] = useState({
@@ -217,21 +224,26 @@ const Pharmacy = () => {
     const fetchRecentImports = useCallback(async (pageNum = 1) => {
         try {
             // Force page size 50 for consistent UX
-            const { data } = await api.get(`pharmacy/purchases/?page=${pageNum}&page_size=50`);
+            let url = `pharmacy/purchases/?page=${pageNum}&page_size=50`;
+            if (importSearch) url += `&search=${importSearch}`;
+            const { data } = await api.get(url);
             setRecentImports(Array.isArray(data) ? data : (data.results || []));
             setTotalRecentCount(data.count || 0);
             setPageRecent(pageNum);
         } catch (err) { setRecentImports([]); setTotalRecentCount(0); }
-    }, []);
+    }, [importSearch]);
 
-    const fetchPendingVisits = useCallback(async (showLoading = false) => {
+    const fetchPendingVisits = useCallback(async (pageNum = 1, showLoading = false) => {
+        if (typeof pageNum === 'boolean') { showLoading = pageNum; pageNum = 1; }
         if (showLoading) setLoading(true);
         try {
-            let url = 'pharmacy/queue/';
-            if (posQueueSearch) url += `?search=${posQueueSearch}`;
+            let url = `pharmacy/queue/?page=${pageNum}&page_size=20`;
+            if (posQueueSearch) url += `&search=${posQueueSearch}`;
             const { data } = await api.get(url);
             setPendingVisits(Array.isArray(data) ? data : (data.results || []));
-        } catch (err) { setPendingVisits([]); }
+            setTotalQueueCount(data.count || 0);
+            setPageQueue(pageNum);
+        } catch (err) { setPendingVisits([]); setTotalQueueCount(0); }
         finally { if (showLoading) setLoading(false); }
     }, [posQueueSearch]);
 
@@ -245,13 +257,15 @@ const Pharmacy = () => {
         }
     }, []);
 
-    const fetchSalesHistory = useCallback(async () => {
+    const fetchSalesHistory = useCallback(async (pageNum = 1) => {
         try {
-            let url = 'pharmacy/sales/?page_size=10';
+            let url = `pharmacy/sales/?page=${pageNum}&page_size=10`;
             if (posDispenseSearch) url += `&search=${posDispenseSearch}`;
             const { data } = await api.get(url);
             setSalesHistory(Array.isArray(data) ? data : (data.results || []));
-        } catch (err) { setSalesHistory([]); }
+            setTotalDispenseCount(data.count || 0);
+            setPageDispense(pageNum);
+        } catch (err) { setSalesHistory([]); setTotalDispenseCount(0); }
     }, [posDispenseSearch]);
 
     const fetchFullSalesHistory = useCallback(async (pageNum = 1) => {
@@ -298,15 +312,8 @@ const Pharmacy = () => {
 
     // Auto-Refresh: Only on POS tab or Patients tab
     useEffect(() => {
-        let interval;
-        if (activeTab === 'pos' || activeTab === 'patients') {
-            interval = setInterval(() => {
-                fetchPendingVisits(false);
-                fetchSalesHistory();
-                fetchActivePatients();
-            }, 4000); // 4 second reload as requested
-        }
-        return () => { if (interval) clearInterval(interval); };
+        // Removed polling interval
+        return () => {};
     }, [activeTab, fetchPendingVisits, fetchSalesHistory, fetchActivePatients]);
 
     useEffect(() => {
@@ -419,17 +426,19 @@ const Pharmacy = () => {
                 // Found existing product
                 const newItem = {
                     product_name: existing.name,
-                    barcode: existing.barcode,
-                    batch_no: '',
-                    expiry_date: '',
+                    barcode: existing.barcode || barcode || '',
+                    content: existing.content || '',
+                    batch_no: existing.batch_no || '',
+                    expiry_date: existing.expiry_date ? String(existing.expiry_date).substring(0, 10) : '',
                     qty: 1,
                     free_qty: 0,
-                    purchase_rate: parseFloat(existing.purchase_rate) || parseFloat(existing.ptr) || 0,
-                    ptr: parseFloat(existing.purchase_rate) || parseFloat(existing.ptr) || 0,
-                    mrp: existing.mrp,
-                    gst_percent: existing.gst_percent || 0, // Auto-fill GST
-                    manufacturer: existing.manufacturer,
-                    hsn: existing.hsn,
+                    purchase_rate: existing.purchase_rate || 0,
+                    gst_percent: existing.gst_percent || 0,
+                    discount_percent: 0,
+                    ptr: existing.ptr || 0,
+                    mrp: existing.mrp || 0,
+                    manufacturer: existing.manufacturer || '',
+                    hsn: existing.hsn || '',
                     tablets_per_strip: existing.tablets_per_strip || 10,
                     selling_price_per_tab: (existing.mrp / (existing.tablets_per_strip || 1)).toFixed(2),
                     medicine_type: existing.medicine_type || 'TABLET'
@@ -442,6 +451,7 @@ const Pharmacy = () => {
                     ...prev, items: [...prev.items, {
                         product_name: '',
                         barcode,
+                        content: '',
                         batch_no: '',
                         expiry_date: '',
                         qty: 1,
@@ -618,6 +628,8 @@ const Pharmacy = () => {
     };
 
     const confirmCheckout = async () => {
+        if (isSubmitting) return;
+        setIsSubmitting(true);
         let visitId = selectedPatient?.v_id || null;
         if (!visitId && selectedPatient) { const matchInQueue = pendingVisits.find(v => v.patient === selectedPatient.id || (v.patient?.id === selectedPatient.id) || v.patient_name === selectedPatient.full_name); if (matchInQueue) visitId = matchInQueue.id || matchInQueue.v_id; }
         const payload = { 
@@ -642,8 +654,13 @@ const Pharmacy = () => {
             showToast('success', 'Sent to Billing.');
         } catch (err) {
             console.error(err);
-            const errorMsg = Object.values(err.response?.data || {}).flat().join(' ') || "Transaction failed";
+            const errorMsg = typeof err.response?.data === 'string' 
+                ? err.response.data 
+                : err.response?.data?.detail 
+                || Object.values(err.response?.data || {}).flat().join(' ') || 'Transaction failed';
             showToast('error', errorMsg);
+        } finally {
+            setIsSubmitting(false);
         }
     };
     const loadPrescription = async (visit) => {
@@ -764,7 +781,7 @@ const Pharmacy = () => {
             const results = data.results || data;
 
             // Try to find exact match first, else take first result
-            const match = results.find(r => r.id === returnSearchTerm || r.id.endsWith(returnSearchTerm)) || results[0];
+            const match = results.find(r => String(r.id) === returnSearchTerm || String(r.id).endsWith(returnSearchTerm)) || results[0];
 
             if (match) {
                 setReturnSaleData(match);
@@ -888,7 +905,7 @@ const Pharmacy = () => {
                     <>
                         <div className="flex-1 overflow-auto">
                             <table className="w-full text-left border-collapse">
-                                <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm"><tr>{['Drug Name', 'Category', 'Type', 'Batch', 'Expiry', 'Total (Tab)', ...(isPharmacist ? [] : ['P.Rate']), 'Sales Price/Tab', 'MRP', 'Action'].map(h => <th key={h} className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">{h}</th>)}</tr></thead>
+                                <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm"><tr>{['Drug Name', 'Content / Composition', 'Type', 'Batch', 'Expiry', 'Total (Tab)', ...(isPharmacist ? [] : ['P.Rate']), 'Sales Price/Tab', 'MRP', 'Action'].map(h => <th key={h} className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">{h}</th>)}</tr></thead>
                                 <tbody className="divide-y divide-slate-50">
                                     {(stockData?.results || []).filter(s => {
                                         if (!filterExpiring) return true;
@@ -903,8 +920,8 @@ const Pharmacy = () => {
                                             <td className="px-6 py-4 border-b border-gray-200"><div className="flex items-center gap-3"><div className={`w-8 h-8 rounded-lg border flex items-center justify-center font-bold ${isOutOfStock ? 'border-red-200 text-red-400 bg-red-50' : 'border-gray-300 text-gray-700'}`}><Pill size={14} /></div><div><p className="font-bold text-slate-900 text-sm">{s.name}</p><p className="text-xs font-bold text-slate-400 uppercase">{s.manufacturer || 'Generic'}</p>{isOutOfStock && <span className="text-[9px] font-black text-red-500 uppercase tracking-widest bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">Stock Out</span>}</div></div></td>
 
                                             <td className="px-6 py-4 border-b border-gray-200">
-                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold uppercase ${s.category === 'CASUALTY' ? 'border border-gray-300 text-gray-700' : 'border border-gray-300 text-gray-700'}`}>
-                                                    {s.category || 'PHARMACY'}
+                                                <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold text-slate-500 italic max-w-[120px] truncate`}>
+                                                    {s.content || '-'}
                                                 </span>
                                             </td>
                                             <td className="px-6 py-4 border-b border-gray-200">
@@ -1076,6 +1093,27 @@ const Pharmacy = () => {
                                             </div>
                                         ))
                                     )}
+                                </div>
+                                <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between shrink-0">
+                                    <span className="text-xs font-bold text-slate-500">
+                                        Page {pageQueue} of {Math.ceil(totalQueueCount / 20) || 1} ({totalQueueCount} Total)
+                                    </span>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => fetchPendingVisits(Math.max(1, pageQueue - 1))}
+                                            disabled={pageQueue === 1}
+                                            className="px-3 py-1.5 text-[10px] font-bold bg-white border border-slate-200 rounded-lg hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                        >
+                                            Prev
+                                        </button>
+                                        <button
+                                            onClick={() => fetchPendingVisits(pageQueue + 1)}
+                                            disabled={pageQueue * 20 >= totalQueueCount}
+                                            className="px-3 py-1.5 text-[10px] font-bold bg-white border border-slate-200 rounded-lg hover:border-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                        >
+                                            Next
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
 
@@ -1279,7 +1317,7 @@ const Pharmacy = () => {
                                     <span className="text-xs font-black text-slate-500 uppercase tracking-widest">Net Payable</span>
                                     <span className="text-3xl font-black text-gray-900 leading-none">₹{calculateTotals().net}</span>
                                 </div>
-                                <button onClick={handleCheckout} disabled={cart.length === 0} className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500 text-white rounded-xl font-black shadow-lg shadow-emerald-600/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 uppercase tracking-widest text-xs border border-transparent disabled:border-slate-300 disabled:shadow-none">
+                                <button onClick={handleCheckout} disabled={cart.length === 0 || isSubmitting} className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:text-slate-500 text-white rounded-xl font-black shadow-lg shadow-emerald-600/20 transition-all active:scale-[0.98] flex items-center justify-center gap-2 uppercase tracking-widest text-xs border border-transparent disabled:border-slate-300 disabled:shadow-none">
                                     <Send size={16} /> Send to Billing
                                 </button>
                             </div>
@@ -1322,8 +1360,8 @@ const Pharmacy = () => {
                                         <button onClick={() => setShowVerificationModal(false)} className="flex-1 py-4 bg-white border-2 border-slate-200 text-slate-600 rounded-xl font-black uppercase tracking-widest hover:border-slate-300 hover:bg-slate-50 transition-colors">
                                             Cancel / Edit
                                         </button>
-                                        <button onClick={confirmCheckout} className="flex-1 py-4 bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20 text-lg flex items-center justify-center gap-2">
-                                            <CheckCircle2 size={24} /> Verified & Send
+                                        <button onClick={confirmCheckout} disabled={isSubmitting} className="flex-1 py-4 bg-emerald-600 text-white rounded-xl font-black uppercase tracking-widest hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20 text-lg flex items-center justify-center gap-2 disabled:opacity-50">
+                                            {isSubmitting ? "Processing..." : <><CheckCircle2 size={24} /> Verified & Send</>}
                                         </button>
                                     </div>
                                 </div>
@@ -1378,7 +1416,13 @@ const Pharmacy = () => {
 
                         {/* RIGHT COLUMN: HISTORY (60%) */}
                         <div className="w-[60%] flex flex-col bg-white h-full">
-                            <div className="p-6 border-b border-slate-100 flex justify-between items-center"><h3 className="font-bold text-slate-900 flex items-center gap-2"><Clock size={18} className="text-slate-400" /> Recent Imports</h3></div>
+                            <div className="p-6 border-b border-slate-100 flex justify-between items-center">
+                                <h3 className="font-bold text-slate-900 flex items-center gap-2"><Clock size={18} className="text-slate-400" /> Recent Imports</h3>
+                                <div className="relative w-64">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                                    <input className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:border-gray-900 outline-none transition-all shadow-sm" placeholder="Search imports..." value={importSearch} onChange={e => setImportSearch(e.target.value)} />
+                                </div>
+                            </div>
                             <div className="flex-1 overflow-auto">
                                 <table className="w-full text-left border-collapse">
                                     <thead className="bg-slate-50 sticky top-0 shadow-sm"><tr>{['Invoice', 'Supplier', 'Date', 'Items', 'Action'].map(h => <th key={h} className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">{h}</th>)}</tr></thead>
@@ -1492,17 +1536,22 @@ const Pharmacy = () => {
                                                                 <td className="px-4 py-4 text-slate-900">{item.med_name}</td>
                                                                 <td className="px-4 py-4 font-mono text-xs">{item.batch_no}</td>
                                                                 <td className="px-4 py-4 text-center">₹{item.unit_price} <span className="text-xs text-slate-400">({item.gst_percent}% GST)</span></td>
-                                                                <td className="px-4 py-4 text-center">{item.qty}</td>
+                                                                <td className="px-4 py-4 text-center">
+                                                                    {item.qty}
+                                                                    {item.returned_qty > 0 && <span className="block text-[10px] text-amber-600">({item.returned_qty} returned)</span>}
+                                                                </td>
                                                                 <td className="px-4 py-4 text-center">
                                                                     <input
                                                                         type="number"
                                                                         min="0"
-                                                                        max={item.qty}
-                                                                        className="w-20 text-center bg-blue-50 border border-blue-100 rounded-lg py-2 font-bold text-blue-700 outline-none focus:ring-2 focus:ring-gray-900"
+                                                                        max={Math.max(0, item.qty - (item.returned_qty || 0))}
+                                                                        className="w-20 text-center bg-blue-50 border border-blue-100 rounded-lg py-2 font-bold text-blue-700 outline-none focus:ring-2 focus:ring-gray-900 disabled:opacity-50"
                                                                         placeholder="0"
+                                                                        disabled={item.qty - (item.returned_qty || 0) <= 0}
                                                                         value={returnItems[item.id] || ''}
                                                                         onChange={(e) => {
-                                                                            const val = Math.min(parseInt(e.target.value) || 0, item.qty);
+                                                                            const maxQty = item.qty - (item.returned_qty || 0);
+                                                                            const val = Math.min(parseInt(e.target.value) || 0, maxQty);
                                                                             setReturnItems(prev => ({ ...prev, [item.id]: val }));
                                                                         }}
                                                                     />
@@ -1840,6 +1889,15 @@ const Pharmacy = () => {
                                                 onChange={(e) => setEditingStockItem({ ...editingStockItem, name: e.target.value })}
                                                 required
                                                 className="bg-white"
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest ml-1">Composition / Content</label>
+                                            <Input
+                                                value={editingStockItem.content || ''}
+                                                onChange={(e) => setEditingStockItem({ ...editingStockItem, content: e.target.value })}
+                                                className="bg-white text-xs"
+                                                placeholder="e.g. Paracetamol 500mg"
                                             />
                                         </div>
                                         <div className="space-y-1">
@@ -2303,7 +2361,8 @@ const Pharmacy = () => {
                                         <table className="w-full text-left">
                                             <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
                                                 <tr className="text-xs font-black text-slate-500 uppercase tracking-widest">
-                                                    <th className="px-4 py-4 w-[12%] border-l-2 border-r-2 border-slate-300">Product</th>
+                                                    <th className="px-4 py-4 w-[2%] border-l-2 border-r-2 border-slate-300 text-center">#</th>
+                                                    <th className="px-4 py-4 w-[12%] border-r-2 border-slate-300">Product</th>
                                                     <th className="px-4 py-4 w-[8%] border-r-2 border-slate-300">Type</th>
                                                     <th className="px-4 py-4 w-[10%] border-r-2 border-slate-300">Batch Info</th>
                                                     <th className="px-4 py-4 w-[5%] text-center border-r-2 border-slate-300">TPS</th>
@@ -2327,8 +2386,11 @@ const Pharmacy = () => {
 
                                                     return (
                                                         <tr key={idx} className="group hover:bg-gray-100/30 transition-colors border-b border-slate-300">
+                                                            <td className="px-2 py-3 text-center align-middle border-l-2 border-r-2 border-slate-300">
+                                                                <span className="text-xs font-black text-slate-400">{idx + 1}</span>
+                                                            </td>
                                                             {/* Product Name */}
-                                                            <td className="px-4 py-3 relative align-top border-l-2 border-r-2 border-slate-300">
+                                                            <td className="px-4 py-3 relative align-top border-r-2 border-slate-300">
                                                                 <div className="space-y-1">
                                                                     <input
                                                                         className="w-full bg-transparent text-sm font-bold text-slate-900 placeholder:text-slate-300 outline-none border-b border-transparent focus:border-gray-900 pb-1"
@@ -2338,9 +2400,15 @@ const Pharmacy = () => {
                                                                         onFocus={() => { if (item.product_name.length >= 2) searchProductsForManual(item.product_name, idx); }}
                                                                     />
                                                                     <input
+                                                                        className="w-full bg-transparent text-[10px] font-bold text-slate-500 italic placeholder:text-slate-300 outline-none"
+                                                                        placeholder="Content / Composition"
+                                                                        value={item.content || ''}
+                                                                        onChange={(e) => handleManualItemChange(idx, 'content', e.target.value)}
+                                                                    />
+                                                                    <input
                                                                         className="w-full bg-transparent text-xs font-bold text-slate-400 uppercase placeholder:text-slate-300 outline-none"
                                                                         placeholder="Manufacturer / HSN"
-                                                                        value={item.hsn} // Using HSN field for visual simplicity, mapped to Manufacturer logic if needed
+                                                                        value={item.hsn}
                                                                         onChange={(e) => handleManualItemChange(idx, 'hsn', e.target.value)}
                                                                     />
                                                                 </div>
@@ -2457,7 +2525,7 @@ const Pharmacy = () => {
                                         {/* Empty State / Add Button Area */}
                                         <div className="p-4 bg-slate-50 border-t border-slate-200">
                                             <button
-                                                onClick={() => setManualInvoice(prev => ({ ...prev, items: [...prev.items, { product_name: '', barcode: '', batch_no: '', expiry_date: '', qty: 1, free_qty: 0, purchase_rate: 0, gst_percent: 0, discount_percent: 0, ptr: 0, mrp: 0, manufacturer: '', hsn: '', tablets_per_strip: 10, selling_price_per_tab: 0, medicine_type: 'TABLET' }] }))}
+                                                onClick={() => setManualInvoice(prev => ({ ...prev, items: [...prev.items, { product_name: '', barcode: '', content: '', batch_no: '', expiry_date: '', qty: 1, free_qty: 0, purchase_rate: 0, gst_percent: 0, discount_percent: 0, ptr: 0, mrp: 0, manufacturer: '', hsn: '', tablets_per_strip: 10, selling_price_per_tab: 0, medicine_type: 'TABLET' }] }))}
                                                 className="w-full h-12 border-2 border-dashed border-slate-300 rounded-xl flex items-center justify-center gap-2 text-slate-500 font-bold text-xs uppercase tracking-widest hover:border-gray-500 hover:bg-gray-100 hover:text-gray-900 transition-all group"
                                             >
                                                 <Plus size={16} className="group-hover:scale-110 transition-transform" />

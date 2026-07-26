@@ -9,6 +9,7 @@ import { useSearch } from '../context/SearchContext';
 const Users = () => {
     const [staffData, setStaffData] = useState({ results: [], count: 0 });
     const [loading, setLoading] = useState(true);
+    const [submitting, setSubmitting] = useState(false);
     const [page, setPage] = useState(1);
     const { globalSearch, setGlobalSearch } = useSearch();
     const [showAddModal, setShowAddModal] = useState(false);
@@ -36,6 +37,8 @@ const Users = () => {
 
     const handleAddStaff = async (e) => {
         e.preventDefault();
+        if (submitting) return;
+        setSubmitting(true);
         try {
             await api.post('/users/management/', addForm);
             setShowAddModal(false);
@@ -44,6 +47,8 @@ const Users = () => {
             fetchStaff();
         } catch (err) {
             alert("Failed to add staff. Username might be taken.");
+        } finally {
+            setSubmitting(false);
         }
     };
 

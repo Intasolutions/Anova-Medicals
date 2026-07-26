@@ -175,18 +175,34 @@ class LabChargeViewSet(viewsets.ModelViewSet):
         visit_patient = self.request.query_params.get('visit__patient')
         if visit_patient:
             qs = qs.filter(visit__patient_id=visit_patient)
+            
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+
+        if start_date:
+            qs = qs.filter(created_at__date__gte=start_date)
+        if end_date:
+            qs = qs.filter(created_at__date__lte=end_date)
+            
         return qs
 
     def list(self, request, *args, **kwargs):
         response = super().list(request, *args, **kwargs)
         
-        # Calculate global status counts (can be optimized later to filter by date if needed)
+        # Calculate status counts using the filtered queryset EXCEPT status
         from django.db.models import Count
-        base_qs = LabCharge.objects.all()
-        counts = base_qs.values('status').annotate(count=Count('id'))
+        base_qs = super().get_queryset()
+        visit_id = self.request.query_params.get('visit')
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        if visit_id: base_qs = base_qs.filter(visit_id=visit_id)
+        if start_date: base_qs = base_qs.filter(created_at__date__gte=start_date)
+        if end_date: base_qs = base_qs.filter(created_at__date__lte=end_date)
+        
+        counts = base_qs.order_by().values('status').annotate(count=Count('visit', distinct=True))
         
         status_dict = {
-            'ALL': base_qs.count(),
+            'ALL': base_qs.order_by().values('visit').distinct().count(),
             'PENDING': 0,
             'DRAWN': 0,
             'RECEIVED': 0,
@@ -218,7 +234,63 @@ class LabChargeViewSet(viewsets.ModelViewSet):
         
         # Save the update
         instance = serializer.save()
-        
+
+        # --- PARENT PACKAGE SYNC (Status & Dates) ---
+        if instance.parent_charge:
+            parent = instance.parent_charge
+            sub_charges = parent.sub_charges.all()
+            
+            # Status sync logic
+            all_cancelled = all(sub.status == 'CANCELLED' for sub in sub_charges)
+            all_completed = all(sub.status in ['COMPLETED', 'CANCELLED'] for sub in sub_charges)
+            any_pending = any(sub.status == 'PENDING' for sub in sub_charges)
+            any_drawn = any(sub.status == 'DRAWN' for sub in sub_charges)
+            any_received = any(sub.status == 'RECEIVED' for sub in sub_charges)
+            any_verification = any(sub.status == 'VERIFICATION' for sub in sub_charges)
+            
+            old_parent_status = parent.status
+            new_parent_status = old_parent_status
+            if all_cancelled: new_parent_status = 'CANCELLED'
+            elif any_pending: new_parent_status = 'PENDING'
+            elif any_drawn: new_parent_status = 'DRAWN'
+            elif any_received: new_parent_status = 'RECEIVED'
+            elif any_verification: new_parent_status = 'VERIFICATION'
+            elif all_completed: new_parent_status = 'COMPLETED'
+            
+            parent.status = new_parent_status
+            
+            # Dates sync logic (Max dates from sub-tests)
+            drawn_dates = [sub.drawn_date for sub in sub_charges if sub.drawn_date]
+            received_dates = [sub.received_date for sub in sub_charges if sub.received_date]
+            report_dates = [sub.report_date for sub in sub_charges if sub.report_date]
+            
+            if drawn_dates: parent.drawn_date = max(drawn_dates)
+            if received_dates: parent.received_date = max(received_dates)
+            if report_dates: parent.report_date = max(report_dates)
+            
+            parent.save()
+            
+            # Parent Billing Logic
+            if new_parent_status == 'COMPLETED' and old_parent_status != 'COMPLETED':
+                invoice = Invoice.objects.filter(visit=instance.visit).order_by('created_at').first()
+                if invoice:
+                    existing_parent_item = InvoiceItem.objects.filter(
+                        invoice=invoice,
+                        dept='LAB',
+                        description=parent.test_name
+                    ).exists()
+                    if not existing_parent_item and float(parent.amount) > 0:
+                        InvoiceItem.objects.create(
+                            invoice=invoice,
+                            dept='LAB',
+                            description=parent.test_name,
+                            qty=1,
+                            unit_price=parent.amount,
+                            amount=parent.amount
+                        )
+                        invoice.total_amount = sum(item.amount for item in invoice.items.all())
+                        invoice.save()
+
         # Trigger Billing & Inventory ONLY if status CHANGED to COMPLETED
         # This prevents double-deduction/billing when treating/editing an already completed test
         if instance.status == 'COMPLETED' and old_status != 'COMPLETED':
@@ -336,32 +408,6 @@ class LabChargeViewSet(viewsets.ModelViewSet):
                 invoice.payment_status = 'PENDING'
                 
             invoice.save()
-            
-            # Check if this was a sub-test, and if parent should be auto-completed
-            if instance.parent_charge:
-                pending_subs = instance.parent_charge.sub_charges.exclude(status__in=['COMPLETED', 'CANCELLED']).exists()
-                if not pending_subs and instance.parent_charge.status not in ['COMPLETED', 'CANCELLED']:
-                    parent = instance.parent_charge
-                    parent.status = 'COMPLETED'
-                    parent.save()
-                    
-                    existing_parent_item = InvoiceItem.objects.filter(
-                        invoice=invoice,
-                        dept='LAB',
-                        description=parent.test_name
-                    ).exists()
-                    
-                    if not existing_parent_item:
-                        InvoiceItem.objects.create(
-                            invoice=invoice,
-                            dept='LAB',
-                            description=parent.test_name,
-                            qty=1,
-                            unit_price=parent.amount,
-                            amount=parent.amount
-                        )
-                        invoice.total_amount = sum(item.amount for item in invoice.items.all())
-                        invoice.save()
 
         # Check if all tests for this visit are completed/cancelled
         if instance.status in ['COMPLETED', 'CANCELLED'] and old_status != instance.status:

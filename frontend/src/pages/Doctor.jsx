@@ -24,7 +24,8 @@ const safePrescrArray = (p) => {
         if (typeof d === 'object' && d) return { name, dosage: d.dosage || '--', duration: d.duration || '--', qty: d.qty || d.count || '--' };
         const parts = String(d).split(' | ');
         const qm = String(d).match(/Qty:\s*(\d+)/i);
-        return { name, dosage: parts[0] || '--', duration: parts[1] || '--', qty: qm ? qm[1] : '--' };
+        const nm = String(d).match(/Note:\s*(.+)/i);
+        return { name, dosage: parts[0] || '--', duration: parts[1] || '--', qty: qm ? qm[1] : '--', note: nm ? nm[1] : '' };
     });
     return [];
 };
@@ -134,7 +135,10 @@ const HistoryModal = ({ history, onClose }) => {
                                     <tbody className="divide-y divide-slate-100">
                                         {meds.map((med, idx) => (
                                             <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                                <td className="px-4 py-3 font-bold text-slate-900">{med.name}</td>
+                                                <td className="px-4 py-3">
+                                                    <span className="font-bold text-slate-900">{med.name}</span>
+                                                    {med.note && <span className="block text-[10px] text-slate-500 italic mt-0.5">{med.note}</span>}
+                                                </td>
                                                 <td className="px-4 py-3 text-slate-600 font-medium">{med.dosage}</td>
                                                 <td className="px-4 py-3 text-slate-600 font-medium">{med.duration}</td>
                                                 <td className="px-4 py-3 text-slate-900 font-bold text-right">{med.qty}</td>
@@ -275,11 +279,19 @@ const Doctor = () => {
             showToast('info', `${med.name} already in prescription`);
             setMedSearch(''); setMedResults([]); return;
         }
-        const dosage = '1-0-1'; const duration = '5 Days';
-        const count = String(calculateQty(dosage, duration) || 15);
+        let isTablet = true;
+        if (med.medicine_type) {
+            isTablet = med.medicine_type === 'TABLET' || med.medicine_type === 'CAPSULE';
+        }
+        const nameUpper = med.name.toUpperCase();
+        if (nameUpper.includes('SYP') || nameUpper.includes('SYRUP') || nameUpper.includes('INJ') || nameUpper.includes('GEL') || nameUpper.includes('OINT') || nameUpper.includes('CREAM') || nameUpper.includes('DROP') || nameUpper.includes('POWDER') || nameUpper.includes('SPRAY') || nameUpper.includes('LOTION') || nameUpper.includes('LIQUID')) {
+            isTablet = false;
+        }
+        const count = isTablet ? '' : '1';
         setSelectedMeds(prev => [...prev, {
-            name: med.name, dosage, duration, count,
-            stock: med.qty_available || 0, mrp: med.mrp || 0, tps: med.tablets_per_strip || 1
+            name: med.name, dosage: '', duration: '', count: count, note: '',
+            stock: med.qty_available || 0, mrp: med.mrp || 0, tps: med.tablets_per_strip || 1,
+            isTablet: isTablet, content: med.content || ''
         }]);
         if (referral !== 'PHARMACY' && referral !== 'CASUALTY') {
             setReferral('PHARMACY'); showToast('info', 'Referral auto-set to Pharmacy');
@@ -299,8 +311,10 @@ const Doctor = () => {
             if (m.name !== name) return m;
             const updated = { ...m, [field]: value };
             if (field === 'dosage' || field === 'duration') {
-                const q = calculateQty(updated.dosage, updated.duration);
-                if (q !== null) updated.count = String(q);
+                if (m.isTablet !== false) {
+                    const q = calculateQty(updated.dosage, updated.duration);
+                    if (q !== null) updated.count = String(q);
+                }
             }
             return updated;
         }));
@@ -380,7 +394,7 @@ const Doctor = () => {
             }
             if (existing.prescription && typeof existing.prescription === 'object' && !draftLoaded) {
                 const medPromises = Object.entries(existing.prescription).map(async ([name, details]) => {
-                    let dosage = '1-0-1', duration = '5 Days', count = '15';
+                    let dosage = '', duration = '', count = '', note = '';
                     try {
                         if (typeof details === 'string') {
                             const parts = details.split(' | ');
@@ -388,10 +402,13 @@ const Doctor = () => {
                             duration = parts[1]?.trim() || duration;
                             const qm = details.match(/Qty:\s*(\d+)/i);
                             if (qm) count = qm[1];
+                            const nm = details.match(/Note:\s*(.+)/i);
+                            if (nm) note = nm[1];
                         } else if (details && typeof details === 'object') {
                             dosage = details.dosage || dosage;
                             duration = details.duration || duration;
                             count = String(details.qty || details.count || count);
+                            note = details.note || note;
                         }
                     } catch (e) { console.error('parse med', name, e); }
                     let stock = 0;
@@ -400,7 +417,16 @@ const Doctor = () => {
                         const match = (sd.results || sd).find(m => m.name === name);
                         if (match) stock = match.qty_available;
                     } catch (e) { /* ignore */ }
-                    return { name, dosage, duration, count, stock };
+                    let isTablet = true;
+                    if (match?.medicine_type) {
+                        isTablet = match.medicine_type === 'TABLET' || match.medicine_type === 'CAPSULE';
+                    } else {
+                        const nameUpper = name.toUpperCase();
+                        if (nameUpper.includes('SYP') || nameUpper.includes('SYRUP') || nameUpper.includes('INJ') || nameUpper.includes('GEL') || nameUpper.includes('OINT') || nameUpper.includes('CREAM') || nameUpper.includes('DROP') || nameUpper.includes('POWDER') || nameUpper.includes('SPRAY')) {
+                            isTablet = false;
+                        }
+                    }
+                    return { name, dosage, duration, count, stock, note, isTablet };
                 });
                 const resolved = (await Promise.all(medPromises)).filter(Boolean);
                 setSelectedMeds(resolved);
@@ -519,7 +545,11 @@ const Doctor = () => {
 
             // Build prescription
             const prescriptionObj = {};
-            selectedMeds.forEach(m => { prescriptionObj[m.name] = `${m.dosage} | ${m.duration} | Qty: ${m.count}`; });
+            selectedMeds.forEach(m => {
+                let desc = `${m.dosage} | ${m.duration} | Qty: ${m.count}`;
+                if (m.note) desc += ` | Note: ${m.note}`;
+                prescriptionObj[m.name] = desc;
+            });
 
             // Preserve existing lab_referral_details if results are already done
             // (so the note still records which tests were ordered originally)
@@ -541,6 +571,23 @@ const Doctor = () => {
                 await api.patch(`/medical/doctor-notes/${existingNoteId}/`, payload);
             } else {
                 await api.post('/medical/doctor-notes/', payload);
+            }
+
+            // Inject tests into Lab Queue instantly, bypassing manual technician verification
+            if (hasNewTests && referral === 'LAB') {
+                for (const t of selectedTests) {
+                    try {
+                        await api.post('lab/charges/', {
+                            visit: selectedVisit.v_id || selectedVisit.id,
+                            test_name: t.name,
+                            sub_name: t.sub_name || '',
+                            amount: t.price || 0,
+                            status: 'PENDING'
+                        });
+                    } catch (err) {
+                        console.error('Failed to auto-inject lab test:', t.name, err);
+                    }
+                }
             }
 
             // Update visit routing
@@ -594,26 +641,14 @@ const Doctor = () => {
 
     useEffect(() => {
         if (!user) return;
-        const iv = setInterval(async () => {
-            await fetchQueue(false);
-            // Live-sync the selectedVisit so lab_results update without needing a re-click
-            if (selectedVisit) {
-                try {
-                    const vId = selectedVisit.v_id || selectedVisit.id;
-                    const { data } = await api.get(`/reception/visits/${vId}/`);
-                    if (data) {
-                        setSelectedVisit(prev => prev && (prev.v_id || prev.id) === vId ? { ...prev, ...data } : prev);
-                    }
-                } catch (e) { /* silent */ }
-            }
-        }, 5000);
+        // Removed 5-second polling interval to save server resources
         const onVU = (d) => {
             fetchQueue(false);
-            // If socket tells us about the currently-open visit, re-fetch it
+            // Live-sync the selectedVisit so lab_results update without needing a re-click
             if (selectedVisit && d?.visit_id && d.visit_id === String(selectedVisit.v_id || selectedVisit.id)) {
-                api.get(`/reception/visits/${selectedVisit.v_id || selectedVisit.id}/`)
-                    .then(({ data }) => setSelectedVisit(prev => prev ? { ...prev, ...data } : prev))
-                    .catch(() => {});
+                api.get(`/reception/visits/${d.visit_id}/`).then(({ data }) => {
+                    if (data) setSelectedVisit(prev => prev && (prev.v_id || prev.id) == d.visit_id ? { ...prev, ...data } : prev);
+                }).catch(() => {});
             }
         };
         const onLU = (d) => {
@@ -624,7 +659,7 @@ const Doctor = () => {
         };
         socket.on('visit_update', onVU);
         socket.on('lab_update', onLU);
-        return () => { clearInterval(iv); socket.off('visit_update', onVU); socket.off('lab_update', onLU); };
+        return () => { socket.off('visit_update', onVU); socket.off('lab_update', onLU); };
     }, [user, page, globalSearch, selectedVisit]);
 
     useEffect(() => {
@@ -1105,7 +1140,8 @@ const Doctor = () => {
                                                                         className={`px-4 py-3 cursor-pointer flex justify-between items-center group transition-colors ${med.qty_available < 1 ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-emerald-50'}`}>
                                                                         <div>
                                                                             <span className={`text-sm font-bold ${med.qty_available < 1 ? 'text-red-700' : 'text-slate-700 group-hover:text-emerald-700'}`}>{med.name}</span>
-                                                                            {med.qty_available < 1 && <span className="block text-[9px] font-bold text-red-500">Out of Stock</span>}
+                                                                            {med.content && <span className="block text-[10px] text-slate-500 italic mt-0.5">{med.content}</span>}
+                                                                            {med.qty_available < 1 && <span className="block text-[9px] font-bold text-red-500 mt-0.5">Out of Stock</span>}
                                                                         </div>
                                                                         <div className="flex flex-col items-end">
                                                                             <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md mb-1 ${med.qty_available < 1 ? 'bg-red-200 text-red-800' : med.qty_available < 10 ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>
@@ -1141,7 +1177,8 @@ const Doctor = () => {
                                                                         <div className="flex items-center gap-3">
                                                                             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${isIns || isOOS ? 'bg-red-100 text-red-600' : 'bg-emerald-50 text-emerald-600'}`}>{idx + 1}</div>
                                                                             <div>
-                                                                                <span className="font-bold text-slate-800 text-sm">{med.name}</span>
+                                                                                <span className="font-bold text-slate-800 text-sm block leading-none">{med.name}</span>
+                                                                                {med.content && <span className="block text-[10px] text-slate-500 italic mt-0.5">{med.content}</span>}
                                                                                 <div className="flex items-center gap-2 mt-0.5">
                                                                                     {isOOS ? (
                                                                                         <span className="text-[10px] font-bold bg-red-100 text-red-700 px-2 py-0.5 rounded-md flex items-center gap-1"><AlertCircle size={10} /> Out of Stock</span>
@@ -1167,8 +1204,8 @@ const Doctor = () => {
                                                                     </div>
                                                                     <div className="flex items-center gap-2 w-full">
                                                                         {[
-                                                                            { field: 'dosage', l: 'Dosage', ph: '1-0-1', lid: `d-${idx}`, opts: ['1-0-1', '1-1-1', '1-0-0', '0-0-1', '0-1-0', 'SOS', 'STAT'] },
-                                                                            { field: 'duration', l: 'Duration', ph: '5 Days', lid: `dur-${idx}`, opts: ['1 Day', '3 Days', '5 Days', '1 Week', '2 Weeks', '1 Month', '2 Months', '3 Months'] },
+                                                                            { field: 'dosage', l: 'Dosage', ph: '1-0-1', lid: `d-${idx}`, opts: ['1-0-1', '1-1-1', '1-0-0', '0-0-1', '0-1-0', '1-1-1-1', 'SOS', 'STAT'] },
+                                                                            { field: 'duration', l: 'Duration', ph: '5', lid: `dur-${idx}`, opts: ['1', '3', '5', '7', '14', '30'] },
                                                                         ].map(inp => (
                                                                             <div key={inp.field} className="relative flex-1">
                                                                                 <label className="absolute -top-2 left-2 px-1 bg-white text-[9px] font-bold text-slate-400 uppercase z-10">{inp.l}</label>
@@ -1184,6 +1221,12 @@ const Doctor = () => {
                                                                                 onChange={e => handleMedFieldChange(med.name, 'count', e.target.value)}
                                                                                 className={`w-full px-3 py-2 bg-slate-50 border-2 rounded-lg text-xs font-bold text-center outline-none transition-all focus:bg-white ${isIns ? 'border-red-400 text-red-700' : 'border-slate-200 focus:border-blue-500'}`} />
                                                                         </div>
+                                                                    </div>
+                                                                    <div className="relative w-full">
+                                                                        <label className="absolute -top-2 left-2 px-1 bg-white text-[9px] font-bold text-slate-400 uppercase z-10">Note</label>
+                                                                        <input type="text" value={med.note || ''} placeholder="Add instructions, quantity marks..."
+                                                                            onChange={e => handleMedFieldChange(med.name, 'note', e.target.value)}
+                                                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 focus:bg-white outline-none transition-all" />
                                                                     </div>
                                                                 </motion.div>
                                                             );

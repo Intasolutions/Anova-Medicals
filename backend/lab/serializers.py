@@ -275,7 +275,7 @@ class LabChargeSerializer(serializers.ModelSerializer):
             'lc_id', 'visit', 'visit_id', 'patient_name', 'registration_number', 'patient_age', 'patient_sex',
             'patient_phone', 'patient_address', 'doctor_name', 'payment_status',
             'test_name', 'sub_name', 'amount', 'status', 'results', 'report_date', 'drawn_date', 'received_date', 'technician_name',
-            'specimen', 'created_at', 'updated_at', 'parent_charge'
+            'specimen', 'notes', 'created_at', 'updated_at', 'parent_charge'
         ]
         read_only_fields = ['lc_id', 'created_at', 'updated_at']
 

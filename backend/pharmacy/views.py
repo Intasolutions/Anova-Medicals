@@ -290,7 +290,7 @@ class PharmacyStockViewSet(viewsets.ModelViewSet):
     serializer_class = PharmacyStockSerializer
     permission_classes = [IsPharmacyOrAdmin]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ['name', 'barcode', 'batch_no']
+    search_fields = ['name', 'content', 'barcode', 'batch_no']
     ordering_fields = ['expiry_date', 'qty_available', 'updated_at', 'supplier__supplier_name']
     ordering = ['expiry_date']
     pagination_class = StandardResultsSetPagination
@@ -371,11 +371,12 @@ class PharmacyStockViewSet(viewsets.ModelViewSet):
         if len(query) < 2:
             return Response([])
 
-        from django.db.models import Sum
+        from django.db.models import Sum, Q
         qs = (
             PharmacyStock.objects
-            .filter(is_deleted=False, name__icontains=query)
-            .values('name')
+            .filter(is_deleted=False)
+            .filter(Q(name__icontains=query) | Q(content__icontains=query))
+            .values('name', 'content')
             .annotate(total_qty=Sum('qty_available'))
             .order_by('name')
         )
@@ -389,8 +390,10 @@ class PharmacyStockViewSet(viewsets.ModelViewSet):
                 'id': item['name'],
                 'name': item['name'],
                 'qty_available': item['total_qty'] or 0,
+                'content': latest.content if latest else '',
                 'mrp': latest.mrp if latest else 0,
-                'tablets_per_strip': latest.tablets_per_strip if latest else 1
+                'tablets_per_strip': latest.tablets_per_strip if latest else 1,
+                'medicine_type': latest.medicine_type if latest else 'TABLET'
             })
         
         return Response(results)
@@ -468,11 +471,19 @@ class PharmacySaleViewSet(viewsets.ModelViewSet):
         
         # Support searching by Invoice ID (UUID string match) or Patient Name
         if search:
+            # Also search by central invoice number
+            from billing.models import InvoiceItem
+            matching_sale_ids = InvoiceItem.objects.filter(
+                invoice__invoice_number__icontains=search, 
+                dept='PHARMACY'
+            ).values_list('item_id', flat=True)
+
             qs = qs.filter(
                 models.Q(id__icontains=search) | 
                 models.Q(patient__full_name__icontains=search) |
                 models.Q(patient__phone__icontains=search) |
-                models.Q(patient__registration_number__icontains=search)
+                models.Q(patient__registration_number__icontains=search) |
+                models.Q(id__in=matching_sale_ids)
             )
             
         start_date = self.request.query_params.get('start_date')

@@ -154,6 +154,35 @@ class LabCharge(BaseModel):
     def __str__(self):
         return f"{self.test_name} - {getattr(self.visit, 'id', self.visit.id)}"
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        # Auto-sync timestamps to parent package (Longest duration / latest timestamp wins)
+        if self.parent_charge:
+            parent = self.parent_charge
+            siblings = list(parent.sub_charges.all())
+            
+            drawn_dates = [s.drawn_date for s in siblings if s.drawn_date]
+            received_dates = [s.received_date for s in siblings if s.received_date]
+            report_dates = [s.report_date for s in siblings if s.report_date]
+            
+            max_drawn = max(drawn_dates) if drawn_dates else None
+            max_received = max(received_dates) if received_dates else None
+            max_report = max(report_dates) if report_dates else None
+            
+            update_fields = []
+            if max_drawn and parent.drawn_date != max_drawn:
+                parent.drawn_date = max_drawn
+                update_fields.append('drawn_date')
+            if max_received and parent.received_date != max_received:
+                parent.received_date = max_received
+                update_fields.append('received_date')
+            if max_report and parent.report_date != max_report:
+                parent.report_date = max_report
+                update_fields.append('report_date')
+                
+            if update_fields:
+                parent.save(update_fields=update_fields)
+
 
 class LabCategory(BaseModel):
     name = models.CharField(max_length=50, unique=True)

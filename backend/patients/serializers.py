@@ -188,6 +188,7 @@ class VisitSerializer(serializers.ModelSerializer):
                         gst = 0
 
                     items.append({
+                        "sale_id": sale.id,
                         "med_id": med_stock.id,
                         "name": med_name,
                         "qty": item.qty,
