@@ -64,6 +64,14 @@ class PatientViewSet(viewsets.ModelViewSet):
         if only_active == 'true':
             qs = qs.filter(has_active_visit=True)
             
+        # Filter Logic: Date filtering (created_at__date__gte/lte)
+        start_date = self.request.query_params.get('created_at__date__gte')
+        end_date = self.request.query_params.get('created_at__date__lte')
+        if start_date:
+            qs = qs.filter(created_at__date__gte=start_date)
+        if end_date:
+            qs = qs.filter(created_at__date__lte=end_date)
+            
         qs = qs.prefetch_related('visits', 'visits__doctor')
             
         return qs
@@ -137,6 +145,14 @@ class VisitViewSet(viewsets.ModelViewSet):
                 Q(assigned_role='BILLING', status='OPEN') | 
                 Q(invoices__payment_status__in=['DRAFT', 'PENDING', 'PARTIAL'])
             ).distinct()
+            
+        # Filter Logic: Date filtering (created_at__date__gte/lte)
+        start_date = self.request.query_params.get('created_at__date__gte')
+        end_date = self.request.query_params.get('created_at__date__lte')
+        if start_date:
+            qs = qs.filter(created_at__date__gte=start_date)
+        if end_date:
+            qs = qs.filter(created_at__date__lte=end_date)
             
         qs = qs.select_related('patient', 'doctor', 'doctor_note')
         qs = qs.prefetch_related(

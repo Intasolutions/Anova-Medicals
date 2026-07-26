@@ -118,7 +118,7 @@ const Laboratory = () => {
     const groupedCharges = React.useMemo(() => {
         const visitBuckets = {};
         chargesData.results.forEach(charge => {
-            const visitId = charge.visit?.id || charge.visit || `unknown_${charge.patient_name}`;
+            const visitId = charge.visit_id || charge.visit?.id || charge.visit || `unknown_${charge.patient_name}`;
             if (!visitBuckets[visitId]) visitBuckets[visitId] = [];
             visitBuckets[visitId].push(charge);
         });

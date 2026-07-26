@@ -48,6 +48,14 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                     queryset = queryset.filter(created_at__month=month, created_at__year=year)
                 except ValueError:
                     pass
+            
+            # Handle frontend date range logic
+            start_date = self.request.query_params.get('created_at__date__gte')
+            end_date = self.request.query_params.get('created_at__date__lte')
+            if start_date:
+                queryset = queryset.filter(created_at__date__gte=start_date)
+            if end_date:
+                queryset = queryset.filter(created_at__date__lte=end_date)
                     
         # Explicitly handle visit__patient since nested filterset_fields might fail silently without a custom FilterSet
         visit_patient = self.request.query_params.get('visit__patient')
