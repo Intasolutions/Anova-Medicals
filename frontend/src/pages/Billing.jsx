@@ -467,7 +467,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
       visit.doctor &&
       !isCasualtyDirectLab
     ) {
-      const fee = visit.consultation_fee
+      const fee = (visit.consultation_fee !== undefined && visit.consultation_fee !== null)
         ? parseFloat(visit.consultation_fee)
         : 500;
       newFormData.items.push({
@@ -995,6 +995,23 @@ const Billing = ({ dateRange: externalDateRange }) => {
             i.dept !== "CONSULTATION" &&
             i.description !== "General Consultation Fee",
         );
+      } else if (
+        visitData &&
+        visitData.doctor &&
+        invoice.payment_status !== "PAID" &&
+        invoice.payment_status !== "CANCELLED"
+      ) {
+        // Sync Consultation Fee with latest backend calculation (e.g., 7-day free rule)
+        const fee = (visitData.consultation_fee !== undefined && visitData.consultation_fee !== null)
+          ? parseFloat(visitData.consultation_fee)
+          : 500;
+        
+        baseItems = baseItems.map((i) => {
+          if (i.dept === "CONSULTATION" && i.description === "General Consultation Fee") {
+            return { ...i, unit_price: fee, amount: fee };
+          }
+          return i;
+        });
       }
 
       // Cleanup: remove auto-generated 0-rupee inner package lab tests
@@ -1072,7 +1089,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
         invoice.payment_status !== "CANCELLED"
       ) {
         const visitLabItems = ((visitData && visitData.lab_charges_data) || [])
-          .filter((item) => parseFloat(item.amount) > 0)
+          .filter((item) => parseFloat(item.amount) > 0 && item.status !== "CANCELLED")
           .map((item) => ({
             dept: "LAB",
             description: item.test_name,
@@ -1301,7 +1318,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
         <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-blue-50/30">
           <h3 className="font-bold text-slate-900 text-sm uppercase tracking-wide flex items-center gap-2">
             <AlertCircle size={16} className="text-blue-500" /> Action Required:
-            Pending Bills & Visits <span className="normal-case text-xs text-slate-500 ml-2 font-medium">(Shows all pending regardless of date)</span>
+            Pending Bills & Visits
           </h3>
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-1 bg-white border border-slate-200 rounded-md text-[10px] font-black text-slate-500 shadow-sm">
@@ -1317,7 +1334,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
                 key={`${item.queue_type}-${item.id}`}
                 onClick={() =>
                   item.queue_type === "invoice"
-                    ? handleMarkAsPaid(item)
+                    ? handleEditInvoice(item)
                     : handleBillNow(item)
                 }
                 className={`bg-white p-5 rounded-2xl border shadow-sm cursor-pointer transition-all group relative overflow-hidden ${item.queue_type === "invoice" ? "border-orange-200 hover:border-orange-400 hover:shadow-orange-100" : "border-slate-200 hover:border-blue-400 hover:shadow-blue-50"}`}
@@ -1375,6 +1392,18 @@ const Billing = ({ dateRange: externalDateRange }) => {
                     </div>
                   ) : (
                     <div className="space-y-1 mt-3">
+                      <div className="flex justify-between text-xs items-center">
+                        <span className="text-slate-500 font-medium">
+                          Total Amount
+                        </span>
+                        <span className="font-bold text-slate-700">
+                          {item.queue_type === "visit" ? (
+                            <span className="text-[9px] uppercase font-black text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded tracking-wider">Unsaved</span>
+                          ) : (
+                            `₹${parseFloat(item.total_amount || 0).toFixed(2)}`
+                          )}
+                        </span>
+                      </div>
                       {item.consultation_fee &&
                       parseFloat(item.consultation_fee) > 0 ? (
                         <div className="flex justify-between text-xs">
@@ -2099,7 +2128,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
                       ))}
                     </tbody>
                   </table>
-                  {(!formData.id || formData.payment_status === "DRAFT") && (
+                  {(!formData.id || formData.payment_status === "DRAFT" || formData.payment_status === "PENDING" || formData.payment_status === "PARTIAL") && (
                     <div className="mt-3 flex gap-2">
                       <button
                         onClick={() => {
@@ -2189,7 +2218,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
               {/* Modal Footer */}
               <div className="p-6 border-t border-slate-100 bg-slate-50/80 flex justify-between items-center">
                 <div>
-                  {(!formData.id || formData.payment_status === "DRAFT") && (
+                  {(!formData.id || formData.payment_status === "DRAFT" || formData.payment_status === "PENDING" || formData.payment_status === "PARTIAL") && (
                     <button
                       onClick={() => handleImportPrescription()}
                       disabled={!selectedPatientId}
@@ -2206,7 +2235,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
                   >
                     Cancel
                   </button>
-                  {(!formData.id || formData.payment_status === "DRAFT") && (
+                  {(!formData.id || formData.payment_status === "DRAFT" || formData.payment_status === "PENDING" || formData.payment_status === "PARTIAL") && (
                     <button
                       onClick={() => handleCreateInvoice("DRAFT")}
                       disabled={isSubmitting}

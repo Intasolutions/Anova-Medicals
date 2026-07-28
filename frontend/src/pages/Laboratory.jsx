@@ -390,7 +390,8 @@ const Laboratory = () => {
     const fetchPendingVisits = async (showLoading = false) => {
         if (showLoading) setLoading(true); // Usually not needed for secondary fetches but keeping for flexibility
         try {
-            const { data } = await api.get(`/reception/visits/?lab_queue=true`);
+            const dateQuery = dateRange.start ? `&created_at__date__gte=${dateRange.start}&created_at__date__lte=${dateRange.end}` : '';
+            const { data } = await api.get(`/reception/visits/?lab_queue=true${dateQuery}`);
             setPendingVisits(data.results || data || []);
         } catch (err) { console.error(err); }
         finally { if (showLoading) setLoading(false); }
@@ -945,8 +946,8 @@ const Laboratory = () => {
         setShowPrintModal(true);
     };
 
-    const hasExistingCharges = (visitId) => {
-        return (chargesData.results || []).some(c => (c.visit?.id || c.visit) === visitId);
+    const hasExistingCharges = (visit) => {
+        return visit?.lab_charges_data?.length > 0;
     };
 
     return (
@@ -1071,7 +1072,7 @@ const Laboratory = () => {
                                         {s}
                                         {chargesData?.status_counts && (
                                             <span className={`px-2 py-0.5 rounded-full text-[10px] ${statusFilter === s ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                                                {(chargesData.status_counts[s] || 0) + (['ALL', 'PENDING'].includes(s) ? pendingVisits.filter(v => v.status === 'OPEN' && !hasExistingCharges(v.id)).length : 0)}
+                                                {(chargesData.status_counts[s] || 0) + (['ALL', 'PENDING'].includes(s) ? pendingVisits.filter(v => v.status === 'OPEN' && !hasExistingCharges(v)).length : 0)}
                                             </span>
                                         )}
                                     </button>
@@ -1090,7 +1091,7 @@ const Laboratory = () => {
                                     <tbody className="divide-y divide-slate-50">
                                         {/* Pending Visits (Assigned to Lab) */}
                                         {pendingVisits.length > 0 && (statusFilter === 'ALL' || statusFilter === 'PENDING') && page === 1 && (
-                                            pendingVisits.filter(v => v.status === 'OPEN' && !hasExistingCharges(v.id)).map(v => (
+                                            pendingVisits.filter(v => v.status === 'OPEN' && !hasExistingCharges(v)).map(v => (
                                                 <tr key={v.id} className="bg-blue-50/30 hover:bg-blue-50 transition-colors group">
                                                     <td className="px-6 py-4">
                                                         <div className="flex items-center gap-3">
@@ -2107,10 +2108,14 @@ const Laboratory = () => {
                                                         </div>
                                                         <div className="col-span-2">
                                                             <input
-                                                                className="w-full bg-slate-100 border-b border-transparent text-xs font-bold text-slate-400 outline-none p-2 rounded cursor-not-allowed opacity-70"
+                                                                className="w-full bg-white border-2 border-slate-200 rounded-lg px-2 py-2 text-xs font-bold text-slate-700 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all"
                                                                 placeholder="Unit"
                                                                 value={field.unit || ''}
-                                                                readOnly
+                                                                onChange={e => {
+                                                                    const newResults = [...resultData.results];
+                                                                    newResults[index].unit = e.target.value;
+                                                                    setResultData({ ...resultData, results: newResults });
+                                                                }}
                                                             />
                                                         </div>
                                                         <div className="col-span-2 relative">

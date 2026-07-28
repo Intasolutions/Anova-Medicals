@@ -322,9 +322,9 @@ class VisitViewSet(viewsets.ModelViewSet):
         if lab_tests is not None and isinstance(lab_tests, list):
             from lab.models import LabCharge, LabTest
             # Find existing tests for this visit
-            existing_charges = LabCharge.objects.filter(visit=visit).values_list('test_name', flat=True)
+            existing_charges = set(LabCharge.objects.filter(visit=visit).values_list('test_name', flat=True))
             
-            for test_id in lab_tests:
+            for test_id in set(lab_tests):
                 try:
                     test_obj = LabTest.objects.get(id=test_id)
                     # Create only if it doesn't exist
@@ -336,6 +336,7 @@ class VisitViewSet(viewsets.ModelViewSet):
                             amount=test_obj.price,
                             status='PENDING'
                         )
+                        existing_charges.add(test_obj.name)
                         
                         if test_obj.is_package:
                             for sub_test in test_obj.package_tests.all():
@@ -344,10 +345,11 @@ class VisitViewSet(viewsets.ModelViewSet):
                                         visit=visit,
                                         test_name=sub_test.name,
                                         sub_name=sub_test.sub_name,
-                                        amount=0,
+                                        amount=0, # Sub-tests are 0 cost, included in package
                                         status='PENDING',
                                         parent_charge=parent_charge
                                     )
+                                    existing_charges.add(sub_test.name)
                 except Exception as e:
                     print(f"Error assigning lab test {test_id} to visit {visit.id}: {e}")
 

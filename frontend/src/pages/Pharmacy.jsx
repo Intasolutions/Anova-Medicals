@@ -684,19 +684,23 @@ const Pharmacy = () => {
                     let dosage = '';
                     let duration = '';
                     let qty = 1;
+                    let note = '';
 
                     if (typeof details === 'object' && details !== null) {
                         dosage = details.dosage || '';
                         duration = details.duration || '';
                         qty = parseInt(details.qty || details.count || 1);
+                        note = details.note || '';
                     } else if (typeof details === 'string') {
                         const parts = details.split('|');
                         if (parts.length > 0) dosage = parts[0].trim();
                         if (parts.length > 1) duration = parts[1].trim();
                         const qtyMatch = details.match(/Qty:\s*(\d+)/i);
                         if (qtyMatch) qty = parseInt(qtyMatch[1]);
+                        const noteMatch = details.match(/Note:\s*(.+)/i);
+                        if (noteMatch) note = noteMatch[1].trim();
                     }
-                    return { name, dosage, duration, qty };
+                    return { name, dosage, duration, qty, note };
                 });
             }
 
@@ -707,7 +711,7 @@ const Pharmacy = () => {
             const itemsInCart = new Set(cart.map(c => c.name.toLowerCase()));
 
             for (const med of medList) {
-                const { name, dosage, duration, qty } = med;
+                const { name, dosage, duration, qty, note } = med;
                 if (alreadySoldNames.has(name.toLowerCase()) || itemsInCart.has(name.toLowerCase())) continue;
 
                 const { data } = await api.get(`pharmacy/stock/?search=${encodeURIComponent(name)}`);
@@ -726,7 +730,8 @@ const Pharmacy = () => {
                         gst_applied: gstRate,
                         original_mrp: match.mrp,
                         dosage: dosage,
-                        duration: duration
+                        duration: duration,
+                        note: note
                     });
                 }
             } setCart(newCart); if (newCart.length > 0) showToast('success', 'Rx loaded');
@@ -1288,9 +1293,16 @@ const Pharmacy = () => {
                                                 <p className="text-xs font-bold text-gray-900 line-clamp-1">{item.name}</p>
                                                 <p className="text-[10px] font-black text-slate-500 uppercase mt-0.5 tracking-wider">₹{item.selling_price.toFixed(2)} / Tab</p>
                                                 {(item.dosage || item.duration) && (
-                                                    <div className="flex items-center gap-1 mt-1.5">
-                                                        {item.dosage && <span className="text-[9px] font-black border border-gray-300 text-gray-700 px-1 py-0.5 rounded uppercase">{item.dosage}</span>}
-                                                        {item.duration && <span className="text-[9px] font-black bg-slate-100 border border-slate-200 text-slate-600 px-1 py-0.5 rounded uppercase">{item.duration}</span>}
+                                                    <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                                                        {item.dosage && <span className="text-[12px] font-black border border-gray-300 text-gray-700 px-1 py-0.5 rounded uppercase">{item.dosage}</span>}
+                                                        {item.duration && <span className="text-[12px] font-black bg-slate-100 border border-slate-200 text-slate-600 px-1 py-0.5 rounded uppercase">{item.duration}</span>}
+                                                    </div>
+                                                )}
+                                                {item.note && (
+                                                    <div className="mt-1">
+                                                        <span className="inline-block text-[12px] font-black bg-amber-50 text-blue-700 border border-amber-200 px-1.5 py-0.5 rounded uppercase max-w-full truncate" title={item.note}>
+                                                            {item.note}
+                                                        </span>
                                                     </div>
                                                 )}
                                             </div>

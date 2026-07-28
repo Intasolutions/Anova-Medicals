@@ -282,6 +282,13 @@ class LabChargeSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         test_name = validated_data.get('test_name')
+        visit = validated_data.get('visit')
+        
+        # Prevent exact duplicates for the same visit
+        existing_charge = LabCharge.objects.filter(visit=visit, test_name=test_name).first()
+        if existing_charge:
+            return existing_charge
+
         from .models import LabTest
         test_obj = LabTest.objects.filter(name=test_name).first()
 
@@ -290,14 +297,15 @@ class LabChargeSerializer(serializers.ModelSerializer):
             parent_charge = super().create(validated_data)
             # Create sub-tests
             for sub_test in test_obj.package_tests.all():
-                LabCharge.objects.create(
-                    visit=validated_data.get('visit'),
-                    test_name=sub_test.name,
-                    sub_name=sub_test.sub_name,
-                    amount=0,
-                    status=validated_data.get('status', 'PENDING'),
-                    parent_charge=parent_charge
-                )
+                if not LabCharge.objects.filter(visit=visit, test_name=sub_test.name).exists():
+                    LabCharge.objects.create(
+                        visit=visit,
+                        test_name=sub_test.name,
+                        sub_name=sub_test.sub_name,
+                        amount=0,
+                        status=validated_data.get('status', 'PENDING'),
+                        parent_charge=parent_charge
+                    )
             return parent_charge
         
         return super().create(validated_data)
