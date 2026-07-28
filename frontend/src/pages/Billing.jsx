@@ -205,7 +205,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
   const fetchUnpaidInvoices = async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
-      const { data } = await api.get("/billing/invoices/?unpaid=true");
+      const { data } = await api.get(`/billing/invoices/?unpaid=true${dateRange.start ? `&created_at__date__gte=${dateRange.start}&created_at__date__lte=${dateRange.end}` : ""}`);
       setUnpaidInvoices(data.results || (Array.isArray(data) ? data : []));
     } catch (err) {
       console.error("Failed to load unpaid invoices", err);
@@ -218,7 +218,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
     if (showLoading) setLoading(true);
     try {
       // Visits where assigned_role is BILLING OR have unpaid/draft invoices
-      const { data } = await api.get("/reception/visits/?billing_queue=true");
+      const { data } = await api.get(`/reception/visits/?billing_queue=true${dateRange.start ? `&created_at__date__gte=${dateRange.start}&created_at__date__lte=${dateRange.end}` : ""}`);
       setPendingVisits(data.results || data || []);
     } catch (err) {
       console.error("Failed to load pending bills", err);
@@ -278,18 +278,26 @@ const Billing = ({ dateRange: externalDateRange }) => {
     }
 
     const lowerTerm = term.toLowerCase();
+    const dept = formData.items[index]?.dept;
 
-    // Search Service Definitions
-    const matchedServices = serviceDefinitions
-      .filter((s) => s.name.toLowerCase().includes(lowerTerm))
-      .map((s) => ({ ...s, type: "SERVICE" }))
-      .slice(0, 5);
+    let matchedServices = [];
+    let matchedLabs = [];
 
-    // Search Lab Tests
-    const matchedLabs = availableLabTests
-      .filter((s) => s.name.toLowerCase().includes(lowerTerm))
-      .map((s) => ({ ...s, type: "LAB" }))
-      .slice(0, 5);
+    // If it's CASUALTY or any service type, search services
+    if (!dept || dept === "CASUALTY") {
+      matchedServices = serviceDefinitions
+        .filter((s) => s.name.toLowerCase().includes(lowerTerm))
+        .map((s) => ({ ...s, type: "SERVICE" }))
+        .slice(0, 5);
+    }
+
+    // If it's LAB or any type, search labs
+    if (!dept || dept === "LAB") {
+      matchedLabs = availableLabTests
+        .filter((s) => s.name.toLowerCase().includes(lowerTerm))
+        .map((s) => ({ ...s, type: "LAB" }))
+        .slice(0, 5);
+    }
 
     const combined = [...matchedLabs, ...matchedServices];
 
@@ -846,7 +854,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
         payment_status: status,
         total_amount: subtotal.toFixed(2),
         discount_amount: discount.toFixed(2),
-        items: validItems.map(({ id, created_at, updated_at, ...rest }) => ({
+        items: validItems.map(({ id, created_at, updated_at, ref_id, mfr, ...rest }) => ({
           ...rest,
           id,
         })),
@@ -1768,10 +1776,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
               <div className="p-6 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
                 <div>
                   <h2 className="text-xl font-black text-slate-900 font-outfit uppercase tracking-tight">
-                    {formData.id ? (formData.invoice_number ? `INV: ${formData.invoice_number}` : "Edit Invoice") : "New Invoice"}
+                    {formData.id ? "Edit Invoice" : "New Invoice"}
                   </h2>
                   <p className="text-xs text-slate-500 font-bold mt-1">
-                    {formData.id ? (formData.invoice_number ? "Generated Invoice" : `Ref: #${formData.id}`) : "Draft"}
+                    Ref: {formData.id ? `#${formData.id}` : "Draft"}
                   </p>
                 </div>
                 <div className="flex gap-2">

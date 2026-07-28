@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Stethoscope, ClipboardList, Send, User, Activity, X, Search,
@@ -251,6 +251,7 @@ const Doctor = () => {
     const [selectedServices, setSelectedServices] = useState([]);
     const [existingNoteId, setExistingNoteId] = useState(null);
     const [localSearch, setLocalSearch] = useState('');
+    const activeVisitRef = useRef(null);
 
     // ── Qty Calculator ────────────────────────────────────────────────────────
     const calculateQty = (dosage, duration) => {
@@ -280,11 +281,14 @@ const Doctor = () => {
             setMedSearch(''); setMedResults([]); return;
         }
         let isTablet = true;
-        if (med.medicine_type) {
-            isTablet = med.medicine_type === 'TABLET' || med.medicine_type === 'CAPSULE';
+        const nonTabletTypes = ['SYRUP', 'DROP', 'INJECTION', 'GEL', 'CREAM', 'OINTMENT', 'POWDER', 'SPRAY', 'LOTION', 'LIQUID'];
+        if (med.medicine_type && nonTabletTypes.includes(med.medicine_type)) {
+            isTablet = false;
         }
         const nameUpper = med.name.toUpperCase();
-        if (nameUpper.includes('SYP') || nameUpper.includes('SYRUP') || nameUpper.includes('INJ') || nameUpper.includes('GEL') || nameUpper.includes('OINT') || nameUpper.includes('CREAM') || nameUpper.includes('DROP') || nameUpper.includes('POWDER') || nameUpper.includes('SPRAY') || nameUpper.includes('LOTION') || nameUpper.includes('LIQUID')) {
+        if (nameUpper.includes('TAB') || nameUpper.includes('CAP') || nameUpper.includes('TABLET') || nameUpper.includes('CAPSULE')) {
+            isTablet = true;
+        } else if (nameUpper.includes('SYP') || nameUpper.includes('SYRUP') || nameUpper.includes('INJ') || nameUpper.includes('GEL') || nameUpper.includes('OINT') || nameUpper.includes('CREAM') || nameUpper.includes('DROP') || nameUpper.includes('POWDER') || nameUpper.includes('SPRAY') || nameUpper.includes('LOTION') || nameUpper.includes('LIQUID')) {
             isTablet = false;
         }
         const count = isTablet ? '' : '1';
@@ -358,16 +362,14 @@ const Doctor = () => {
         } catch (e) { console.error(e); }
     };
 
-    const fetchPatientHistory = async (patientId) => {
+    const fetchPatientHistory = async (patientId, expectedVId) => {
         if (!patientId) return;
         setHistoryLoading(true); setPatientHistory([]);
         try {
-            // Fetch visits for this patient (closed + open)
             const { data: vd } = await api.get(`/reception/visits/?patient=${patientId}&page_size=100`);
             const visits = vd.results || vd || [];
             if (!visits.length) { setHistoryLoading(false); return; }
             const vIds = visits.map(v => v.v_id || v.id);
-            // Fetch notes scoped to this patient via visit filter
             const { data: nd } = await api.get(`/medical/doctor-notes/?page_size=100`);
             const allNotes = nd.results || nd || [];
             const enriched = allNotes
@@ -377,22 +379,24 @@ const Doctor = () => {
                     return { ...note, vitals: visit?.vitals || {}, lab_results: visit?.lab_results || [] };
                 })
                 .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            if (activeVisitRef.current !== expectedVId) return;
             setPatientHistory(enriched);
         } catch (e) { console.error(e); }
         finally { setHistoryLoading(false); }
     };
 
-    const fetchExistingNote = async (visit, draftLoaded = false) => {
+    const fetchExistingNote = async (visit, draftLoaded = false, draftMeds = []) => {
         try {
             const vId = visit.v_id || visit.id;
             const { data } = await api.get(`/medical/doctor-notes/?visit=${vId}`);
             const existing = (data.results || data)[0];
             if (!existing) return;
+            if (activeVisitRef.current !== vId) return;
             setExistingNoteId(existing.note_id || existing.id);
             if (!draftLoaded) {
                 setNotes({ complaints: existing.complaints || '', examination: existing.examination || '', diagnosis: existing.diagnosis || '', notes: existing.notes || '' });
             }
-            if (existing.prescription && typeof existing.prescription === 'object' && !draftLoaded) {
+            if (existing.prescription && typeof existing.prescription === 'object' && (!draftLoaded || draftMeds.length === 0)) {
                 const medPromises = Object.entries(existing.prescription).map(async ([name, details]) => {
                     let dosage = '', duration = '', count = '', note = '';
                     try {
@@ -412,23 +416,27 @@ const Doctor = () => {
                         }
                     } catch (e) { console.error('parse med', name, e); }
                     let stock = 0;
+                    let match = null;
                     try {
                         const { data: sd } = await api.get(`/pharmacy/stock/doctor-search/?search=${encodeURIComponent(name)}`);
-                        const match = (sd.results || sd).find(m => m.name === name);
+                        match = (sd.results || sd).find(m => m.name === name);
                         if (match) stock = match.qty_available;
                     } catch (e) { /* ignore */ }
                     let isTablet = true;
-                    if (match?.medicine_type) {
-                        isTablet = match.medicine_type === 'TABLET' || match.medicine_type === 'CAPSULE';
-                    } else {
-                        const nameUpper = name.toUpperCase();
-                        if (nameUpper.includes('SYP') || nameUpper.includes('SYRUP') || nameUpper.includes('INJ') || nameUpper.includes('GEL') || nameUpper.includes('OINT') || nameUpper.includes('CREAM') || nameUpper.includes('DROP') || nameUpper.includes('POWDER') || nameUpper.includes('SPRAY')) {
-                            isTablet = false;
-                        }
+                    const nonTabletTypes = ['SYRUP', 'DROP', 'INJECTION', 'GEL', 'CREAM', 'OINTMENT', 'POWDER', 'SPRAY', 'LOTION', 'LIQUID'];
+                    if (match?.medicine_type && nonTabletTypes.includes(match.medicine_type)) {
+                        isTablet = false;
                     }
-                    return { name, dosage, duration, count, stock, note, isTablet };
+                    const nameUpper = name.toUpperCase();
+                    if (nameUpper.includes('TAB') || nameUpper.includes('CAP') || nameUpper.includes('TABLET') || nameUpper.includes('CAPSULE')) {
+                        isTablet = true;
+                    } else if (nameUpper.includes('SYP') || nameUpper.includes('SYRUP') || nameUpper.includes('INJ') || nameUpper.includes('GEL') || nameUpper.includes('OINT') || nameUpper.includes('CREAM') || nameUpper.includes('DROP') || nameUpper.includes('POWDER') || nameUpper.includes('SPRAY')) {
+                        isTablet = false;
+                    }
+                    return { name, dosage, duration, count, stock, note, isTablet, mrp: match?.mrp || 0, tps: match?.tablets_per_strip || 1 };
                 });
                 const resolved = (await Promise.all(medPromises)).filter(Boolean);
+                if (activeVisitRef.current !== vId) return;
                 setSelectedMeds(resolved);
                 if (resolved.length > 0) setReferral('PHARMACY');
             }
@@ -664,6 +672,9 @@ const Doctor = () => {
 
     useEffect(() => {
         if (!selectedVisit) { setPatientHistory([]); return; }
+        const currentVId = selectedVisit.v_id || selectedVisit.id;
+        activeVisitRef.current = currentVId;
+        
         setNotes({ complaints: '', examination: '', diagnosis: '', notes: '' });
         setVitals(selectedVisit.vitals && Object.values(selectedVisit.vitals).some(Boolean)
             ? selectedVisit.vitals : { bp: '', temp: '', pulse: '', spo2: '', weight: '' });
@@ -675,12 +686,16 @@ const Doctor = () => {
         const draftKey = `doctor_draft_visit_${selectedVisit.v_id || selectedVisit.id}`;
         const draftJson = localStorage.getItem(draftKey);
         let draftLoaded = false;
+        let draftMeds = [];
         if (draftJson) {
             try {
                 const draft = JSON.parse(draftJson);
                 if (draft.notes) setNotes(draft.notes);
                 if (draft.vitals) setVitals(draft.vitals);
-                if (draft.selectedMeds) setSelectedMeds(draft.selectedMeds);
+                if (draft.selectedMeds) {
+                    setSelectedMeds(draft.selectedMeds);
+                    draftMeds = draft.selectedMeds;
+                }
                 if (draft.selectedTests) setSelectedTests(draft.selectedTests);
                 if (draft.referral) setReferral(draft.referral);
                 if (draft.referredDoctorId) setReferredDoctorId(draft.referredDoctorId);
@@ -688,8 +703,8 @@ const Doctor = () => {
             } catch (e) { console.error('Error parsing draft', e); }
         }
 
-        fetchExistingNote(selectedVisit, draftLoaded);
-        fetchPatientHistory(selectedVisit.patient_id || selectedVisit.patient);
+        fetchExistingNote(selectedVisit, draftLoaded, draftMeds);
+        fetchPatientHistory(selectedVisit.patient_id || selectedVisit.patient, currentVId);
     }, [selectedVisit?.v_id, selectedVisit?.id]);
 
     // ── Autosave Draft Effect ──

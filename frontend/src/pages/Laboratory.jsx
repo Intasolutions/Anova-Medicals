@@ -1071,7 +1071,7 @@ const Laboratory = () => {
                                         {s}
                                         {chargesData?.status_counts && (
                                             <span className={`px-2 py-0.5 rounded-full text-[10px] ${statusFilter === s ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                                                {chargesData.status_counts[s] || 0}
+                                                {(chargesData.status_counts[s] || 0) + (['ALL', 'PENDING'].includes(s) ? pendingVisits.filter(v => v.status === 'OPEN' && !hasExistingCharges(v.id)).length : 0)}
                                             </span>
                                         )}
                                     </button>
@@ -1089,7 +1089,7 @@ const Laboratory = () => {
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
                                         {/* Pending Visits (Assigned to Lab) */}
-                                        {pendingVisits.length > 0 && statusFilter === 'ALL' && page === 1 && (
+                                        {pendingVisits.length > 0 && (statusFilter === 'ALL' || statusFilter === 'PENDING') && page === 1 && (
                                             pendingVisits.filter(v => v.status === 'OPEN' && !hasExistingCharges(v.id)).map(v => (
                                                 <tr key={v.id} className="bg-blue-50/30 hover:bg-blue-50 transition-colors group">
                                                     <td className="px-6 py-4">
@@ -1120,7 +1120,7 @@ const Laboratory = () => {
                                                         </div>
                                                     </td>
                                                     <td className="px-6 py-4">
-                                                        <span className="inline-flex px-2.5 py-1 rounded-md text-xs font-bold bg-blue-100 text-blue-700 uppercase tracking-wide">Waiting</span>
+                                                        <span className="inline-flex px-2.5 py-1 rounded-md text-xs font-bold bg-yellow-100 text-yellow-700 uppercase tracking-wide">Pending</span>
                                                     </td>
                                                     <td className="px-6 py-4 text-slate-400">--</td>
                                                     <td className="px-6 py-4">

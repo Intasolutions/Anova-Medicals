@@ -667,7 +667,7 @@ const Pharmacy = () => {
         setSelectedPatient({ id: visit.patient, p_id: visit.patient, full_name: visit.patient_name, v_id: visit.id, diagnosis: visit.diagnosis });
         if (visit.doctor_name) setSelectedDoctor({ username: visit.doctor_name, u_id: visit.doctor }); else setSelectedDoctor({ username: 'Referral', u_id: null });
         if (!visit.prescription) { showToast('info', 'No digital prescription.'); return; }
-        setLoading(true); const newCart = [];
+        setLoading(true); const newCart = [...cart];
         try {
             const rawPrescription = visit.prescription;
             let medList = [];
@@ -700,8 +700,15 @@ const Pharmacy = () => {
                 });
             }
 
+            const alreadySoldNames = new Set(
+                (visit.pharmacy_items || []).map(pi => pi.name.toLowerCase())
+            );
+            
+            const itemsInCart = new Set(cart.map(c => c.name.toLowerCase()));
+
             for (const med of medList) {
                 const { name, dosage, duration, qty } = med;
+                if (alreadySoldNames.has(name.toLowerCase()) || itemsInCart.has(name.toLowerCase())) continue;
 
                 const { data } = await api.get(`pharmacy/stock/?search=${encodeURIComponent(name)}`);
                 const results = data.results || data || [];

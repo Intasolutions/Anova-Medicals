@@ -286,7 +286,7 @@ const Reception = () => {
             
             // Add date filter to patients/visits fetch
             if (dateRange.start && dateRange.end) {
-                url += `&created_at__date__gte=${dateRange.start}&created_at__date__lte=${dateRange.end}`;
+                url += `&visits__created_at__date__gte=${dateRange.start}&visits__created_at__date__lte=${dateRange.end}`;
             }
 
             url += `${patientSearch ? `&search=${encodeURIComponent(patientSearch)}` : globalSearch ? `&search=${encodeURIComponent(globalSearch)}` : ''}`;
@@ -753,7 +753,7 @@ const Reception = () => {
                     <div className="h-full overflow-y-auto custom-scrollbar p-6 md:p-8">
 
                         {/* --- Dashboard Stats Section --- */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                             {/* New Patients */}
                             <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                                 <div className="flex items-center justify-between mb-4">
@@ -787,7 +787,7 @@ const Reception = () => {
                             </div>
 
                             {/* Today's Revenue */}
-                            <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
+                            {/* <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="p-2.5 bg-blue-600 rounded-lg shadow-sm">
                                         <IndianRupee className="w-5 h-5 text-white" />
@@ -800,7 +800,7 @@ const Reception = () => {
                                     </h3>
                                     <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Revenue</p>
                                 </div>
-                            </div>
+                            </div> */}
 
                             {/* Recent Visits (Paid) */}
                             <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">

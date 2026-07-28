@@ -35,27 +35,26 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         year = self.request.query_params.get('year')
         
         if self.request.query_params.get('unpaid') == 'true':
-            # Ignore date filters for unpaid invoices (they need to be collected regardless of date)
             queryset = queryset.exclude(payment_status='PAID')
-        else:
-            if date_str:
-                try:
-                    queryset = queryset.filter(created_at__date=date_str)
-                except ValueError:
-                    pass
-            elif month and year:
-                try:
-                    queryset = queryset.filter(created_at__month=month, created_at__year=year)
-                except ValueError:
-                    pass
             
-            # Handle frontend date range logic
-            start_date = self.request.query_params.get('created_at__date__gte')
-            end_date = self.request.query_params.get('created_at__date__lte')
-            if start_date:
-                queryset = queryset.filter(created_at__date__gte=start_date)
-            if end_date:
-                queryset = queryset.filter(created_at__date__lte=end_date)
+        if date_str:
+            try:
+                queryset = queryset.filter(created_at__date=date_str)
+            except ValueError:
+                pass
+        elif month and year:
+            try:
+                queryset = queryset.filter(created_at__month=month, created_at__year=year)
+            except ValueError:
+                pass
+        
+        # Handle frontend date range logic
+        start_date = self.request.query_params.get('created_at__date__gte')
+        end_date = self.request.query_params.get('created_at__date__lte')
+        if start_date:
+            queryset = queryset.filter(created_at__date__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(created_at__date__lte=end_date)
                     
         # Explicitly handle visit__patient since nested filterset_fields might fail silently without a custom FilterSet
         visit_patient = self.request.query_params.get('visit__patient')

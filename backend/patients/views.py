@@ -34,6 +34,7 @@ class PatientViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = {
         'created_at': ['date', 'gte', 'lte', 'exact'],
+        'visits__created_at': ['date', 'gte', 'lte', 'exact'],
     }
     search_fields = ['full_name', 'phone', 'registration_number']
 

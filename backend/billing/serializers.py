@@ -165,6 +165,9 @@ class InvoiceSerializer(serializers.ModelSerializer):
             
             # Remove missing items
             instance.items.exclude(id__in=keep_ids).delete()
+            
+            # Recalculate totals after updating items (already handled by frontend payload)
+            instance.save()
         
         # Emit Socket Event
         try:
