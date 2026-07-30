@@ -1752,7 +1752,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
         </div>
 
         {/* --- Footer Summary --- */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center bg-gray-50/50">
+        {/* <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center bg-gray-50/50">
           <div className="flex items-center gap-6">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
               Monthly Summary
@@ -1788,7 +1788,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
               ₹{(stats?.monthly_total || 0).toLocaleString()}
             </p>
           </div>
-        </div>
+        </div> */}
       </div>
 
       {/* --- Premium Modal (Invoice Preview & Edit) --- */}
