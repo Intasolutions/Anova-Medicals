@@ -480,6 +480,26 @@ const Reception = () => {
         }
     };
 
+    const handleForceCloseVisit = async (visitId, patientName) => {
+        const isConfirmed = await confirm({
+            title: 'Force Close Visit?',
+            message: `Are you sure you want to manually close the active visit for ${patientName}? This should only be used for edge cases.`,
+            confirmText: 'Close Visit',
+            type: 'danger'
+        });
+
+        if (isConfirmed) {
+            try {
+                await api.patch(`/reception/visits/${visitId}/`, { status: 'CLOSED' });
+                showToast('success', 'Visit closed successfully.');
+                fetchPatients(false);
+                fetchStats();
+            } catch (err) {
+                showToast('error', 'Failed to close visit.');
+            }
+        }
+    };
+
     const handleAddNewPatient = () => {
         setForm({ registration_number: '', full_name: '', age: '', age_months: '', gender: 'M', phone: '', address: '', medical_history: '' });
         setEditingPatientId(null);
@@ -973,6 +993,16 @@ const Reception = () => {
                                                                                 className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-200 text-xs font-bold hover:bg-indigo-100 transition-all disabled:opacity-50"
                                                                             >
                                                                                 <Activity size={12}/> Route
+                                                                            </button>
+                                                                            <button 
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    handleForceCloseVisit(p.active_visit_id, p.full_name);
+                                                                                }}
+                                                                                title="Force Close Visit"
+                                                                                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-50 text-red-600 border border-red-200 text-xs font-bold hover:bg-red-100 transition-all disabled:opacity-50"
+                                                                            >
+                                                                                <X size={12}/> Close
                                                                             </button>
                                                                         </div>
                                                                     ) : (

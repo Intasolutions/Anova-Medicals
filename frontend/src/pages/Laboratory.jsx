@@ -487,7 +487,11 @@ const Laboratory = () => {
             setEditingTestId(null);
             setTestCatalogForm({ name: '', sub_name: '', category: 'HAEMATOLOGY', price: '', gender: 'B', normal_range: '', description: '', parameters: [], required_items: [], is_package: false, package_tests: [] });
             fetchLabTests();
-        } catch (err) { showToast('error', 'Failed to save test'); }
+        } catch (err) { 
+            showToast('error', 'Failed to save test'); 
+        } finally {
+            setTestSubmitting(false);
+        }
     };
 
     const handleEditTest = (test) => {
@@ -869,7 +873,11 @@ const Laboratory = () => {
             setShowInventoryModal(false);
             setInventoryForm({ item_name: '', category: 'REAGENT', qty: 0, cost_per_unit: '', reorder_level: 10, items_per_pack: 1, num_packs: 0 });
             fetchInventory();
-        } catch (err) { showToast('error', "Failed to save item"); }
+        } catch (err) { 
+            showToast('error', "Failed to save item"); 
+        } finally {
+            setItemSubmitting(false);
+        }
     };
 
     const handleEditItem = (item) => {

@@ -434,6 +434,9 @@ class LabChargeViewSet(viewsets.ModelViewSet):
                             related_id=instance.visit.id
                         )
                     else:
-                        # If walk-in (no doctor), visit is complete
-                        instance.visit.status = 'CLOSED'
-                        instance.visit.save()
+                        # If walk-in (no doctor), visit is complete only if fully paid
+                        has_unpaid = instance.visit.invoices.exclude(payment_status='PAID').exists()
+                        if not has_unpaid:
+                            instance.visit.status = 'CLOSED'
+                            instance.visit.save()
+                        # If unpaid, we leave it OPEN. The billing module will close it upon payment.
