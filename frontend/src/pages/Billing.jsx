@@ -851,7 +851,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
       const invoiceData = {
         patient_name: formData.patient_name,
         patient: formData.patient || selectedPatientId || null,
-        payment_status: status,
+        payment_status: formData.payment_status === "PARTIAL" && status === "PENDING" ? "PARTIAL" : status,
         total_amount: subtotal.toFixed(2),
         discount_amount: discount.toFixed(2),
         items: validItems.map(({ id, created_at, updated_at, ref_id, mfr, ...rest }) => ({
@@ -1922,10 +1922,9 @@ const Billing = ({ dateRange: externalDateRange }) => {
                           >
                             <input
                               readOnly={
-                                !!formData.id &&
-                                formData.payment_status !== "DRAFT"
+                                !!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status)
                               }
-                              className={`w-full bg-transparent outline-none font-bold text-slate-700 placeholder:text-slate-300 ${!!formData.id && formData.payment_status !== "DRAFT" ? "cursor-not-allowed opacity-80" : ""}`}
+                              className={`w-full bg-transparent outline-none font-bold text-slate-700 placeholder:text-slate-300 ${!!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status) ? "cursor-not-allowed opacity-80" : ""}`}
                               placeholder="Item Name / Service"
                               autoComplete="off"
                               value={item.description}
@@ -2024,11 +2023,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
                           <td className="py-4 text-center">
                             <input
                               readOnly={
-                                !!formData.id &&
-                                formData.payment_status !== "DRAFT"
+                                !!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status)
                               }
                               type="number"
-                              className={`w-full bg-transparent text-center font-bold outline-none ${!!formData.id && formData.payment_status !== "DRAFT" ? "cursor-not-allowed opacity-80" : ""}`}
+                              className={`w-full bg-transparent text-center font-bold outline-none ${!!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status) ? "cursor-not-allowed opacity-80" : ""}`}
                               value={item.qty}
                               onChange={(e) => {
                                 const qty = parseInt(e.target.value) || 0;
@@ -2045,11 +2043,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
                           <td className="py-4 text-center">
                             <input
                               readOnly={
-                                !!formData.id &&
-                                formData.payment_status !== "DRAFT"
+                                !!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status)
                               }
                               type="number"
-                              className={`w-full bg-transparent text-center font-medium outline-none text-slate-500 ${!!formData.id && formData.payment_status !== "DRAFT" ? "cursor-not-allowed opacity-80" : ""}`}
+                              className={`w-full bg-transparent text-center font-medium outline-none text-slate-500 ${!!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status) ? "cursor-not-allowed opacity-80" : ""}`}
                               value={item.gst_percent}
                               placeholder="0"
                               onChange={(e) => {
@@ -2063,11 +2060,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
                           <td className="py-4 text-right">
                             <input
                               readOnly={
-                                !!formData.id &&
-                                formData.payment_status !== "DRAFT"
+                                !!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status)
                               }
                               type="number"
-                              className={`w-full bg-transparent text-right font-medium outline-none ${!!formData.id && formData.payment_status !== "DRAFT" ? "cursor-not-allowed opacity-80" : ""}`}
+                              className={`w-full bg-transparent text-right font-medium outline-none ${!!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status) ? "cursor-not-allowed opacity-80" : ""}`}
                               value={item.unit_price}
                               onChange={(e) => {
                                 const price = parseFloat(e.target.value) || 0;
@@ -2084,11 +2080,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
                           <td className="py-4 text-right">
                             <input
                               readOnly={
-                                !!formData.id &&
-                                formData.payment_status !== "DRAFT"
+                                !!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status)
                               }
                               type="number"
-                              className={`w-full bg-transparent text-right font-bold text-slate-900 outline-none placeholder:text-slate-300 ${!!formData.id && formData.payment_status !== "DRAFT" ? "cursor-not-allowed opacity-80" : ""}`}
+                              className={`w-full bg-transparent text-right font-bold text-slate-900 outline-none placeholder:text-slate-300 ${!!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status) ? "cursor-not-allowed opacity-80" : ""}`}
                               value={item.amount}
                               onChange={(e) => {
                                 const newAmount =
@@ -2110,7 +2105,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
                           <td className="py-4 text-center">
                             {(!formData.id ||
                               formData.payment_status === "DRAFT" ||
-                              formData.payment_status === "PENDING") && (
+                              formData.payment_status === "PENDING" || formData.payment_status === "PARTIAL") && (
                               <button
                                 onClick={() => {
                                   const newItems = formData.items.filter(
@@ -2672,3 +2667,6 @@ const Billing = ({ dateRange: externalDateRange }) => {
 };
 
 export default Billing;
+
+
+
