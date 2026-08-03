@@ -6,9 +6,7 @@ from .models import Invoice, InvoiceItem
 @receiver(post_save, sender=Visit)
 def create_or_update_consultation_invoice(sender, instance, created, **kwargs):
     # Determine the correct fee
-    amount = 500.00
-    if instance.doctor and hasattr(instance.doctor, 'consultation_fee'):
-        amount = instance.doctor.consultation_fee
+    amount = float(instance.calculated_consultation_fee)
     
     if created and instance.doctor:
         # Create new invoice

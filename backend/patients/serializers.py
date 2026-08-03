@@ -129,32 +129,7 @@ class VisitSerializer(serializers.ModelSerializer):
         return None
     
     def get_consultation_fee(self, obj):
-        if not obj.doctor:
-            return 0.00
-            
-        # 7-day free consultation rule
-        from django.utils import timezone
-        from datetime import timedelta
-        from billing.models import Invoice
-        
-        created_at = obj.created_at or timezone.now()
-        seven_days_ago = created_at - timedelta(days=7)
-        
-        recent_paid_consultation = Invoice.objects.filter(
-            patient=obj.patient,
-            payment_status__in=['PAID', 'PARTIAL'],
-            created_at__lt=created_at,
-            created_at__gte=seven_days_ago,
-            items__dept='CONSULTATION',
-            items__unit_price__gt=0
-        ).exists()
-        
-        if recent_paid_consultation:
-            return 0.00
-            
-        if hasattr(obj.doctor, 'consultation_fee'):
-            return float(obj.doctor.consultation_fee)
-        return 0.00
+        return obj.calculated_consultation_fee
 
     def get_pharmacy_items(self, obj):
         # Return list of items from all PENDING pharmacy sales

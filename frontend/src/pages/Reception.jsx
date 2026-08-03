@@ -537,6 +537,8 @@ const Reception = () => {
     const submitVisit = async (e) => {
         e.preventDefault();
 
+        if (visitSubmitting) return;
+
         if (visitForm.assigned_role === 'CASUALTY' && selectedStartServices.length === 0) {
             showToast('error', 'Please select at least one service to bill.');
             return;
@@ -568,6 +570,8 @@ const Reception = () => {
             setServiceSearchQ('');
         } catch (err) {
             showToast('error', 'Failed to create visit record.');
+        } finally {
+            setVisitSubmitting(false);
         }
     };
 
@@ -1613,10 +1617,10 @@ const Reception = () => {
 
                                             <button
                                                 onClick={submitVisit}
-                                                disabled={(visitForm.assigned_role === 'DOCTOR' && !visitForm.doctor) || (visitForm.assigned_role === 'LAB' && selectedLabTests.length === 0)}
+                                                disabled={visitSubmitting || (visitForm.assigned_role === 'DOCTOR' && !visitForm.doctor) || (visitForm.assigned_role === 'LAB' && selectedLabTests.length === 0)}
                                                 className="mt-6 w-full py-4 bg-slate-950 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-2xl shadow-xl shadow-slate-900/20 transition-all active:scale-[0.98] flex items-center justify-center gap-3"
                                             >
-                                                <span>Generate Token</span>
+                                                <span>{visitSubmitting ? 'Generating...' : 'Generate Token'}</span>
                                                 <ArrowRight size={18} />
                                             </button>
                                         </div>

@@ -77,3 +77,34 @@ class Visit(BaseModel):
 
     def __str__(self):
         return f"Visit {self.id} - {self.patient.full_name}"
+
+    @property
+    def calculated_consultation_fee(self):
+        if not self.doctor:
+            return 0.00
+            
+        from django.utils import timezone
+        from datetime import timedelta
+        from billing.models import Invoice
+        
+        created_at = self.created_at or timezone.now()
+        visit_date = created_at.date()
+        seven_days_ago_date = visit_date - timedelta(days=7)
+        
+        # Check for a previous paid consultation with the SAME doctor within the last 7 calendar days
+        recent_paid_consultation = Invoice.objects.filter(
+            patient=self.patient,
+            payment_status__in=['PAID', 'PARTIAL'],
+            visit__created_at__date__gte=seven_days_ago_date,
+            visit__created_at__lt=created_at,
+            visit__doctor=self.doctor,
+            items__dept='CONSULTATION',
+            items__unit_price__gt=0
+        ).exclude(visit=self).exists()
+        
+        if recent_paid_consultation:
+            return 0.00
+            
+        if hasattr(self.doctor, 'consultation_fee'):
+            return float(self.doctor.consultation_fee)
+        return 0.00

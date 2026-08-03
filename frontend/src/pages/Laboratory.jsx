@@ -63,6 +63,11 @@ const Laboratory = () => {
     const [debouncedLabSearchQuery, setDebouncedLabSearchQuery] = useState('');
     const searchTimeoutRef = React.useRef(null);
     
+    // --- Test Catalog Filter State ---
+    const [catalogSearch, setCatalogSearch] = useState('');
+    const [catalogTypeFilter, setCatalogTypeFilter] = useState('ALL');
+    const [catalogCategoryFilter, setCatalogCategoryFilter] = useState('ALL');
+    
     // --- Date Filter State ---
     const getLocalDate = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
     const [dateRange, setDateRange] = useState({ 
@@ -1363,9 +1368,44 @@ const Laboratory = () => {
                     {/* 3. TEST CATALOG TAB */}
                     {activeTab === 'test_catalog' && (
                         <div className="flex flex-col h-full">
+                            <div className="flex items-center gap-4 p-4 border-b border-slate-200 bg-white shadow-sm z-10 shrink-0">
+                                <div className="relative flex-1 max-w-sm">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Search tests by name..."
+                                        className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all"
+                                        value={catalogSearch}
+                                        onChange={(e) => setCatalogSearch(e.target.value)}
+                                    />
+                                    {catalogSearch && (
+                                        <button onClick={() => setCatalogSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                                            <X size={14} />
+                                        </button>
+                                    )}
+                                </div>
+                                <select 
+                                    className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer"
+                                    value={catalogTypeFilter}
+                                    onChange={(e) => setCatalogTypeFilter(e.target.value)}
+                                >
+                                    <option value="ALL">All Types (Tests & Packages)</option>
+                                    <option value="TEST">Individual Tests</option>
+                                    <option value="PACKAGE">Packages Only</option>
+                                </select>
+                                <select 
+                                    className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all cursor-pointer"
+                                    value={catalogCategoryFilter}
+                                    onChange={(e) => setCatalogCategoryFilter(e.target.value)}
+                                >
+                                    <option value="ALL">All Categories</option>
+                                    {categories.map(c => <option key={c.id || c.name} value={c.name}>{c.name}</option>)}
+                                    <option value="UNCATEGORIZED">Uncategorized</option>
+                                </select>
+                            </div>
                             <div className="flex-1 overflow-auto">
                                 <table className="w-full text-left border-collapse">
-                                    <thead className="bg-slate-50 sticky top-0 shadow-sm">
+                                    <thead className="bg-slate-50 sticky top-0 shadow-sm z-0">
                                         <tr>
                                             {['Test Name', 'Category', 'Price', 'Normal Range', 'Actions'].map(h => (
                                                 <th key={h} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{h}</th>
@@ -1374,7 +1414,12 @@ const Laboratory = () => {
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
                                         {Object.entries(
-                                            labTests.reduce((acc, test) => {
+                                            labTests.filter(test => {
+                                                const matchSearch = test.name.toLowerCase().includes(catalogSearch.toLowerCase());
+                                                const matchType = catalogTypeFilter === 'ALL' ? true : (catalogTypeFilter === 'PACKAGE' ? test.is_package : !test.is_package);
+                                                const matchCat = catalogCategoryFilter === 'ALL' ? true : (test.category || 'UNCATEGORIZED') === catalogCategoryFilter;
+                                                return matchSearch && matchType && matchCat;
+                                            }).reduce((acc, test) => {
                                                 const cat = test.category || 'UNCATEGORIZED';
                                                 if (!acc[cat]) acc[cat] = [];
                                                 acc[cat].push(test);
