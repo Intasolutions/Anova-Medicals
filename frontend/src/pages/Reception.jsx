@@ -587,14 +587,18 @@ const Reception = () => {
             }
         });
 
+        const due = paymentData.invoice.balance_due !== undefined
+            ? paymentData.invoice.balance_due
+            : (parseFloat(paymentData.invoice.total_amount) - (parseFloat(paymentData.invoice.discount_amount) || 0));
+
+        if (parseFloat(due) === 0 && paymentsList.length === 0) {
+            paymentsList.push({ mode: 'CASH', amount: 0 });
+        }
+
         if (paymentsList.length === 0) {
             showToast('error', 'Please enter a payment amount.');
             return;
         }
-
-        const due = paymentData.invoice.balance_due !== undefined
-            ? paymentData.invoice.balance_due
-            : (parseFloat(paymentData.invoice.total_amount) - (parseFloat(paymentData.invoice.discount_amount) || 0));
 
         const totalEntered = paymentsList.reduce((sum, p) => sum + p.amount, 0);
 

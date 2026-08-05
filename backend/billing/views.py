@@ -169,7 +169,14 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         current_paid = sum(p.amount for p in invoice.payments.all())
         from decimal import Decimal
         
+        balance_due = invoice.total_amount - getattr(invoice, 'discount_amount', Decimal('0')) - current_paid
+
         if proposed_total <= 0:
+            if balance_due <= Decimal('0'):
+                if invoice.payment_status != 'PAID':
+                    invoice.payment_status = 'PAID'
+                    invoice.save(update_fields=['payment_status'])
+                return Response({'status': 'success', 'message': 'Invoice marked as paid'})
             return Response({'error': 'Payment amount must be greater than zero.'}, status=400)
             
         if (current_paid + Decimal(str(proposed_total))) > invoice.total_amount - getattr(invoice, 'discount_amount', Decimal('0')) + Decimal('0.5'):

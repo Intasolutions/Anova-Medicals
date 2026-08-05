@@ -1220,7 +1220,7 @@ const Doctor = () => {
                                                                     <div className="flex items-center gap-2 w-full">
                                                                         {[
                                                                             { field: 'dosage', l: 'Dosage', ph: '1-0-1', lid: `d-${idx}`, opts: ['1-0-1', '1-1-1', '1-0-0', '0-0-1', '0-1-0', '1-1-1-1', 'SOS', 'STAT'] },
-                                                                            { field: 'duration', l: 'Duration', ph: '5', lid: `dur-${idx}`, opts: ['1', '3', '5', '7', '14', '30'] },
+                                                                            { field: 'duration', l: 'Duration', ph: '5', lid: `dur-${idx}`, opts: ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '12', '14', '30'] },
                                                                         ].map(inp => (
                                                                             <div key={inp.field} className="relative flex-1">
                                                                                 <label className="absolute -top-2 left-2 px-1 bg-white text-[9px] font-bold text-slate-400 uppercase z-10">{inp.l}</label>
