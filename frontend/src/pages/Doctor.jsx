@@ -75,8 +75,8 @@ const HistoryModal = ({ history, onClose }) => {
                             <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
                                 <div className="p-1.5 bg-rose-100 rounded-lg text-rose-600"><Activity size={16} /></div> Recorded Vitals
                             </div>
-                            <div className="grid grid-cols-5 gap-3">
-                                {[{ l: 'BP', k: 'bp', c: 'blue' }, { l: 'Temp', k: 'temp', c: 'amber' }, { l: 'Pulse', k: 'pulse', c: 'rose' }, { l: 'SpO2', k: 'spo2', c: 'cyan' }, { l: 'Weight', k: 'weight', c: 'slate' }].map(v =>
+                            <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+                                {[{ l: 'BP', k: 'bp', c: 'blue' }, { l: 'Temp', k: 'temp', c: 'amber' }, { l: 'Pulse', k: 'pulse', c: 'rose' }, { l: 'SpO2', k: 'spo2', c: 'cyan' }, { l: 'Weight', k: 'weight', c: 'slate' }, { l: 'GRBS', k: 'grbs', c: 'red' }].map(v =>
                                     history.vitals[v.k] ? (
                                         <div key={v.k} className={`p-3 bg-${v.c}-50 rounded-2xl border border-${v.c}-100`}>
                                             <label className={`text-[10px] font-black text-${v.c}-600 uppercase block mb-1`}>{v.l}</label>
@@ -236,7 +236,7 @@ const Doctor = () => {
     const [saving, setSaving] = useState(false);
 
     const [notes, setNotes] = useState({ complaints: '', examination: '', diagnosis: '', notes: '' });
-    const [vitals, setVitals] = useState({ bp: '', temp: '', pulse: '', spo2: '', weight: '' });
+    const [vitals, setVitals] = useState({ bp: '', temp: '', pulse: '', spo2: '', weight: '', grbs: '' });
     const [medicalHistory, setMedicalHistory] = useState('');
     const [medSearch, setMedSearch] = useState('');
     const [medResults, setMedResults] = useState([]);
@@ -677,7 +677,7 @@ const Doctor = () => {
         
         setNotes({ complaints: '', examination: '', diagnosis: '', notes: '' });
         setVitals(selectedVisit.vitals && Object.values(selectedVisit.vitals).some(Boolean)
-            ? selectedVisit.vitals : { bp: '', temp: '', pulse: '', spo2: '', weight: '' });
+            ? selectedVisit.vitals : { bp: '', temp: '', pulse: '', spo2: '', weight: '', grbs: '' });
         setMedicalHistory(selectedVisit.patient_medical_history || '');
         setSelectedMeds([]); setSelectedTests([]); setReferral('NONE'); setReferredDoctorId('');
         setExistingNoteId(null); setMedSearch(''); setMedResults([]); setLabSearch(''); setLabResults([]);
@@ -898,9 +898,9 @@ const Doctor = () => {
                                             <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-3">
                                                 <div className="p-1.5 bg-rose-100 rounded-lg text-rose-600"><Activity size={16} /></div> Vitals Check
                                             </label>
-                                            <div className="grid grid-cols-5 gap-3">
+                                            <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
                                                 {[{ l: 'BP', k: 'bp', ph: '120/80', c: 'blue' }, { l: 'Temp', k: 'temp', ph: '98.6°F', c: 'amber' },
-                                                { l: 'Pulse', k: 'pulse', ph: '72 bpm', c: 'rose' }, { l: 'SpO2', k: 'spo2', ph: '98%', c: 'cyan' }, { l: 'Weight', k: 'weight', ph: 'Kg', c: 'slate' }].map(v => (
+                                                { l: 'Pulse', k: 'pulse', ph: '72 bpm', c: 'rose' }, { l: 'SpO2', k: 'spo2', ph: '98%', c: 'cyan' }, { l: 'Weight', k: 'weight', ph: 'Kg', c: 'slate' }, { l: 'GRBS', k: 'grbs', ph: 'mg/dL', c: 'red' }].map(v => (
                                                     <div key={v.k} className={`p-3 bg-${v.c}-50 rounded-2xl border border-${v.c}-100`}>
                                                         <label className={`text-[10px] font-black text-${v.c}-600 uppercase block mb-1`}>{v.l}</label>
                                                         <input className="w-full bg-transparent font-black text-slate-900 outline-none text-xs placeholder:text-slate-300"

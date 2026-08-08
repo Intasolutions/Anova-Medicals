@@ -273,16 +273,27 @@ class PharmacySaleItemSerializer(serializers.ModelSerializer):
 
 class PharmacySaleSerializer(serializers.ModelSerializer):
     sale_id = serializers.IntegerField(source='id', read_only=True)
-    patient_name = serializers.CharField(source='patient.full_name', read_only=True)
+    patient_name = serializers.SerializerMethodField()
     patient_registration_number = serializers.CharField(source='patient.registration_number', read_only=True)
     invoice_number = serializers.SerializerMethodField()
     # allow creating items in same request
     items = PharmacySaleItemSerializer(many=True)
+    walkin_name = serializers.CharField(required=False, write_only=True, allow_blank=True, allow_null=True)
+    walkin_phone = serializers.CharField(required=False, write_only=True, allow_blank=True, allow_null=True)
 
     class Meta:
         model = PharmacySale
         fields = '__all__'
         read_only_fields = ['sale_id', 'sale_date', 'created_at', 'updated_at', 'total_amount']
+
+    def get_patient_name(self, obj):
+        if obj.patient:
+            return obj.patient.full_name
+        from billing.models import InvoiceItem
+        invoice_item = InvoiceItem.objects.filter(item_id=obj.id, dept='PHARMACY').first()
+        if invoice_item and invoice_item.invoice and invoice_item.invoice.patient_name:
+            return invoice_item.invoice.patient_name
+        return None
 
     def get_invoice_number(self, obj):
         from billing.models import InvoiceItem, Invoice
@@ -300,6 +311,9 @@ class PharmacySaleSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])
+        walkin_name = validated_data.pop('walkin_name', None)
+        walkin_phone = validated_data.pop('walkin_phone', None)
+        
         sale = PharmacySale.objects.create(total_amount=0, **validated_data)
         total = 0
 
@@ -370,7 +384,46 @@ class PharmacySaleSerializer(serializers.ModelSerializer):
         target_visit = sale.visit
         patient = sale.patient
 
-        if not target_visit and patient:
+        # WALK-IN FLOW (Unregistered Patient)
+        if not patient and walkin_name:
+            from billing.models import Invoice, InvoiceItem
+            
+            # Create a standalone invoice for the walk-in
+            invoice_name = f"{walkin_name} (Walk-In)"
+            if walkin_phone:
+                invoice_name += f" - {walkin_phone}"
+                
+            invoice = Invoice.objects.create(
+                patient_name=invoice_name,
+                patient=None,
+                visit=None,
+                total_amount=sale.total_amount,
+                payment_status='PENDING'
+            )
+            
+            # Link items to the invoice
+            for sale_item in sale.items.all():
+                InvoiceItem.objects.create(
+                    invoice=invoice,
+                    item_id=sale.id, # Link back to PharmacySale
+                    dept='PHARMACY',
+                    description=sale_item.med_stock.name,
+                    qty=sale_item.qty,
+                    unit_price=sale_item.unit_price,
+                    amount=sale_item.amount,
+                    hsn=sale_item.med_stock.hsn,
+                    batch=sale_item.med_stock.batch_no,
+                    gst_percent=sale_item.gst_percent,
+                    stock_deducted=True,
+                    deducted_qty=sale_item.qty,
+                    dosage=sale_item.dosage,
+                    duration=sale_item.timing
+                )
+                
+            # Skip the registered patient logic entirely
+
+        # REGISTERED PATIENT FLOW
+        elif not target_visit and patient:
             # Check for an existing OPEN visit for this patient today to attach to
             # This avoids creating multiple visits if the patient is already wandering around via Reception
             # Priority: BILLING > DOCTOR > RECEPTION

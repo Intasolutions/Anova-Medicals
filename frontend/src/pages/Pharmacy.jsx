@@ -141,6 +141,8 @@ const Pharmacy = () => {
     const [patientSearch, setPatientSearch] = useState('');
     const [patients, setPatients] = useState([]);
     const [selectedPatient, setSelectedPatient] = useState(null);
+    const [isWalkIn, setIsWalkIn] = useState(false);
+    const [walkInDetails, setWalkInDetails] = useState({ name: '', phone: '' });
     const [doctorSearch, setDoctorSearch] = useState('');
     const [doctors, setDoctors] = useState([]);
     const [selectedDoctor, setSelectedDoctor] = useState(null);
@@ -615,7 +617,8 @@ const Pharmacy = () => {
 
     const handleCheckout = () => {
         if (cart.length === 0) return showToast('error', "Cart Empty");
-        if (!selectedPatient) return showToast('error', "Please select a patient to proceed.");
+        if (!selectedPatient && !isWalkIn) return showToast('error', "Please select a patient or add Walk-In details to proceed.");
+        if (isWalkIn && !walkInDetails.name.trim()) return showToast('error', "Please enter Walk-In Patient Name.");
         
         const hasMismatch = cart.some(item => item.original_qty !== undefined && item.qty !== item.original_qty);
         if (hasMismatch) {
@@ -635,6 +638,8 @@ const Pharmacy = () => {
         const payload = { 
             visit: visitId, 
             patient: selectedPatient?.p_id || selectedPatient?.id || null, 
+            walkin_name: isWalkIn ? walkInDetails.name : null,
+            walkin_phone: isWalkIn ? walkInDetails.phone : null,
             items: cart.map(item => ({ 
                 med_stock: item.med_id || item.id, 
                 qty: item.qty, 
@@ -647,9 +652,9 @@ const Pharmacy = () => {
         };
         try {
             const { data } = await api.post('pharmacy/sales/', payload);
-            setLastSale({ ...data, patient: selectedPatient, doctor: selectedDoctor, details: cart });
+            setLastSale({ ...data, patient: selectedPatient || { full_name: walkInDetails.name + ' (Walk-In)' }, doctor: selectedDoctor, details: cart });
             if (visitId) { await api.patch(`reception/visits/${visitId}/`, { status: 'OPEN', assigned_role: 'BILLING' }); fetchPendingVisits(); }
-            setCart([]); setMedSearch(''); setMedResults([]); setSelectedPatient(null); setSelectedDoctor(null);
+            setCart([]); setMedSearch(''); setMedResults([]); setSelectedPatient(null); setSelectedDoctor(null); setIsWalkIn(false); setWalkInDetails({ name: '', phone: '' });
             setShowVerificationModal(false);
             showToast('success', 'Sent to Billing.');
         } catch (err) {
@@ -1273,10 +1278,20 @@ const Pharmacy = () => {
                                         </div>
                                         <button onClick={() => setSelectedPatient(null)} className="text-slate-400 hover:text-red-600 transition-colors p-2 rounded-lg hover:bg-red-50"><X size={18} /></button>
                                     </div>
+                                ) : isWalkIn ? (
+                                    <div className="p-4 bg-white border-2 border-emerald-500 rounded-xl flex flex-col gap-3 shadow-sm relative">
+                                        <button onClick={() => setIsWalkIn(false)} className="absolute top-2 right-2 text-slate-400 hover:text-red-600 p-1"><X size={16} /></button>
+                                        <p className="text-[10px] text-emerald-600 font-black uppercase tracking-wider">Walk-In Patient</p>
+                                        <div className="flex gap-2">
+                                            <input type="text" placeholder="Patient Name" value={walkInDetails.name} onChange={e => setWalkInDetails({...walkInDetails, name: e.target.value})} className="flex-1 px-3 py-2 text-sm font-bold bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-500" />
+                                            <input type="text" placeholder="Phone (Opt)" value={walkInDetails.phone} onChange={e => setWalkInDetails({...walkInDetails, phone: e.target.value})} className="w-1/3 px-3 py-2 text-sm font-bold bg-slate-50 border border-slate-200 rounded-lg outline-none focus:border-emerald-500" />
+                                        </div>
+                                    </div>
                                 ) : (
                                     <div className="p-4 bg-white border-2 border-dashed border-gray-300 rounded-xl flex flex-col items-center justify-center text-center">
                                         <User size={24} className="text-slate-300 mb-2" />
-                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">No Patient Selected</span>
+                                        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">No Patient Selected</span>
+                                        <button onClick={() => setIsWalkIn(true)} className="px-4 py-2 bg-slate-900 text-white rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-slate-800 transition-colors">Add Walk-In</button>
                                     </div>
                                 )}
                             </div>

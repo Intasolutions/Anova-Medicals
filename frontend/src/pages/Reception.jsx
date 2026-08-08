@@ -5,7 +5,7 @@ import {
     UserPlus, Phone, User as UserIcon, ArrowRight, X,
     Activity, Thermometer, Heart, Scale, Stethoscope,
     MapPin, ChevronRight, Search, CheckCircle2, AlertCircle, FileText, IndianRupee, Edit, Trash2,
-    Users, Info, Wallet, Sparkles, CreditCard, AlertTriangle, Calendar
+    Users, Info, Wallet, Sparkles, CreditCard, AlertTriangle, Calendar, Droplet
 } from 'lucide-react';
 import { useSearch } from '../context/SearchContext';
 import { useAuth } from '../context/AuthContext';
@@ -157,7 +157,7 @@ const Reception = () => {
         assigned_role: 'DOCTOR',
         doctor: '',
         referred_by: 'Self',
-        vitals: { temp: '', bp: '', pulse: '', weight: '', spo2: '' }
+        vitals: { temp: '', bp: '', pulse: '', weight: '', spo2: '', grbs: '' }
     });
     const [visitSubmitting, setVisitSubmitting] = useState(false);
 
@@ -509,7 +509,7 @@ const Reception = () => {
 
     const handleNewVisit = async (p) => {
         setSelectedPatient(p);
-        setVisitForm({ assigned_role: 'DOCTOR', doctor: '', vitals: { temp: '', bp: '', pulse: '', weight: '', spo2: '' } });
+        setVisitForm({ assigned_role: 'DOCTOR', doctor: '', vitals: { temp: '', bp: '', pulse: '', weight: '', spo2: '', grbs: '' } });
         setSelectedLabTests([]);
         setSelectedStartServices([]);
         setServiceSearchQ('');
@@ -564,7 +564,7 @@ const Reception = () => {
                 showToast('success', `Visit token generated for ${selectedPatient.full_name}`);
             }
 
-            setVisitForm({ assigned_role: 'DOCTOR', doctor: '', referred_by: 'Self', vitals: { temp: '', bp: '', pulse: '', weight: '', spo2: '' } });
+            setVisitForm({ assigned_role: 'DOCTOR', doctor: '', referred_by: 'Self', vitals: { temp: '', bp: '', pulse: '', weight: '', spo2: '', grbs: '' } });
             setSelectedLabTests([]);
             setSelectedStartServices([]);
             setServiceSearchQ('');
@@ -1393,6 +1393,22 @@ const Reception = () => {
                                                             onChange={e => setVisitForm({ ...visitForm, vitals: { ...visitForm.vitals, spo2: e.target.value } })}
                                                         />
                                                         <span className="text-xs font-bold text-slate-400">%</span>
+                                                    </div>
+                                                </div>
+                                                {/* GRBS */}
+                                                <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 shadow-sm focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all">
+                                                    <div className="flex justify-between mb-2">
+                                                        <label className="text-[10px] font-bold text-slate-400 uppercase">GRBS</label>
+                                                        <Droplet size={16} className="text-red-400" />
+                                                    </div>
+                                                    <div className="flex items-baseline gap-1">
+                                                        <input
+                                                            type="text" placeholder="110"
+                                                            className="w-full text-2xl font-bold text-slate-900 outline-none placeholder:text-slate-200"
+                                                            value={visitForm.vitals.grbs}
+                                                            onChange={e => setVisitForm({ ...visitForm, vitals: { ...visitForm.vitals, grbs: e.target.value } })}
+                                                        />
+                                                        <span className="text-xs font-bold text-slate-400">mg/dL</span>
                                                     </div>
                                                 </div>
                                             </div>
