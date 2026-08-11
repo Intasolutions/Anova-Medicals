@@ -169,6 +169,11 @@ class VisitViewSet(viewsets.ModelViewSet):
         )
             
         return qs
+        
+    def paginate_queryset(self, queryset):
+        if self.request.query_params.get('no_page') == 'true':
+            return None
+        return super().paginate_queryset(queryset)
 
     @action(detail=False, methods=['get'])
     def casualty_history(self, request):
@@ -286,7 +291,6 @@ class VisitViewSet(viewsets.ModelViewSet):
             match_role = visit.assigned_role
         elif visit.doctor:
             # Single doctor notification (legacy/specific)
-            from core.models import Notification
             Notification.objects.create(
                 recipient=visit.doctor,
                 message=f"New patient assigned: {visit.patient.full_name}",

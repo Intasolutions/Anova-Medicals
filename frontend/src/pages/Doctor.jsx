@@ -366,11 +366,11 @@ const Doctor = () => {
         if (!patientId) return;
         setHistoryLoading(true); setPatientHistory([]);
         try {
-            const { data: vd } = await api.get(`/reception/visits/?patient=${patientId}&page_size=100`);
+            const { data: vd } = await api.get(`/reception/visits/?patient=${patientId}&no_page=true`);
             const visits = vd.results || vd || [];
             if (!visits.length) { setHistoryLoading(false); return; }
             const vIds = visits.map(v => v.v_id || v.id);
-            const { data: nd } = await api.get(`/medical/doctor-notes/?page_size=100`);
+            const { data: nd } = await api.get(`/medical/doctor-notes/?visit__patient=${patientId}&no_page=true`);
             const allNotes = nd.results || nd || [];
             const enriched = allNotes
                 .filter(n => vIds.includes(n.visit))

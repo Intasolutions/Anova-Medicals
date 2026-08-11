@@ -21,7 +21,9 @@ class DoctorNoteViewSet(viewsets.ModelViewSet):
     ordering_fields = ['created_at']
 
     def get_queryset(self):
-        user_role = getattr(self.request.user, "role", None)
-        if user_role in ['ADMIN', 'PHARMACY', 'RECEPTION']:
-            return DoctorNote.objects.all().order_by('-created_at')
-        return DoctorNote.objects.filter(visit__doctor=self.request.user).order_by('-created_at')
+        return DoctorNote.objects.all().order_by('-created_at')
+        
+    def paginate_queryset(self, queryset):
+        if self.request.query_params.get('no_page') == 'true':
+            return None
+        return super().paginate_queryset(queryset)
