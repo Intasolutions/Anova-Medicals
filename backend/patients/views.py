@@ -214,6 +214,17 @@ class VisitViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     def perform_create(self, serializer):
+        patient = serializer.validated_data.get('patient')
+        close_previous = self.request.data.get('close_previous', False)
+        
+        if patient and close_previous:
+            # Auto-close previous open visits for this patient based on frontend confirmation
+            # Exclude LAB and BILLING just in case, to prevent forcefully closing active critical flows
+            Visit.objects.filter(
+                patient=patient, 
+                status='OPEN'
+            ).exclude(assigned_role__in=['BILLING', 'LAB']).update(status='CLOSED')
+
         visit = serializer.save()
         match_role = None
         

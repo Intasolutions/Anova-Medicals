@@ -140,6 +140,11 @@ const Reception = () => {
     const [labTestSearchQ, setLabTestSearchQ] = useState('');
     const [serviceDefinitions, setServiceDefinitions] = useState([]);
     const [selectedStartServices, setSelectedStartServices] = useState([]);
+
+    const [showActiveVisitModal, setShowActiveVisitModal] = useState(false);
+    const [activeVisitMessage, setActiveVisitMessage] = useState('');
+    const [activeVisitBlocked, setActiveVisitBlocked] = useState(false);
+
     const [serviceSearchQ, setServiceSearchQ] = useState('');
     const [doctorSearchQ, setDoctorSearchQ] = useState('');
 
@@ -516,6 +521,7 @@ const Reception = () => {
         setLabTestSearchQ('');
         setDoctorSearchQ('');
         await fetchDoctorsAndTests();
+        await fetchHistory(p.p_id || p.id);
         setShowVisitModal(true);
     };
 
@@ -534,8 +540,8 @@ const Reception = () => {
         }
     };
 
-    const submitVisit = async (e) => {
-        e.preventDefault();
+    const submitVisit = async (e, forceCreate = false) => {
+        if (e) e.preventDefault();
 
         if (visitSubmitting) return;
 
@@ -543,6 +549,32 @@ const Reception = () => {
             showToast('error', 'Please select at least one service to bill.');
             return;
         }
+
+        if (!forceCreate && patientHistory) {
+            const openVisits = patientHistory.filter(v => v.status === 'OPEN');
+            if (openVisits.length > 0) {
+                const hasCritical = openVisits.some(v => ['LAB', 'BILLING'].includes(v.assigned_role));
+                const hasUnpaidBills = patientInvoices && patientInvoices.some(inv => inv.payment_status === 'PENDING');
+                
+                if (hasCritical || hasUnpaidBills) {
+                    setActiveVisitBlocked(true);
+                    let msg = "Cannot create visit. ";
+                    if (hasCritical && hasUnpaidBills) msg += "Patient has an active Lab test AND pending bills.";
+                    else if (hasCritical) msg += "Patient has an active Lab test or is waiting at Billing.";
+                    else if (hasUnpaidBills) msg += "Patient has pending bills.";
+                    msg += " Please close or clear them first.";
+                    setActiveVisitMessage(msg);
+                    setShowActiveVisitModal(true);
+                    return;
+                } else {
+                    setActiveVisitBlocked(false);
+                    setActiveVisitMessage("This patient already has an active visit. Do you want to close the previous one and start new?");
+                    setShowActiveVisitModal(true);
+                    return;
+                }
+            }
+        }
+
         setVisitSubmitting(true);
         try {
             await api.post('/reception/visits/', {
@@ -553,9 +585,11 @@ const Reception = () => {
                 vitals: visitForm.vitals,
                 referred_by: visitForm.assigned_role === 'LAB' ? (visitForm.referred_by || 'Self') : 'Self',
                 lab_tests: visitForm.assigned_role === 'LAB' ? selectedLabTests : [],
-                casualty_services: visitForm.assigned_role === 'CASUALTY' ? selectedStartServices : []
+                casualty_services: visitForm.assigned_role === 'CASUALTY' ? selectedStartServices : [],
+                close_previous: forceCreate
             });
             setShowVisitModal(false);
+            setShowActiveVisitModal(false);
             
             if (visitForm.assigned_role === 'LAB' || visitForm.assigned_role === 'CASUALTY') {
                 setActiveTab('billing');
@@ -1636,7 +1670,7 @@ const Reception = () => {
                                             )}
 
                                             <button
-                                                onClick={submitVisit}
+                                                onClick={(e) => submitVisit(e, false)}
                                                 disabled={visitSubmitting || (visitForm.assigned_role === 'DOCTOR' && !visitForm.doctor) || (visitForm.assigned_role === 'LAB' && selectedLabTests.length === 0)}
                                                 className="mt-6 w-full py-4 bg-slate-950 hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold rounded-2xl shadow-xl shadow-slate-900/20 transition-all active:scale-[0.98] flex items-center justify-center gap-3"
                                             >
