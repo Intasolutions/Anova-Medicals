@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -70,6 +70,8 @@ const Reception = () => {
     const [frontDeskTab, setFrontDeskTab] = useState('active'); // 'all' | 'active'
     const [editingPatientId, setEditingPatientId] = useState(null);
     const [isRegistering, setIsRegistering] = useState(false);
+    const isRegisteringRef = useRef(false);
+    const isSubmittingRef = useRef(false);
     const getLocalDate = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
     const [dateRange, setDateRange] = useState({ 
         start: getLocalDate(), 
@@ -397,15 +399,15 @@ const Reception = () => {
     const handleRegister = async (e) => {
         e.preventDefault();
 
-        if (isRegistering) return;
+        if (isRegistering || isRegisteringRef.current) return;
 
         if (!validateForm()) {
             showToast('error', 'Please fix the errors highlighted in the form.');
             return;
         }
-        setVisitSubmitting(true);
+        setIsRegistering(true);
+        isRegisteringRef.current = true;
         try {
-            setIsRegistering(true);
             const payload = {
                 ...form,
                 age: form.age ? parseInt(form.age) : 0,
@@ -445,6 +447,7 @@ const Reception = () => {
             }
         } finally {
             setIsRegistering(false);
+            isRegisteringRef.current = false;
         }
     };
 
@@ -543,39 +546,16 @@ const Reception = () => {
     const submitVisit = async (e, forceCreate = false) => {
         if (e) e.preventDefault();
 
-        if (visitSubmitting) return;
+        if (visitSubmitting || isSubmittingRef.current) return;
 
         if (visitForm.assigned_role === 'CASUALTY' && selectedStartServices.length === 0) {
             showToast('error', 'Please select at least one service to bill.');
             return;
         }
 
-        if (!forceCreate && patientHistory) {
-            const openVisits = patientHistory.filter(v => v.status === 'OPEN');
-            if (openVisits.length > 0) {
-                const hasCritical = openVisits.some(v => ['LAB', 'BILLING'].includes(v.assigned_role));
-                const hasUnpaidBills = patientInvoices && patientInvoices.some(inv => inv.payment_status === 'PENDING');
-                
-                if (hasCritical || hasUnpaidBills) {
-                    setActiveVisitBlocked(true);
-                    let msg = "Cannot create visit. ";
-                    if (hasCritical && hasUnpaidBills) msg += "Patient has an active Lab test AND pending bills.";
-                    else if (hasCritical) msg += "Patient has an active Lab test or is waiting at Billing.";
-                    else if (hasUnpaidBills) msg += "Patient has pending bills.";
-                    msg += " Please close or clear them first.";
-                    setActiveVisitMessage(msg);
-                    setShowActiveVisitModal(true);
-                    return;
-                } else {
-                    setActiveVisitBlocked(false);
-                    setActiveVisitMessage("This patient already has an active visit. Do you want to close the previous one and start new?");
-                    setShowActiveVisitModal(true);
-                    return;
-                }
-            }
-        }
 
         setVisitSubmitting(true);
+        isSubmittingRef.current = true;
         try {
             await api.post('/reception/visits/', {
                 patient: selectedPatient.p_id || selectedPatient.id,
@@ -603,9 +583,23 @@ const Reception = () => {
             setSelectedStartServices([]);
             setServiceSearchQ('');
         } catch (err) {
-            showToast('error', 'Failed to create visit record.');
+            if (err.response && err.response.data && err.response.data.non_field_errors) {
+                const message = err.response.data.non_field_errors[0];
+                if (err.response.data.requires_confirmation) {
+                    setActiveVisitBlocked(false);
+                    setActiveVisitMessage(message);
+                    setShowActiveVisitModal(true);
+                } else {
+                    setActiveVisitBlocked(true);
+                    setActiveVisitMessage(message);
+                    setShowActiveVisitModal(true);
+                }
+            } else {
+                showToast('error', 'Failed to create visit record.');
+            }
         } finally {
             setVisitSubmitting(false);
+            isSubmittingRef.current = false;
         }
     };
 
@@ -1677,6 +1671,54 @@ const Reception = () => {
                                                 <span>{visitSubmitting ? 'Generating...' : 'Generate Token'}</span>
                                                 <ArrowRight size={18} />
                                             </button>
+                                        </div>
+                                    </motion.div>
+                                </div>
+                            )}
+                        </AnimatePresence>
+
+                        {/* --- MODAL: Active Visit Warning --- */}
+                        <AnimatePresence>
+                            {showActiveVisitModal && (
+                                <div className="fixed inset-0 z-[120] flex items-center justify-center px-4">
+                                    <motion.div
+                                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                        className="absolute inset-0 bg-slate-900/20 backdrop-blur-sm"
+                                        onClick={() => setShowActiveVisitModal(false)}
+                                    />
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                                        className="relative bg-white w-full max-w-md rounded-2xl shadow-2xl p-6"
+                                    >
+                                        <div className="flex flex-col items-center text-center">
+                                            <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 ${activeVisitBlocked ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-600'}`}>
+                                                <AlertCircle size={32} />
+                                            </div>
+                                            <h3 className="text-xl font-bold text-slate-900 mb-2">
+                                                {activeVisitBlocked ? "Cannot Create Visit" : "Active Visit Exists"}
+                                            </h3>
+                                            <p className="text-slate-500 mb-6 font-medium leading-relaxed">
+                                                {activeVisitMessage}
+                                            </p>
+                                            
+                                            <div className="flex gap-3 w-full">
+                                                {activeVisitBlocked ? (
+                                                    <button onClick={() => setShowActiveVisitModal(false)} className="flex-1 p-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 transition-colors">
+                                                        Okay
+                                                    </button>
+                                                ) : (
+                                                    <>
+                                                        <button onClick={() => setShowActiveVisitModal(false)} className="flex-1 p-3 rounded-xl border-2 border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-colors">
+                                                            Cancel
+                                                        </button>
+                                                        <button onClick={(e) => submitVisit(e, true)} disabled={visitSubmitting} className="flex-1 p-3 rounded-xl bg-amber-600 text-white font-bold hover:bg-amber-700 transition-colors disabled:opacity-50 flex justify-center items-center gap-2">
+                                                            {visitSubmitting ? 'Processing...' : 'Proceed Anyway'}
+                                                        </button>
+                                                    </>
+                                                )}
+                                            </div>
                                         </div>
                                     </motion.div>
                                 </div>

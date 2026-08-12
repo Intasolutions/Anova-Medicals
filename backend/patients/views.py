@@ -109,6 +109,7 @@ class PatientViewSet(viewsets.ModelViewSet):
 
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.db import transaction
 
 class VisitViewSet(viewsets.ModelViewSet):
     queryset = Visit.objects.all().order_by('-created_at')
@@ -218,6 +219,10 @@ class VisitViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(visits, many=True)
         return Response(serializer.data)
 
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        return super().create(request, *args, **kwargs)
+
     def perform_create(self, serializer):
         patient = serializer.validated_data.get('patient')
         close_previous = self.request.data.get('close_previous', False)
@@ -287,6 +292,8 @@ class VisitViewSet(viewsets.ModelViewSet):
             visit.save()
 
         # Determine who to notify
+        from core.models import Notification
+        
         if visit.assigned_role and visit.assigned_role != 'DOCTOR':
             match_role = visit.assigned_role
         elif visit.doctor:
@@ -300,7 +307,6 @@ class VisitViewSet(viewsets.ModelViewSet):
             return
 
         if match_role:
-            from core.models import Notification
             from django.contrib.auth import get_user_model
             User = get_user_model()
             

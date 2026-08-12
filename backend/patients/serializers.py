@@ -276,6 +276,53 @@ class VisitSerializer(serializers.ModelSerializer):
         # The frontend should ensure only doctors are selectable
         return doctor
 
+    def validate(self, attrs):
+        request = self.context.get('request')
+        if not request:
+            return attrs
+
+        # Only run validation on creation
+        if getattr(self.instance, 'pk', None) is not None:
+            return attrs
+
+        patient = attrs.get('patient')
+        if not patient:
+            return attrs
+
+        # Lock the patient row to prevent concurrent visit creations
+        # This works because we wrapped the view's create() in transaction.atomic
+        try:
+            Patient.objects.select_for_update().get(id=patient.id)
+        except Patient.DoesNotExist:
+            pass
+
+        close_previous = request.data.get('close_previous', False)
+        if isinstance(close_previous, str):
+            close_previous = close_previous.lower() == 'true'
+
+        open_visits = Visit.objects.filter(patient=patient, status__in=['OPEN', 'IN_PROGRESS'])
+        
+        if open_visits.exists():
+            has_critical = open_visits.filter(assigned_role__in=['LAB', 'BILLING']).exists()
+            
+            from billing.models import Invoice
+            has_unpaid_bills = Invoice.objects.filter(visit__patient=patient, payment_status='PENDING').exists()
+            
+            if has_critical and has_unpaid_bills:
+                raise serializers.ValidationError({"non_field_errors": ["Cannot create visit. Patient has an active Lab test AND pending bills. Please close or clear them first."]})
+            elif has_critical:
+                raise serializers.ValidationError({"non_field_errors": ["Cannot create visit. Patient has an active Lab test or is waiting at Billing. Please close or clear them first."]})
+            elif has_unpaid_bills:
+                raise serializers.ValidationError({"non_field_errors": ["Cannot create visit. Patient has pending bills. Please close or clear them first."]})
+            
+            if not close_previous:
+                raise serializers.ValidationError({
+                    "non_field_errors": ["This patient already has an active visit. Do you want to close the previous one and start new?"],
+                    "requires_confirmation": True
+                })
+
+        return attrs
+
     def create(self, validated_data):
         visit = super().create(validated_data)
         self.emit_socket_update(visit)
