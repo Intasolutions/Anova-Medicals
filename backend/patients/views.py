@@ -3,6 +3,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Exists, OuterRef
+from django.db import IntegrityError
 from revive_cms.utils import export_to_csv
 
 from .models import Patient, Visit, ReferringDoctor
@@ -221,7 +222,21 @@ class VisitViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def create(self, request, *args, **kwargs):
-        return super().create(request, *args, **kwargs)
+        try:
+            with transaction.atomic():
+                return super().create(request, *args, **kwargs)
+        except IntegrityError as e:
+            if 'one_active_visit_per_patient' in str(e):
+                # Two requests raced past the pre-check in VisitSerializer.validate()
+                # and both tried to insert at once; the DB constraint caught it.
+                return Response(
+                    {
+                        "non_field_errors": ["This patient already has an active visit. Do you want to close the previous one and start new?"],
+                        "requires_confirmation": True,
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            raise
 
     def perform_create(self, serializer):
         patient = serializer.validated_data.get('patient')

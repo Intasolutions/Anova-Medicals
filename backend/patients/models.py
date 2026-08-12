@@ -75,6 +75,15 @@ class Visit(BaseModel):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='OPEN')
     vitals = models.JSONField(default=dict, blank=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['patient'],
+                condition=models.Q(status__in=['OPEN', 'IN_PROGRESS']),
+                name='one_active_visit_per_patient',
+            ),
+        ]
+
     def __str__(self):
         return f"Visit {self.id} - {self.patient.full_name}"
 
