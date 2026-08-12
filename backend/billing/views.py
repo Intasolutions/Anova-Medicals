@@ -168,8 +168,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         proposed_total = sum(float(p.get('amount') or 0) for p in payments_list if float(p.get('amount') or 0) > 0)
         current_paid = sum(p.amount for p in invoice.payments.all())
         from decimal import Decimal
-        
-        balance_due = invoice.total_amount - getattr(invoice, 'discount_amount', Decimal('0')) - current_paid
+
+        discount = getattr(invoice, 'discount_amount', None) or Decimal('0')
+        refund = getattr(invoice, 'refund_amount', None) or Decimal('0')
+        balance_due = invoice.total_amount - discount - refund - current_paid
 
         if proposed_total <= 0:
             if balance_due <= Decimal('0'):
@@ -178,8 +180,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                     invoice.save(update_fields=['payment_status'])
                 return Response({'status': 'success', 'message': 'Invoice marked as paid'})
             return Response({'error': 'Payment amount must be greater than zero.'}, status=400)
-            
-        if (current_paid + Decimal(str(proposed_total))) > invoice.total_amount - getattr(invoice, 'discount_amount', Decimal('0')) + Decimal('0.5'):
+
+        if (current_paid + Decimal(str(proposed_total))) > balance_due + current_paid + Decimal('0.5'):
             return Response({'error': 'Total payment exceeds invoice balance due.'}, status=400)
         
         with transaction.atomic():
@@ -210,8 +212,9 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         
         # Update Invoice Status
         # Allow small buffer for float errors (converted to Decimal)
-        discount = getattr(invoice, 'discount_amount', Decimal('0'))
-        if total_paid >= invoice.total_amount - discount - Decimal('0.5'):
+        discount = getattr(invoice, 'discount_amount', None) or Decimal('0')
+        refund = getattr(invoice, 'refund_amount', None) or Decimal('0')
+        if total_paid >= invoice.total_amount - discount - refund - Decimal('0.5'):
             invoice.payment_status = 'PAID'
             if invoice.visit and invoice.visit.lab_charges.filter(status='PENDING').exists():
                 invoice.visit.assigned_role = 'LAB'
@@ -249,7 +252,9 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         date_str = request.query_params.get('date')
         
         monthly_payments = PaymentTransaction.objects.all()
-        pending_query = Invoice.objects.filter(payment_status='PENDING')
+        # Include PARTIAL invoices too -- they still have money outstanding,
+        # same as a PENDING invoice, just with some payment already recorded.
+        pending_query = Invoice.objects.filter(payment_status__in=['PENDING', 'PARTIAL'])
         
         if date_str:
             try:
@@ -290,11 +295,15 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         
         collection_today = PaymentTransaction.objects.filter(created_at__date=today).aggregate(Sum('amount'))['amount__sum'] or 0
 
-        # total_pending needs to be calculated in python because balance_due is not a DB field
+        # total_pending needs to be calculated in python because balance_due is not a DB field.
+        # Uses the same formula as InvoiceSerializer.get_balance_due so this stat always
+        # agrees with what an individual invoice shows as its balance due.
         total_pending = 0
         for inv in pending_query.prefetch_related('payments'):
             paid = sum(p.amount for p in inv.payments.all())
-            total_pending += (inv.total_amount - paid - inv.refund_amount)
+            discount = inv.discount_amount or 0
+            refund = inv.refund_amount or 0
+            total_pending += max(0, inv.total_amount - discount - refund - paid)
         
         count = Invoice.objects.filter(created_at__date=today).count()
 

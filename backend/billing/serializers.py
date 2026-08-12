@@ -28,13 +28,27 @@ class InvoiceSerializer(serializers.ModelSerializer):
         model = Invoice
         fields = ['id', 'invoice_number', 'visit', 'patient', 'patient_name', 'total_amount', 'discount_amount', 'refund_amount', 'payment_status', 'payment_mode', 'remarks', 'items', 'payments', 'amount_paid', 'balance_due', 'patient_display', 'patient_id', 'registration_number', 'created_at']
 
+    def validate_discount_amount(self, value):
+        if value is not None and value < 0:
+            raise serializers.ValidationError("Discount cannot be negative.")
+        return value
+
+    @staticmethod
+    def _check_discount_not_exceeding_total(invoice):
+        discount = invoice.discount_amount or 0
+        if discount > invoice.total_amount:
+            raise serializers.ValidationError({
+                "discount_amount": f"Discount (₹{discount}) cannot exceed the invoice total (₹{invoice.total_amount})."
+            })
+
     def get_amount_paid(self, obj):
         return sum(p.amount for p in obj.payments.all())
 
     def get_balance_due(self, obj):
         paid = sum(p.amount for p in obj.payments.all())
         discount = obj.discount_amount or 0
-        return max(0, obj.total_amount - discount - paid)
+        refund = obj.refund_amount or 0
+        return max(0, obj.total_amount - discount - refund - paid)
 
     def get_patient_display(self, obj):
         if obj.visit and obj.visit.patient:
@@ -61,25 +75,34 @@ class InvoiceSerializer(serializers.ModelSerializer):
             
         if invoice:
 
-            # Append items to existing master invoice (Deduplicating to prevent double amounts)
+            # Append items to existing master invoice. Items are matched by
+            # description only (medicine/service name) -- batch is a pharmacy
+            # stock concern, not something the patient's bill should split on.
+            # A repeat of the same medicine/service merges into the existing
+            # line (qty and amount added together) instead of being dropped.
             for item_data in items_data:
                 desc = item_data.get('description')
-                batch = item_data.get('batch', '')
-                
-                # Check if item already exists on this invoice
-                exists = InvoiceItem.objects.filter(
+
+                existing_item = InvoiceItem.objects.filter(
                     invoice=invoice,
                     description=desc
-                ).filter(
-                    models.Q(batch=batch) | models.Q(batch__isnull=True)
-                ).exists()
-                
-                if not exists:
+                ).first()
+
+                if existing_item:
+                    new_qty = item_data.get('qty', 1) or 1
+                    new_amount = item_data.get('amount', 0) or 0
+                    existing_item.qty = (existing_item.qty or 0) + new_qty
+                    existing_item.amount = (existing_item.amount or 0) + new_amount
+                    if existing_item.qty:
+                        existing_item.unit_price = existing_item.amount / existing_item.qty
+                    existing_item.save()
+                else:
                     InvoiceItem.objects.create(invoice=invoice, **item_data)
-                
+
             # Recalculate total amount
             invoice.total_amount = sum(item.amount for item in invoice.items.all())
-            
+            self._check_discount_not_exceeding_total(invoice)
+
             # Adjust payment status based on new total
             paid_amount = sum(p.amount for p in invoice.payments.all())
             discount = invoice.discount_amount or 0
@@ -97,20 +120,33 @@ class InvoiceSerializer(serializers.ModelSerializer):
         else:
             # Create new invoice
             invoice = Invoice.objects.create(**validated_data)
-            
-            created_items_tracker = set()
+
+            # Merge items by description (medicine/service name) -- batch is a
+            # pharmacy stock concern, not something the patient's bill should
+            # split on. A repeat of the same medicine/service merges into one
+            # line (qty and amount added together) instead of being dropped.
+            merged_items = {}
+            item_order = []
             for item_data in items_data:
                 desc = item_data.get('description')
-                batch = item_data.get('batch', '')
-                
-                # Check tracker to prevent duplicate items from being created in a new invoice
-                tracker_key = f"{desc}_{batch}"
-                if tracker_key not in created_items_tracker:
-                    InvoiceItem.objects.create(invoice=invoice, **item_data)
-                    created_items_tracker.add(tracker_key)
-            
-            # Recalculate total amount to ensure accuracy after deduplication
+                if desc in merged_items:
+                    existing = merged_items[desc]
+                    new_qty = item_data.get('qty', 1) or 1
+                    new_amount = item_data.get('amount', 0) or 0
+                    existing['qty'] = (existing.get('qty') or 0) + new_qty
+                    existing['amount'] = (existing.get('amount') or 0) + new_amount
+                    if existing['qty']:
+                        existing['unit_price'] = existing['amount'] / existing['qty']
+                else:
+                    merged_items[desc] = dict(item_data)
+                    item_order.append(desc)
+
+            for desc in item_order:
+                InvoiceItem.objects.create(invoice=invoice, **merged_items[desc])
+
+            # Recalculate total amount to ensure accuracy after merging
             invoice.total_amount = sum(item.amount for item in invoice.items.all())
+            self._check_discount_not_exceeding_total(invoice)
             invoice.save()
                 
             if invoice.payment_status == 'PAID' and invoice.total_amount > 0:
@@ -137,7 +173,11 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         items_data = validated_data.pop('items', None)
-        
+        # total_amount must always equal the sum of the invoice's items -- never
+        # trust a client-supplied value for it, whether or not items are being
+        # touched in this particular update.
+        validated_data.pop('total_amount', None)
+
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
@@ -162,13 +202,16 @@ class InvoiceSerializer(serializers.ModelSerializer):
                     # New item
                     new_item = InvoiceItem.objects.create(invoice=instance, **item_data)
                     keep_ids.append(new_item.id)
-            
+
             # Remove missing items
             instance.items.exclude(id__in=keep_ids).delete()
-            
-            # Recalculate totals after updating items (already handled by frontend payload)
-            instance.save()
-        
+
+        # Always recompute from the actual line items -- this is the source of truth,
+        # not whatever the client sent, and must reflect any items sync above.
+        instance.total_amount = sum(item.amount for item in instance.items.all())
+        self._check_discount_not_exceeding_total(instance)
+        instance.save()
+
         # Emit Socket Event
         try:
             from asgiref.sync import async_to_sync

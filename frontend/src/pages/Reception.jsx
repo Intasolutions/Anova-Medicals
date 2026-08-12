@@ -1824,6 +1824,21 @@ const Reception = () => {
                                                                 </div>
                                                             )}
 
+                                                            {/* Pharmacy Returns / Refunds */}
+                                                            {visit.pharmacy_returns && visit.pharmacy_returns.length > 0 && (
+                                                                <div className="bg-white p-3 rounded-xl border border-rose-100">
+                                                                    <p className="text-[10px] font-black text-rose-500 uppercase tracking-wider mb-2">Returned Medicines</p>
+                                                                    <div className="space-y-2">
+                                                                        {visit.pharmacy_returns.map((ret, idx) => (
+                                                                            <div key={idx} className="flex justify-between items-start text-xs border-b border-slate-50 last:border-0 pb-1 last:pb-0">
+                                                                                <span className="font-bold text-slate-800">{ret.name} <span className="text-slate-400 font-normal">x{ret.qty_returned}</span></span>
+                                                                                <span className="text-rose-600 text-[10px] font-bold">-₹{ret.refund_amount}</span>
+                                                                            </div>
+                                                                        ))}
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
                                                             {/* Lab Referral / Tests */}
                                                             {(visit.lab_referral_details || (visit.lab_charges_data && visit.lab_charges_data.length > 0)) && (
                                                                 <div className="bg-white p-3 rounded-xl border border-slate-200">
@@ -1890,6 +1905,13 @@ const Reception = () => {
                                                                     </button>
                                                                 )}
                                                             </div>
+
+                                                            {parseFloat(inv.refund_amount) > 0 && (
+                                                                <div className="flex justify-between items-center px-3 py-1.5 rounded-lg bg-rose-50 border border-rose-100">
+                                                                    <p className="text-xs font-bold text-rose-600 uppercase">Refunded</p>
+                                                                    <p className="text-xs font-black text-rose-600">-₹{inv.refund_amount}</p>
+                                                                </div>
+                                                            )}
 
                                                             <div className="flex justify-between items-center pt-2 border-t border-slate-200/50">
                                                                 <p className="text-xs font-bold text-slate-400 uppercase">Total Bill</p>

@@ -149,6 +149,34 @@ const HistoryModal = ({ history, onClose }) => {
                             </div>
                         </div>
                     )}
+                    {/* Pharmacy Returns / Refunds */}
+                    {history.pharmacy_returns && history.pharmacy_returns.length > 0 && (
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-2 text-sm font-bold text-slate-700">
+                                <div className="p-1.5 bg-rose-100 rounded-lg text-rose-600"><Pill size={16} /></div> Returned Medication
+                            </div>
+                            <div className="border border-rose-200 rounded-xl overflow-hidden">
+                                <table className="w-full text-left text-sm">
+                                    <thead className="bg-rose-50 border-b border-rose-100">
+                                        <tr>
+                                            {['Medicine', 'Qty Returned', 'Refund'].map(h => (
+                                                <th key={h} className={`px-4 py-3 font-bold text-rose-500 uppercase text-[10px] tracking-wider${h === 'Refund' ? ' text-right' : ''}`}>{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {history.pharmacy_returns.map((ret, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                                <td className="px-4 py-3 font-bold text-slate-900">{ret.name}</td>
+                                                <td className="px-4 py-3 text-slate-600 font-medium">{ret.qty_returned}</td>
+                                                <td className="px-4 py-3 text-rose-600 font-bold text-right">-₹{ret.refund_amount}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                     {/* Lab Reports */}
                     {history.lab_results && history.lab_results.length > 0 && (
                         <div className="space-y-3">
@@ -376,7 +404,7 @@ const Doctor = () => {
                 .filter(n => vIds.includes(n.visit))
                 .map(note => {
                     const visit = visits.find(v => (v.v_id || v.id) === note.visit);
-                    return { ...note, vitals: visit?.vitals || {}, lab_results: visit?.lab_results || [] };
+                    return { ...note, vitals: visit?.vitals || {}, lab_results: visit?.lab_results || [], pharmacy_returns: visit?.pharmacy_returns || [] };
                 })
                 .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
             if (activeVisitRef.current !== expectedVId) return;

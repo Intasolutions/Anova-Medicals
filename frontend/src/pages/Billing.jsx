@@ -2202,12 +2202,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
                       </span>
                       <span className="text-2xl font-black text-slate-900 leading-none">
                         ₹
-                        {Math.ceil(
-                          Math.max(
-                            0,
-                            calculateSubtotal(formData.items) -
-                              (parseFloat(formData.discount_amount) || 0),
-                          ),
+                        {Math.max(
+                          0,
+                          calculateSubtotal(formData.items) -
+                            (parseFloat(formData.discount_amount) || 0),
                         ).toFixed(2)}
                       </span>
                     </div>
@@ -2465,12 +2463,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
                   </td>
                   <td className="py-3 px-2 text-right text-sm font-black text-slate-900">
                     ₹
-                    {Math.ceil(
-                      Math.max(
-                        0,
-                        calculateSubtotal(formData.items) -
-                          (parseFloat(formData.discount_amount) || 0),
-                      ),
+                    {Math.max(
+                      0,
+                      calculateSubtotal(formData.items) -
+                        (parseFloat(formData.discount_amount) || 0),
                     ).toFixed(2)}
                   </td>
                 </tr>

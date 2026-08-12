@@ -91,7 +91,7 @@ class VisitSerializer(serializers.ModelSerializer):
         model = Visit
         fields = [
             'id', 'v_id', 'patient', 'patient_name', 'doctor', 'doctor_name', 'consultation_fee', 'assigned_role',
-            'status', 'vitals', 'prescription', 'diagnosis', 'lab_referral_details', 'pharmacy_items', 'lab_results', 'lab_charges_data',
+            'status', 'vitals', 'prescription', 'diagnosis', 'lab_referral_details', 'pharmacy_items', 'pharmacy_returns', 'lab_results', 'lab_charges_data',
             'casualty_medicines', 'casualty_services', 'casualty_observations',
             'patient_age', 'patient_age_months', 'patient_gender', 'patient_registration_number', 'patient_medical_history', 'referred_by', 'created_at', 'updated_at'
         ]
@@ -112,6 +112,7 @@ class VisitSerializer(serializers.ModelSerializer):
     lab_referral_details = serializers.SerializerMethodField()
     lab_charges_data = serializers.SerializerMethodField()
     pharmacy_items = serializers.SerializerMethodField()
+    pharmacy_returns = serializers.SerializerMethodField()
     lab_results = serializers.SerializerMethodField()
     casualty_medicines = serializers.SerializerMethodField()
     casualty_services = serializers.SerializerMethodField()
@@ -202,6 +203,39 @@ class VisitSerializer(serializers.ModelSerializer):
                     print(f"Error processing pharmacy item {item.id if item else '?'}: {e}")
                     continue
         return items
+
+    def get_pharmacy_returns(self, obj):
+        # Returns/refunds for this visit's pharmacy sales, so patient history
+        # shows what was returned alongside what was dispensed.
+        try:
+            sales = obj.pharmacy_sales.all()
+        except Exception:
+            return []
+
+        returns = []
+        for sale in sales:
+            try:
+                sale_returns = sale.returns.all()
+            except Exception:
+                continue
+
+            for ret in sale_returns:
+                try:
+                    for ret_item in ret.items.all():
+                        returns.append({
+                            "return_id": ret.id,
+                            "sale_id": sale.id,
+                            "name": ret_item.med_stock.name,
+                            "batch": ret_item.med_stock.batch_no,
+                            "qty_returned": ret_item.qty_returned,
+                            "refund_amount": float(ret_item.refund_amount) if ret_item.refund_amount else 0.0,
+                            "reason": ret.reason or "",
+                            "return_date": ret.return_date.isoformat() if ret.return_date else None,
+                        })
+                except Exception as e:
+                    print(f"Error processing pharmacy return {ret.id if ret else '?'}: {e}")
+                    continue
+        return returns
 
     def get_lab_referral_details(self, obj):
         try:
