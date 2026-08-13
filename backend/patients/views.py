@@ -140,12 +140,17 @@ class VisitViewSet(viewsets.ModelViewSet):
                 Q(lab_charges__status='PENDING')
             ).distinct()
             
-        # Support for Billing Queue (Patients assigned to billing OR patients with draft/pending invoices)
+        # Support for Billing Queue: patients waiting at Billing with no invoice
+        # created yet, OR any visit that has an actually unpaid/partial invoice.
+        # A visit tagged BILLING+OPEN whose only invoice is already PAID must
+        # NOT surface here -- otherwise a fully-paid bill can keep showing as
+        # pending indefinitely if the visit's own status is ever out of sync
+        # with its invoice (e.g. via a code path that doesn't close the visit).
         billing_queue = self.request.query_params.get('billing_queue')
         if billing_queue == 'true':
             from django.db.models import Q
             qs = qs.filter(
-                Q(assigned_role='BILLING', status='OPEN') | 
+                Q(assigned_role='BILLING', status='OPEN', invoices__isnull=True) |
                 Q(invoices__payment_status__in=['DRAFT', 'PENDING', 'PARTIAL'])
             ).distinct()
             

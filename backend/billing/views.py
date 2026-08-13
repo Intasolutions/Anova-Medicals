@@ -70,22 +70,43 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         invoice = serializer.save()
         self._deduct_stock(invoice)
-        
-        # Only close the visit if it is fully paid AND there are no pending lab charges
-        if invoice.visit:
-            visit = invoice.visit
-            if invoice.payment_status == 'PAID':
-                if visit.lab_charges.filter(status='PENDING').exists():
-                    visit.assigned_role = 'LAB'
-                    visit.status = 'OPEN'
-                else:
-                    visit.status = 'CLOSED'
-            visit.save()
+        self._close_visit_if_fully_paid(invoice)
 
     @transaction.atomic
     def perform_update(self, serializer):
         invoice = serializer.save()
         self._deduct_stock(invoice)
+        self._close_visit_if_fully_paid(invoice)
+
+    def _close_visit_if_fully_paid(self, invoice):
+        """
+        Close the visit only once the patient has paid for everything they used.
+
+        Checks the real outstanding balance on EVERY open invoice for the visit,
+        rather than trusting a single invoice's payment_status flag -- a flag can
+        say PAID while items added afterwards have pushed the total back up.
+
+        Pending lab RESULTS deliberately do not block closing: the charge for the
+        test is already on the bill (billed at order time), so once it's paid the
+        patient is square. The lab keeps the test in its own queue and sends the
+        result on afterwards.
+        """
+        from decimal import Decimal
+
+        visit = invoice.visit
+        if not visit:
+            return
+
+        for inv in visit.invoices.exclude(payment_status='CANCELLED'):
+            paid = sum(p.amount for p in inv.payments.all())
+            discount = inv.discount_amount or Decimal('0')
+            refund = inv.refund_amount or Decimal('0')
+            outstanding = inv.total_amount - discount - refund - paid
+            if outstanding > Decimal('0.5'):
+                return  # still owes money on something -- keep the visit open
+
+        visit.status = 'CLOSED'
+        visit.save()
 
     def _deduct_stock(self, invoice):
         from django.db import transaction
@@ -184,52 +205,52 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         if (current_paid + Decimal(str(proposed_total))) > balance_due + current_paid + Decimal('0.5'):
             return Response({'error': 'Total payment exceeds invoice balance due.'}, status=400)
         
+        # Recording the payments AND updating the invoice/visit off the back of them
+        # must all happen in one transaction -- otherwise the money can be recorded
+        # successfully while the visit-close step fails independently afterward,
+        # leaving a fully-paid invoice attached to a visit that never closes.
         with transaction.atomic():
             for payment in payments_list:
                 amount_val = payment.get('amount')
                 mode_val = payment.get('mode')
-                
+
                 if not amount_val:
                     continue
-                    
+
                 try:
                     amount_float = float(amount_val)
                     if amount_float <= 0:
                         continue
                 except ValueError:
                     continue
-                    
+
                 # Create Transaction
                 PaymentTransaction.objects.create(
                     invoice=invoice,
                     amount=amount_float,
                     mode=mode_val,
-                    remarks=remarks 
+                    remarks=remarks
                 )
 
-        # Recalculate Totals
-        total_paid = sum(p.amount for p in invoice.payments.all())
-        
-        # Update Invoice Status
-        # Allow small buffer for float errors (converted to Decimal)
-        discount = getattr(invoice, 'discount_amount', None) or Decimal('0')
-        refund = getattr(invoice, 'refund_amount', None) or Decimal('0')
-        if total_paid >= invoice.total_amount - discount - refund - Decimal('0.5'):
-            invoice.payment_status = 'PAID'
-            if invoice.visit and invoice.visit.lab_charges.filter(status='PENDING').exists():
-                invoice.visit.assigned_role = 'LAB'
-                invoice.visit.status = 'OPEN'
-                invoice.visit.save()
+            # Recalculate Totals
+            total_paid = sum(p.amount for p in invoice.payments.all())
+
+            # Update Invoice Status
+            # Allow small buffer for float errors (converted to Decimal)
+            discount = getattr(invoice, 'discount_amount', None) or Decimal('0')
+            refund = getattr(invoice, 'refund_amount', None) or Decimal('0')
+            if total_paid >= invoice.total_amount - discount - refund - Decimal('0.5'):
+                invoice.payment_status = 'PAID'
+            elif total_paid > 0:
+                invoice.payment_status = 'PARTIAL'
             else:
-                if invoice.visit:
-                    invoice.visit.status = 'CLOSED'
-                    invoice.visit.save()
-        elif total_paid > 0:
-            invoice.payment_status = 'PARTIAL'
-        else:
-            invoice.payment_status = 'PENDING'
-            
-        invoice.save()
+                invoice.payment_status = 'PENDING'
+
+            invoice.save()
+
+            # Close the visit only if the patient now owes nothing on ANY of
+            # their bills for this visit (shared rule -- see the helper).
+            self._close_visit_if_fully_paid(invoice)
         
         # Emit Socket Update
         try:

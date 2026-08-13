@@ -270,26 +270,9 @@ class LabChargeViewSet(viewsets.ModelViewSet):
             
             parent.save()
             
-            # Parent Billing Logic
-            if new_parent_status == 'COMPLETED' and old_parent_status != 'COMPLETED':
-                invoice = Invoice.objects.filter(visit=instance.visit).order_by('created_at').first()
-                if invoice:
-                    existing_parent_item = InvoiceItem.objects.filter(
-                        invoice=invoice,
-                        dept='LAB',
-                        description=parent.test_name
-                    ).exists()
-                    if not existing_parent_item and float(parent.amount) > 0:
-                        InvoiceItem.objects.create(
-                            invoice=invoice,
-                            dept='LAB',
-                            description=parent.test_name,
-                            qty=1,
-                            unit_price=parent.amount,
-                            amount=parent.amount
-                        )
-                        invoice.total_amount = sum(item.amount for item in invoice.items.all())
-                        invoice.save()
+            # Parent Billing Logic: removed. The parent package charge is billed
+            # when it is ordered (sync_lab_charge_to_invoice in billing/signals.py),
+            # not when its sub-tests complete.
 
         # Trigger Billing & Inventory ONLY if status CHANGED to COMPLETED
         # This prevents double-deduction/billing when treating/editing an already completed test
@@ -365,49 +348,11 @@ class LabChargeViewSet(viewsets.ModelViewSet):
             # so it also triggers on CANCELLED if it's the last test.
             
             # --- BILLING LOGIC ---
-            # 1. Get/Create Master Invoice for this Visit
-            invoice = Invoice.objects.filter(visit=instance.visit).order_by('created_at').first()
-            if not invoice:
-                invoice = Invoice.objects.create(
-                    visit=instance.visit,
-                    payment_status='PENDING',
-                    patient_name=instance.visit.patient.full_name if instance.visit.patient else 'Unknown',
-                    total_amount=0
-                )
-
-            # 2. Add Invoice Item (Only if not already billed manually by Reception/Billing)
-            existing_item = InvoiceItem.objects.filter(
-                invoice=invoice,
-                dept='LAB',
-                description=instance.test_name
-            ).exists()
-            
-            if not existing_item and float(instance.amount) > 0:
-                InvoiceItem.objects.create(
-                    invoice=invoice,
-                    dept='LAB',
-                    description=instance.test_name,
-                    qty=1,
-                    unit_price=instance.amount,
-                    amount=instance.amount
-                )
-
-            # 3. Update Invoice Total & Status
-            invoice.total_amount = sum(item.amount for item in invoice.items.all())
-            
-            paid_amount = sum(p.amount for p in invoice.payments.all())
-            discount = invoice.discount_amount or 0
-            
-            if invoice.total_amount == 0:
-                invoice.payment_status = 'PENDING'
-            elif paid_amount + discount >= invoice.total_amount:
-                invoice.payment_status = 'PAID'
-            elif paid_amount > 0:
-                invoice.payment_status = 'PARTIAL'
-            else:
-                invoice.payment_status = 'PENDING'
-                
-            invoice.save()
+            # Intentionally nothing here any more. Lab charges are billed the
+            # moment they are ordered, by sync_lab_charge_to_invoice in
+            # billing/signals.py -- not when the test completes. Billing here
+            # too would double-bill, and billing ONLY here meant a patient could
+            # pay and leave before their ordered test ever reached the bill.
 
         # Check if all tests for this visit are completed/cancelled
         if instance.status in ['COMPLETED', 'CANCELLED'] and old_status != instance.status:
