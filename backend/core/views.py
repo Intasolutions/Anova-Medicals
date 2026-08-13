@@ -86,7 +86,8 @@ class DashboardStatsView(APIView):
         module_revenue = {item['dept']: float(item['total']) for item in module_revenue_raw}
 
         data = {
-            "patients_today": visits_today, # Used to be new_patients_today, now tracks total visits
+            "patients_today": new_patients_today,  # Matches the "Total Patients" label on the dashboard card.
+            "visits_today": visits_today,
             "new_patients_today": new_patients_today,
             "active_visits": active_visits,
             "revenue_today": float(revenue_today),

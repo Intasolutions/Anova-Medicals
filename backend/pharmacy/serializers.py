@@ -453,8 +453,17 @@ class PharmacySaleSerializer(serializers.ModelSerializer):
              # If it was alrdy Billing, it stays Billing.
              if target_visit.status != 'CLOSED':
                  target_visit.assigned_role = 'BILLING'
-                 target_visit.status = 'OPEN' 
+                 target_visit.status = 'OPEN'
                  target_visit.save()
+             else:
+                 # Don't silently drop the routing step -- raising here rolls back
+                 # the whole @transaction.atomic block (stock deduction, sale, sale
+                 # items included), so the sale is never left half-completed with
+                 # no way for the patient to reach Billing.
+                 raise serializers.ValidationError(
+                     "This patient's visit was closed before the sale could be routed to Billing. "
+                     "No sale was recorded and no stock was deducted -- please check the patient's visit status and try again."
+                 )
 
         # Notify via Socket.IO
         try:

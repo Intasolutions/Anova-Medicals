@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     Users, Activity, TrendingUp, Package, Clock,
     ChevronRight, RefreshCw, Calendar, DollarSign,
-    ArrowUpRight, ArrowDownRight, Stethoscope, Wallet
+    ArrowUpRight, ArrowDownRight, Stethoscope, Wallet, AlertTriangle
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -61,6 +61,7 @@ const Dashboard = () => {
     const navigate = useNavigate();
     const [stats, setStats] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [fetchError, setFetchError] = useState(false);
     const getLocalDate = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
     const [dateRange, setDateRange] = useState({ 
         start: getLocalDate(), 
@@ -125,8 +126,12 @@ const Dashboard = () => {
                 // Real API call with date range
                 const { data } = await api.get(`/core/dashboard/stats/?start_date=${dateRange.start}&end_date=${dateRange.end}`);
                 setStats(data);
+                setFetchError(false);
             } catch (err) {
-                console.error("Dashboard data fetch failed, using fallback for UI demo");
+                console.error("Dashboard data fetch failed:", err);
+                // Don't silently show a zeroed-out dashboard -- an admin can't tell
+                // "no activity" apart from "the request failed" unless we say so.
+                setFetchError(true);
             } finally {
                 setLoading(false);
             }
@@ -215,6 +220,17 @@ const Dashboard = () => {
                 </div>
             </div>
 
+            {/* --- Fetch Error Banner --- */}
+            {fetchError && (
+                <div className="mb-8 flex items-center gap-3 bg-rose-50 border border-rose-200 text-rose-700 px-6 py-4 rounded-2xl">
+                    <AlertTriangle size={20} className="shrink-0" />
+                    <div>
+                        <p className="font-bold text-sm">Couldn't load dashboard data.</p>
+                        <p className="text-xs text-rose-600/80">The numbers below may be blank or out of date. Check your connection and try adjusting the date range to refresh.</p>
+                    </div>
+                </div>
+            )}
+
             {/* --- Key Metrics Grid --- */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <StatCard
@@ -267,7 +283,11 @@ const Dashboard = () => {
                                 <div className="p-2 bg-blue-50 rounded-xl text-blue-600"><TrendingUp size={20} /></div>
                                 <h2 className="text-xl font-black text-slate-900 tracking-tight font-outfit">Revenue Analytics</h2>
                             </div>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 ml-11">Last 7 Days Performance</p>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1 ml-11">
+                                {dateRange.start === dateRange.end
+                                    ? new Date(dateRange.start).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+                                    : `${new Date(dateRange.start).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })} — ${new Date(dateRange.end).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`}
+                            </p>
                         </div>
                         <button className="p-3 bg-slate-50 text-slate-500 rounded-xl hover:bg-slate-100 hover:text-slate-900 transition-colors">
                             <RefreshCw size={18} />

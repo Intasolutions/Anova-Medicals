@@ -14,6 +14,14 @@ import api from '../api/axios';
 import { socket } from '../socket';
 import { Search } from 'lucide-react';
 
+// Shared DD/MM/YYYY formatter -- used across every report tab's table so
+// dates are displayed consistently instead of each tab re-implementing it.
+const formatDisplayDate = (value) => {
+    const d = new Date(value);
+    if (isNaN(d)) return '—';
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+};
+
 const Reports = () => {
     const [activeReport, setActiveReport] = useState('financial');
     const [data, setData] = useState(null);
@@ -81,30 +89,110 @@ const Reports = () => {
         };
     }, [activeReport, startDate, endDate]); // Re-bind if report type or dates change
 
-    const handleExport = () => {
-        const url = `${import.meta.env.VITE_API_URL}reports/${activeReport}/?export=csv&start_date=${startDate}&end_date=${endDate}`;
-        window.open(url, '_blank');
+    const [exporting, setExporting] = useState(false);
+    const [exportError, setExportError] = useState(false);
+
+    const handleExport = async () => {
+        setExporting(true);
+        setExportError(false);
+        try {
+            // Must go through the authenticated `api` client -- a plain window.open()
+            // has no way to attach the JWT bearer token, so the backend rejects it.
+            const response = await api.get(`/reports/${activeReport}/`, {
+                params: { export: 'csv', start_date: startDate, end_date: endDate },
+                responseType: 'blob',
+            });
+
+            const disposition = response.headers['content-disposition'] || '';
+            const match = disposition.match(/filename="?([^"]+)"?/);
+            const filename = match ? match[1] : `${activeReport}_report.csv`;
+
+            const blobUrl = URL.createObjectURL(response.data);
+            const link = document.createElement('a');
+            link.href = blobUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(blobUrl);
+        } catch (err) {
+            console.error('Export failed:', err);
+            setExportError(true);
+        } finally {
+            setExporting(false);
+        }
     };
 
+    // Grouped for a predictable reading order: money first, then clinical
+    // activity, then pharmacy/lab stock movement, then supplier purchases.
     const tabs = [
-        { id: 'financial', name: 'Revenue', icon: <IndianRupee size={18} /> },
-        { id: 'opd', name: 'OPD Patients', icon: <Users size={18} /> },
-        { id: 'doctor', name: 'Doctor Report', icon: <Stethoscope size={18} /> },
-        { id: 'pharmacy', name: 'Pharmacy Sales', icon: <Pill size={18} /> },
-        { id: 'lab', name: 'Lab Tests', icon: <FlaskConical size={18} /> },
-        { id: 'pharmacy-inventory', name: 'Stock Logs', icon: <Package size={18} /> },
-        { id: 'expiry', name: 'Expiry', icon: <AlertTriangle size={18} /> },
-        { id: 'supplier-purchase', name: 'Purchases', icon: <Import size={18} /> },
-        { id: 'billing-summary', name: 'Billing', icon: <ClipboardList size={18} /> },
+        { id: 'financial', name: 'Revenue', icon: <IndianRupee size={18} />, group: 'Financial' },
+        { id: 'billing-summary', name: 'Billing', icon: <ClipboardList size={18} />, group: 'Financial' },
+        { id: 'opd', name: 'OPD Patients', icon: <Users size={18} />, group: 'Clinical' },
+        { id: 'doctor', name: 'Doctor Report', icon: <Stethoscope size={18} />, group: 'Clinical' },
+        { id: 'lab', name: 'Lab Tests', icon: <FlaskConical size={18} />, group: 'Clinical' },
+        { id: 'pharmacy', name: 'Pharmacy Sales', icon: <Pill size={18} />, group: 'Pharmacy & Stock' },
+        { id: 'pharmacy-inventory', name: 'Pharmacy Stock Logs', icon: <Package size={18} />, group: 'Pharmacy & Stock' },
+        { id: 'inventory', name: 'Lab Stock Logs', icon: <Package size={18} />, group: 'Pharmacy & Stock' },
+        { id: 'expiry', name: 'Expiry', icon: <AlertTriangle size={18} />, group: 'Pharmacy & Stock' },
+        { id: 'supplier-purchase', name: 'Purchases', icon: <Import size={18} />, group: 'Purchases' },
     ];
+
+    // Which field holds the real monetary value for each report type, if any.
+    // Tabs not listed here (OPD, Doctor Report) have no currency figure --
+    // their chart counts records instead of fabricating a fake amount.
+    const REPORT_VALUE_FIELD = {
+        financial: 'amount',
+        pharmacy: 'total',
+        lab: 'amount',
+        'supplier-purchase': 'total',
+        'billing-summary': 'amount',
+        'pharmacy-inventory': 'stock_value',
+        expiry: 'loss_value',
+    };
+    const isMonetaryReport = Object.prototype.hasOwnProperty.call(REPORT_VALUE_FIELD, activeReport);
+
+    // What "Total Revenue / Total Expense / Net Profit" actually mean on each
+    // tab -- these three labels are reused across very different underlying
+    // calculations (cash collected vs. sale price vs. potential stock loss),
+    // so the KPI row shows this description instead of leaving it ambiguous.
+    const KPI_DESCRIPTIONS = {
+        financial: {
+            revenue: 'Cash actually collected via payments in this date range (not invoice totals)',
+            expense: 'Estimated cost of goods (pharmacy purchases + lab stock) in this range',
+            profit: 'Revenue collected minus estimated cost of goods',
+        },
+        pharmacy: {
+            revenue: 'Total sale price (MRP) of medicines sold in this range',
+            expense: 'Estimated cost (PTR) of medicines sold',
+            profit: 'Sale price minus cost, per sale',
+        },
+        lab: {
+            revenue: 'Total lab test charges billed in this range',
+            expense: 'Not tracked for lab tests',
+            profit: 'Same as revenue (no cost tracked)',
+        },
+        'pharmacy-inventory': {
+            revenue: 'Total value of stock received (purchases) in this range',
+            expense: 'Total value of stock dispensed (sales) in this range',
+            profit: 'Not applicable for stock movement',
+        },
+        expiry: {
+            revenue: 'Not applicable for this report',
+            expense: 'Estimated stock value at risk from items expiring within 90 days',
+            profit: 'Negative of the potential loss',
+        },
+    };
+    const kpiDescription = KPI_DESCRIPTIONS[activeReport];
 
     const getChartData = () => {
         if (!data?.details) return [];
-        
+
+        const valueField = REPORT_VALUE_FIELD[activeReport];
         const daily = {};
         const start = new Date(startDate);
         const end = new Date(endDate);
-        
+
         // Pre-fill days to ensure we always have points for a line
         let current = new Date(start);
         let daysCount = 0;
@@ -117,14 +205,17 @@ const Reports = () => {
 
         data.details.forEach(item => {
             const day = new Date(item.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-            const val = parseFloat(item.amount) || parseFloat(item.total) || 1;
+            // Monetary reports sum the real value field (0 counts as 0, not 1).
+            // Non-monetary reports (OPD, Doctor) count one record per row.
+            const raw = valueField ? item[valueField] : undefined;
+            const val = valueField ? (Number.isFinite(parseFloat(raw)) ? parseFloat(raw) : 0) : 1;
             if (daily[day] !== undefined) {
                 daily[day] += val;
             } else {
                 daily[day] = val;
             }
         });
-        
+
         const result = Object.keys(daily).map(day => ({ name: day, value: daily[day] }));
         if (result.length === 1) {
             result.unshift({ name: 'Start', value: 0 });
@@ -164,7 +255,7 @@ const Reports = () => {
                     row.patient,
                     `₹${row.amount}`,
                     <span className="px-2 py-1 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-black">{row.status}</span>,
-                    (() => { const d = new Date(row.date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()
+                    formatDisplayDate(row.date)
                 ])
             };
         }
@@ -176,7 +267,7 @@ const Reports = () => {
                     row.patient,
                     row.doctor,
                     <span className="px-2 py-1 bg-sky-100 text-sky-700 rounded-full text-[10px] font-black">{row.status}</span>,
-                    (() => { const d = new Date(row.date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()
+                    formatDisplayDate(row.date)
                 ])
             };
         }
@@ -189,7 +280,7 @@ const Reports = () => {
                     `₹${row.total}`,
                     `₹${Number(row.cost || 0).toFixed(2)}`,
                     <span className={`font-black ${row.profit >= 0 ? 'text-emerald-500' : 'text-amber-500'}`}>₹{Number(row.profit || 0).toFixed(2)}</span>,
-                    (() => { const d = new Date(row.date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()
+                    formatDisplayDate(row.date)
                 ])
             };
         }
@@ -201,7 +292,7 @@ const Reports = () => {
                     row.patient,
                     row.test_name,
                     `₹${row.amount}`,
-                    (() => { const d = new Date(row.date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()
+                    formatDisplayDate(row.date)
                 ])
             };
         }
@@ -215,7 +306,7 @@ const Reports = () => {
                     row.qty,
                     `₹${row.cost || '0.00'}`,
                     row.performed_by || 'Unknown',
-                    (() => { const d = new Date(row.date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()
+                    formatDisplayDate(row.date)
                 ])
             };
         }
@@ -227,7 +318,7 @@ const Reports = () => {
                     row.doctor,
                     row.patient,
                     row.diagnosis,
-                    (() => { const d = new Date(row.date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })(),
+                    formatDisplayDate(row.date),
                     <Button size="xs" onClick={() => setSelectedNote(row)} className="text-[10px] h-7 px-3 bg-slate-900 rounded-lg">View Case</Button>
                 ])
             };
@@ -243,7 +334,7 @@ const Reports = () => {
                     row.qty,
                     `₹${row.cost}`,
                     `₹${Number(row.stock_value || 0).toFixed(2)}`,
-                    (() => { const d = new Date(row.date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()
+                    formatDisplayDate(row.date)
                 ])
             };
         }
@@ -253,7 +344,7 @@ const Reports = () => {
                 rows: paginatedDetails.map(row => [
                     row.item_name,
                     row.batch_no,
-                    <span className={`font-bold ${new Date(row.expiry_date) < new Date() ? 'text-red-500' : 'text-amber-500'}`}>{(() => { const d = new Date(row.expiry_date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()}</span>,
+                    <span className={`font-bold ${new Date(row.expiry_date) < new Date() ? 'text-red-500' : 'text-amber-500'}`}>{formatDisplayDate(row.expiry_date)}</span>,
                     row.qty,
                     `₹${row.cost}`,
                     <span className="text-rose-500 font-bold">₹{Number(row.loss_value || 0).toFixed(2)}</span>
@@ -268,7 +359,7 @@ const Reports = () => {
                     row.supplier,
                     `₹${row.total}`,
                     row.type,
-                    (() => { const d = new Date(row.date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()
+                    formatDisplayDate(row.date)
                 ])
             };
         }
@@ -282,11 +373,11 @@ const Reports = () => {
                     row.description,
                     row.qty,
                     `₹${row.amount}`,
-                    (() => { const d = new Date(row.date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()
+                    formatDisplayDate(row.date)
                 ])
             };
         }
-        return { headers: ['ID', 'Details', 'Date'], rows: paginatedDetails.map(row => [String(row.id || '').substring(0, 8), row.patient || 'Internal', (() => { const d = new Date(row.date); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; })()]) };
+        return { headers: ['ID', 'Details', 'Date'], rows: paginatedDetails.map(row => [String(row.id || '').substring(0, 8), row.patient || 'Internal', formatDisplayDate(row.date)]) };
     };
 
     const tableConfig = getTableConfig();
@@ -346,21 +437,26 @@ const Reports = () => {
                     </div>
                 </div>
 
-                {/* --- NAVIGATION TABS --- */}
+                {/* --- NAVIGATION TABS (grouped: Financial / Clinical / Pharmacy & Stock / Purchases) --- */}
                 <div className="w-full overflow-x-auto no-scrollbar mb-8 shrink-0">
-                    <div className="flex bg-white/80 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200 shadow-sm min-w-max">
-                        {tabs.map(tab => (
-                            <button
-                                key={tab.id}
-                                onClick={() => setActiveReport(tab.id)}
-                                className={`flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 ${activeReport === tab.id
-                                    ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/20'
-                                    : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
-                                    }`}
-                            >
-                                {tab.icon}
-                                {tab.name}
-                            </button>
+                    <div className="flex items-center bg-white/80 backdrop-blur-md p-1.5 rounded-2xl border border-slate-200 shadow-sm min-w-max">
+                        {tabs.map((tab, idx) => (
+                            <React.Fragment key={tab.id}>
+                                {idx > 0 && tab.group !== tabs[idx - 1].group && (
+                                    <div className="w-px h-6 bg-slate-200 mx-1.5 shrink-0" />
+                                )}
+                                <button
+                                    onClick={() => setActiveReport(tab.id)}
+                                    title={tab.group}
+                                    className={`flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider transition-all duration-300 ${activeReport === tab.id
+                                        ? 'bg-slate-900 text-white shadow-lg shadow-slate-900/20'
+                                        : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'
+                                        }`}
+                                >
+                                    {tab.icon}
+                                    {tab.name}
+                                </button>
+                            </React.Fragment>
                         ))}
                     </div>
                 </div>
@@ -377,6 +473,7 @@ const Reports = () => {
                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Revenue</p>
                                 </div>
                                 <h3 className="text-4xl font-black font-outfit tracking-tight text-slate-900">₹{Number(data?.total_revenue || 0).toFixed(2)}</h3>
+                                {kpiDescription && <p className="text-[11px] text-slate-400 font-medium mt-2 leading-snug">{kpiDescription.revenue}</p>}
                             </div>
                             <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-xl shadow-slate-200/50 flex flex-col justify-center">
                                 <div className="flex items-center gap-3 mb-2">
@@ -384,6 +481,7 @@ const Reports = () => {
                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Expense</p>
                                 </div>
                                 <h3 className="text-4xl font-black font-outfit tracking-tight text-slate-900">₹{Number(data?.total_expense || 0).toFixed(2)}</h3>
+                                {kpiDescription && <p className="text-[11px] text-slate-400 font-medium mt-2 leading-snug">{kpiDescription.expense}</p>}
                             </div>
                             <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 rounded-[2rem] shadow-xl shadow-slate-900/30 flex flex-col justify-center text-white relative overflow-hidden group">
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16 blur-2xl group-hover:bg-white/10 transition-all duration-700"></div>
@@ -392,6 +490,7 @@ const Reports = () => {
                                     <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Net Profit</p>
                                 </div>
                                 <h3 className={`text-4xl font-black font-outfit tracking-tight relative z-10 ${data?.net_profit >= 0 ? 'text-emerald-400' : 'text-amber-400'}`}>₹{Number(data?.net_profit || 0).toFixed(2)}</h3>
+                                {kpiDescription && <p className="text-[11px] text-slate-400 font-medium mt-2 leading-snug relative z-10">{kpiDescription.profit}</p>}
                             </div>
                         </div>
                     ) : (
@@ -399,7 +498,9 @@ const Reports = () => {
                             <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-32 -mt-32 blur-3xl group-hover:bg-white/10 transition-all duration-700"></div>
                             <div className="flex items-center gap-3 mb-4 relative z-10">
                                 <div className="p-3 bg-white/10 text-white rounded-2xl backdrop-blur-sm border border-white/10"><ClipboardList size={24}/></div>
-                                <p className="text-xs font-black text-slate-300 uppercase tracking-widest">Total Records</p>
+                                <p className="text-xs font-black text-slate-300 uppercase tracking-widest">
+                                    {tabs.find(t => t.id === activeReport)?.name || 'Total'} Records
+                                </p>
                             </div>
                             <div className="flex items-end gap-4 relative z-10">
                                 <h3 className="text-6xl font-black font-outfit tracking-tighter text-white">{data?.details?.length || 0}</h3>
@@ -414,10 +515,12 @@ const Reports = () => {
                     <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xl shadow-slate-200/50 flex flex-col">
                         <div className="flex justify-between items-center mb-6">
                             <h3 className="font-black text-slate-900 text-lg flex items-center gap-3 uppercase tracking-tighter">
-                                <BarChart3 size={20} className="text-blue-500" /> Growth Trajectory
+                                <BarChart3 size={20} className="text-blue-500" /> {isMonetaryReport ? 'Revenue Trend' : 'Daily Record Count'}
                             </h3>
                             <div className="flex gap-2">
-                                <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-3 py-1 rounded-lg uppercase tracking-wide">Daily Trend</span>
+                                <span className="text-[10px] font-bold bg-blue-50 text-blue-600 px-3 py-1 rounded-lg uppercase tracking-wide">
+                                    {isMonetaryReport ? 'Amount / Day' : 'Records / Day'}
+                                </span>
                             </div>
                         </div>
                         <div className="w-full h-[250px]">
@@ -436,6 +539,7 @@ const Reports = () => {
                                         contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 20px 25px -5px rgb(0 0 0 / 0.1)', padding: '16px', fontFamily: 'sans-serif' }}
                                         itemStyle={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a' }}
                                         labelStyle={{ fontSize: '10px', color: '#64748b', fontWeight: 'bold', marginBottom: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}
+                                        formatter={(val) => [isMonetaryReport ? `₹${Number(val).toLocaleString()}` : `${val} record${val === 1 ? '' : 's'}`, isMonetaryReport ? 'Amount' : 'Count']}
                                     />
                                     <Area type="monotone" dataKey="value" stroke="#0ea5e9" strokeWidth={4} fillOpacity={1} fill="url(#colorValue)" />
                                 </AreaChart>
@@ -460,8 +564,17 @@ const Reports = () => {
                                         className="pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all shadow-sm w-64"
                                     />
                                 </div>
-                                <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200 transition-all shadow-sm">
-                                    <Download size={14} /> Export CSV
+                                <button
+                                    onClick={handleExport}
+                                    disabled={exporting}
+                                    className={`flex items-center gap-2 px-4 py-2 bg-white border rounded-xl text-xs font-bold transition-all shadow-sm disabled:opacity-60 disabled:cursor-not-allowed ${
+                                        exportError
+                                            ? 'border-rose-200 text-rose-600 hover:bg-rose-50'
+                                            : 'border-slate-200 text-slate-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200'
+                                    }`}
+                                >
+                                    <Download size={14} />
+                                    {exporting ? 'Exporting…' : exportError ? 'Export Failed — Retry' : 'Export CSV'}
                                 </button>
                             </div>
                         </div>

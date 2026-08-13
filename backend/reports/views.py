@@ -21,14 +21,29 @@ class BaseReportView(APIView):
     def get_date_range(self, request):
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
-        
+
         # If dates are empty strings or None, default to today
         if not start_date or start_date == 'null' or start_date == 'undefined':
             start_date = timezone.now().date()
         if not end_date or end_date == 'null' or end_date == 'undefined':
             end_date = timezone.now().date()
-            
+
+        # Guard against a malformed (but non-empty) date string reaching a
+        # queryset filter -- Django raises a raw ValidationError there that
+        # DRF doesn't catch, producing a 500 instead of a usable response.
+        start_date = self._safe_parse_date(start_date)
+        end_date = self._safe_parse_date(end_date)
+
         return str(start_date), str(end_date)
+
+    @staticmethod
+    def _safe_parse_date(value):
+        if isinstance(value, str):
+            try:
+                return datetime.strptime(value, '%Y-%m-%d').date()
+            except ValueError:
+                return timezone.now().date()
+        return value
 
     def export_csv(self, filename, headers, data):
         response = HttpResponse(content_type='text/csv')
@@ -49,7 +64,7 @@ class OPDReportView(BaseReportView):
         ).select_related('patient', 'doctor')
 
         if request.query_params.get('export') == 'csv':
-            data = [[v.id, v.patient.name, v.doctor.username if v.doctor else "N/A", v.status, v.created_at] for v in visits]
+            data = [[v.id, v.patient.full_name, v.doctor.username if v.doctor else "N/A", v.status, v.created_at] for v in visits]
             return self.export_csv("opd_report", ["Visit ID", "Patient", "Doctor", "Status", "Date"], data)
         
         details = [{
@@ -112,12 +127,9 @@ class FinancialReportView(BaseReportView):
         invoices = Invoice.objects.filter(
             payments__in=payments
         ).distinct().select_related('visit__patient').prefetch_related('payments')
-        
-        print(f"DEBUG: FinancialReport {start_date} to {end_date}", flush=True)
-        print(f"DEBUG: Invoices found: {invoices.count()}", flush=True)
-        
+
         # Independent Pharmacy Sales (not linked to visit, or visit not yet closed)
-        # To avoid double counting, we only take sales where visit is null 
+        # To avoid double counting, we only take sales where visit is null
         # (Assuming visit-linked pharmacy items are in the main Invoice)
         pharmacy_sales = PharmacySale.objects.filter(
             created_at__date__gte=start_date,
@@ -126,11 +138,9 @@ class FinancialReportView(BaseReportView):
         )
 
         billing_revenue = payments.aggregate(total=Sum('amount'))['total'] or 0
-        
-        print(f"DEBUG: Billing Revenue (Actual Collected): {billing_revenue}", flush=True)
 
         pharmacy_gross = pharmacy_sales.aggregate(total=Sum('total_amount'))['total'] or 0
-        
+
         # Deduct refunds for independent pharmacy sales
         # We find returns linked to the sales in this period
         pharmacy_refunds = PharmacyReturn.objects.filter(
@@ -138,9 +148,7 @@ class FinancialReportView(BaseReportView):
         ).aggregate(total=Sum('total_refund_amount'))['total'] or 0
 
         pharmacy_revenue = float(pharmacy_gross) - float(pharmacy_refunds)
-        total_revenue = billing_revenue + pharmacy_revenue
-        
-        print(f"DEBUG: Total Revenue: {total_revenue}", flush=True)
+        total_revenue = float(billing_revenue) + pharmacy_revenue
 
         # 2. EXPENSES (COGS)
         # Pharmacy: Hybrid Approach
@@ -196,24 +204,29 @@ class FinancialReportView(BaseReportView):
         total_expense = total_pharmacy_expense + float(lab_invoice_total) + float(lab_direct_stock_total)
         net_profit = total_revenue - total_expense
 
-        if request.query_params.get('export') == 'csv':
-            data = [[i.id, i.visit.patient.full_name if i.visit and i.visit.patient else i.patient_name, i.total_amount, sum(p.amount for p in i.payments.all()), i.payment_status, i.created_at] for i in invoices]
-            return self.export_csv("financial_report", ["Invoice ID", "Patient", "Total Amount", "Amount Paid", "Status", "Date"], data)
-        
+        # Amount collected for each invoice WITHIN the selected period -- this is the
+        # single source of truth for the "amount" figure below, shared by both the
+        # on-screen table and the CSV export so they can never disagree.
         details = []
         for i in invoices:
             # Filter prefetched payments in Python to avoid N+1 queries
             period_payments = [
-                p.amount for p in i.payments.all() 
+                p.amount for p in i.payments.all()
                 if str(p.created_at.date()) >= start_date and str(p.created_at.date()) <= end_date
             ]
+            patient_name = i.visit.patient.full_name if i.visit and i.visit.patient else (i.patient_name or "Walk-in")
             details.append({
                 "id": str(i.id)[:8],
-                "patient": i.visit.patient.full_name if i.visit and i.visit.patient else (i.patient_name or "Walk-in"),
+                "invoice_id": i.id,
+                "patient": patient_name,
                 "amount": sum(period_payments),
                 "status": i.get_payment_status_display(),
                 "date": i.created_at
             })
+
+        if request.query_params.get('export') == 'csv':
+            data = [[d["invoice_id"], d["patient"], d["amount"], d["status"], d["date"]] for d in details]
+            return self.export_csv("financial_report", ["Invoice ID", "Patient", "Amount Collected", "Status", "Date"], data)
 
         return Response({
             "start_date": start_date,
@@ -372,19 +385,27 @@ class ProfitAnalyticsView(APIView):
             created_at__lte=current_month_end
         ).aggregate(total=Sum('amount'))['total'] or 0
         
-        # Calculate refunds for current month
+        # Calculate refunds and discounts for current month -- total_amount is the
+        # pre-discount gross figure (see billing/serializers.py get_balance_due),
+        # so discount_amount must be subtracted too, not just refund_amount.
         current_billing_refunds = Invoice.objects.filter(
             created_at__gte=current_month_start,
             created_at__lte=current_month_end
         ).aggregate(total=Sum('refund_amount'))['total'] or 0
-        
+
+        current_billing_discounts = Invoice.objects.filter(
+            created_at__gte=current_month_start,
+            created_at__lte=current_month_end,
+            payment_status='PAID'
+        ).aggregate(total=Sum('discount_amount'))['total'] or 0
+
         current_pharmacy_refunds = PharmacyReturn.objects.filter(
             sale__created_at__gte=current_month_start,
             sale__created_at__lte=current_month_end
         ).aggregate(total=Sum('total_refund_amount'))['total'] or 0
 
         # Net Revenues
-        current_billing = float(current_billing) - float(current_billing_refunds)
+        current_billing = float(current_billing) - float(current_billing_refunds) - float(current_billing_discounts)
         current_pharmacy = float(current_pharmacy) - float(current_pharmacy_refunds)
         
         current_total = current_billing + current_pharmacy + float(current_lab)
@@ -400,8 +421,14 @@ class ProfitAnalyticsView(APIView):
             created_at__gte=previous_month_start,
             created_at__lte=previous_month_end
         ).aggregate(total=Sum('refund_amount'))['total'] or 0
-        
-        previous_billing = float(previous_billing) - float(previous_billing_refunds)
+
+        previous_billing_discounts = Invoice.objects.filter(
+            created_at__gte=previous_month_start,
+            created_at__lte=previous_month_end,
+            payment_status='PAID'
+        ).aggregate(total=Sum('discount_amount'))['total'] or 0
+
+        previous_billing = float(previous_billing) - float(previous_billing_refunds) - float(previous_billing_discounts)
         
         previous_pharmacy = PharmacySale.objects.filter(
             created_at__gte=previous_month_start,

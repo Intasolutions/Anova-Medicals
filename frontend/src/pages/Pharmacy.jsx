@@ -651,9 +651,15 @@ const Pharmacy = () => {
             payment_status: 'PENDING' 
         };
         try {
+            // The backend records the sale, deducts stock, AND routes the visit to
+            // Billing all inside one atomic transaction -- either all of it happens
+            // or none of it does. We must not make a second, separate request to
+            // route the visit: if that second call failed, the sale above would
+            // already be irreversibly committed with no safe way to retry just the
+            // billing handoff (re-submitting would double-sell the same items).
             const { data } = await api.post('pharmacy/sales/', payload);
             setLastSale({ ...data, patient: selectedPatient || { full_name: walkInDetails.name + ' (Walk-In)' }, doctor: selectedDoctor, details: cart });
-            if (visitId) { await api.patch(`reception/visits/${visitId}/`, { status: 'OPEN', assigned_role: 'BILLING' }); fetchPendingVisits(); }
+            fetchPendingVisits();
             setCart([]); setMedSearch(''); setMedResults([]); setSelectedPatient(null); setSelectedDoctor(null); setIsWalkIn(false); setWalkInDetails({ name: '', phone: '' });
             setShowVerificationModal(false);
             showToast('success', 'Sent to Billing.');
