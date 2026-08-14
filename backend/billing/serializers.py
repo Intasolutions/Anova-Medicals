@@ -100,7 +100,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
                     InvoiceItem.objects.create(invoice=invoice, **item_data)
 
             # Recalculate total amount
-            invoice.total_amount = sum(item.amount for item in invoice.items.all())
+            invoice.recalculate_total(save=False)
             self._check_discount_not_exceeding_total(invoice)
 
             # Adjust payment status based on new total
@@ -145,7 +145,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
                 InvoiceItem.objects.create(invoice=invoice, **merged_items[desc])
 
             # Recalculate total amount to ensure accuracy after merging
-            invoice.total_amount = sum(item.amount for item in invoice.items.all())
+            invoice.recalculate_total(save=False)
             self._check_discount_not_exceeding_total(invoice)
             invoice.save()
                 
@@ -208,7 +208,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
         # Always recompute from the actual line items -- this is the source of truth,
         # not whatever the client sent, and must reflect any items sync above.
-        instance.total_amount = sum(item.amount for item in instance.items.all())
+        instance.recalculate_total(save=False)
         self._check_discount_not_exceeding_total(instance)
         instance.save()
 

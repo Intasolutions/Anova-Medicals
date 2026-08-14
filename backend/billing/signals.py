@@ -1,3 +1,4 @@
+from django.db.models import Q
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from patients.models import Visit
@@ -29,26 +30,44 @@ def sync_lab_charge_to_invoice(sender, instance, created, **kwargs):
     if float(amount) <= 0:
         return
 
+    # This charge's line on ANY bill for this visit -- paid ones included.
+    # Matching on item_id ties the line to this exact charge; the description
+    # fallback catches lines created before item_id was recorded.
+    this_charges_line = InvoiceItem.objects.filter(
+        invoice__visit=instance.visit, dept='LAB'
+    ).filter(
+        Q(item_id=instance.id)
+        | Q(item_id__isnull=True, description=instance.test_name)
+    )
+
+    # A cancelled test must come back off the bill -- but only off a bill that
+    # is still open. Money already collected is not silently reversed here.
+    if instance.status == 'CANCELLED':
+        removable = this_charges_line.filter(
+            invoice__payment_status__in=OPEN_INVOICE_STATUSES
+        )
+        affected = list({item.invoice for item in removable})
+        if removable.delete()[0]:
+            for inv in affected:
+                inv.recalculate_total()
+        return
+
+    # Already on a bill somewhere? Nothing to do. This is the important guard:
+    # the signal re-fires on every status change (DRAWN, RECEIVED, COMPLETED...),
+    # and without this an already-paid charge would look "unbilled" and get put
+    # on a brand new invoice each time the lab moved the test along.
+    if this_charges_line.exists():
+        return
+
     open_invoice = Invoice.objects.filter(
         visit=instance.visit,
         payment_status__in=OPEN_INVOICE_STATUSES,
     ).order_by('created_at').first()
 
-    # A cancelled test must come back off the bill.
-    if instance.status == 'CANCELLED':
-        if open_invoice:
-            deleted, _ = InvoiceItem.objects.filter(
-                invoice=open_invoice, dept='LAB', description=instance.test_name
-            ).delete()
-            if deleted:
-                open_invoice.total_amount = sum(i.amount for i in open_invoice.items.all())
-                open_invoice.save()
-        return
-
     # No open bill to add to -- either this visit has none yet (e.g. a walk-in
     # lab patient with no consultation), or the previous one is already settled
-    # and this is a new charge the patient now owes for. Either way it needs a
-    # bill of its own so it can't go uncollected.
+    # and this is a genuinely new charge the patient now owes for. Either way it
+    # needs a bill of its own so it can't go uncollected.
     if not open_invoice:
         open_invoice = Invoice.objects.create(
             visit=instance.visit,
@@ -58,20 +77,16 @@ def sync_lab_charge_to_invoice(sender, instance, created, **kwargs):
             payment_status='PENDING',
         )
 
-    already_billed = InvoiceItem.objects.filter(
-        invoice=open_invoice, dept='LAB', description=instance.test_name
-    ).exists()
-    if not already_billed:
-        InvoiceItem.objects.create(
-            invoice=open_invoice,
-            dept='LAB',
-            description=instance.test_name,
-            qty=1,
-            unit_price=amount,
-            amount=amount,
-        )
-        open_invoice.total_amount = sum(i.amount for i in open_invoice.items.all())
-        open_invoice.save()
+    InvoiceItem.objects.create(
+        invoice=open_invoice,
+        item_id=instance.id,
+        dept='LAB',
+        description=instance.test_name,
+        qty=1,
+        unit_price=amount,
+        amount=amount,
+    )
+    open_invoice.recalculate_total()
 
 @receiver(post_save, sender=Visit)
 def create_or_update_consultation_invoice(sender, instance, created, **kwargs):
@@ -82,6 +97,7 @@ def create_or_update_consultation_invoice(sender, instance, created, **kwargs):
         # Create new invoice
         invoice = Invoice.objects.create(
             visit=instance,
+            patient=instance.patient,
             patient_name=instance.patient.full_name,
             total_amount=amount,
             payment_status='PENDING'
@@ -129,7 +145,7 @@ def create_or_update_consultation_invoice(sender, instance, created, **kwargs):
                     cons_item.delete()
 
             # Update Invoice Total
-            invoice.total_amount = sum(item.amount for item in invoice.items.all())
+            invoice.recalculate_total(save=False)
 
             # Adjust payment status -- must subtract refund_amount too, matching
             # the same balance formula used everywhere else (get_balance_due,

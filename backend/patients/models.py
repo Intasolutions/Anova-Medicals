@@ -100,9 +100,20 @@ class Visit(BaseModel):
         visit_date = created_at.date()
         seven_days_ago_date = visit_date - timedelta(days=7)
         
-        # Check for a previous paid consultation with the SAME doctor within the last 7 calendar days
+        # Look back over the patient's last 7 days for a consultation they
+        # ACTUALLY PAID FOR with this same doctor.
+        #
+        # items__unit_price__gt=0 is what makes the window behave correctly: a
+        # free follow-up is billed as a 0-rupee consultation line, so it is not
+        # counted here and therefore cannot extend the free period. Pay on day 1,
+        # free on day 6, and day 9 is charged again -- because day 9 looks back
+        # to day 2 and only finds the day-6 visit, which was free.
+        #
+        # Matched via visit__patient rather than the invoice's own patient field:
+        # the auto-created consultation invoice historically left `patient` empty,
+        # so filtering on it found nothing and every follow-up was charged.
         recent_paid_consultation = Invoice.objects.filter(
-            patient=self.patient,
+            visit__patient=self.patient,
             payment_status__in=['PAID', 'PARTIAL'],
             visit__created_at__date__gte=seven_days_ago_date,
             visit__created_at__lt=created_at,

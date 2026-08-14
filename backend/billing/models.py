@@ -17,12 +17,39 @@ class Invoice(BaseModel):
 
     def save(self, *args, **kwargs):
         if not self.invoice_number:
-            last_invoice = Invoice.objects.exclude(invoice_number__isnull=True).exclude(invoice_number="").order_by('created_at').last()
-            if not last_invoice or not last_invoice.invoice_number or not last_invoice.invoice_number.isdigit():
-                self.invoice_number = "20001"
-            else:
-                self.invoice_number = str(int(last_invoice.invoice_number) + 1)
+            # Take the HIGHEST existing number, not the most recently created row.
+            # Ordering by created_at picks the newest row, whose number is not
+            # necessarily the largest -- when they fall out of order that hands
+            # back an already-used number and the save fails on the unique
+            # constraint, which the staff member just sees as an error.
+            existing = Invoice.objects.exclude(
+                invoice_number__isnull=True
+            ).exclude(invoice_number="").values_list('invoice_number', flat=True)
+            numbers = [int(n) for n in existing if str(n).isdigit()]
+            self.invoice_number = str(max(numbers) + 1) if numbers else "20001"
         super().save(*args, **kwargs)
+
+    def recalculate_total(self, save=True):
+        """
+        Re-add this invoice's line items and store the result.
+
+        Deliberately queries InvoiceItem directly instead of using
+        ``self.items.all()``. The viewset loads invoices with
+        ``prefetch_related('items')``, which caches the item list on the
+        instance -- so after adding or deleting rows, ``self.items.all()``
+        returns the list as it was BEFORE the change and the total comes out
+        stale (e.g. a Rs631.32 bill saving as Rs500).
+        """
+        from django.db.models import Sum
+        total = (
+            InvoiceItem.objects.filter(invoice=self)
+            .aggregate(total=Sum('amount'))['total']
+            or 0
+        )
+        self.total_amount = total
+        if save:
+            self.save()
+        return total
 
     def __str__(self):
         return f"{self.invoice_number or self.id} - {self.total_amount}"

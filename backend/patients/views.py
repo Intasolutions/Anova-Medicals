@@ -342,7 +342,11 @@ class VisitViewSet(viewsets.ModelViewSet):
             ]
             Notification.objects.bulk_create(notifications)
 
+    @transaction.atomic
     def perform_update(self, serializer):
+        # Atomic: this path can also create LabCharges (which in turn create
+        # invoice lines) and re-route the visit. All of it must land together or
+        # not at all, so a charge can never exist without its bill entry.
         old_doctor = serializer.instance.doctor
         old_role = serializer.instance.assigned_role
         

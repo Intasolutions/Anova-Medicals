@@ -1503,15 +1503,32 @@ const Billing = ({ dateRange: externalDateRange }) => {
                         WAITING
                       </span>
                     )}
-                    <div
-                      className={`flex items-center gap-1 text-xs font-bold ${item.queue_type === "invoice" ? "text-orange-400 group-hover:text-orange-600" : "text-slate-400 group-hover:text-blue-500"}`}
-                    >
-                      <span>
-                        {item.queue_type === "invoice"
-                          ? "Collect Payment"
-                          : "Bill Now"}
-                      </span>
-                      <ChevronRight size={14} />
+                    <div className="flex items-center gap-2">
+                      {/* Open the full itemised bill (same detail view as the
+                          table's action), without triggering the card's own
+                          click handler underneath. */}
+                      {item.queue_type === "invoice" && (
+                        <button
+                          title="View / print full bill"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEditInvoice(item);
+                          }}
+                          className="text-slate-400 hover:text-blue-600 p-1.5 rounded-lg hover:bg-blue-50 border border-slate-100"
+                        >
+                          <Printer size={14} />
+                        </button>
+                      )}
+                      <div
+                        className={`flex items-center gap-1 text-xs font-bold ${item.queue_type === "invoice" ? "text-orange-400 group-hover:text-orange-600" : "text-slate-400 group-hover:text-blue-500"}`}
+                      >
+                        <span>
+                          {item.queue_type === "invoice"
+                            ? "Collect Payment"
+                            : "Bill Now"}
+                        </span>
+                        <ChevronRight size={14} />
+                      </div>
                     </div>
                   </div>
                 </div>

@@ -2,7 +2,7 @@ from rest_framework import viewsets, permissions, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db import models
+from django.db import models, transaction
 
 from billing.models import Invoice, InvoiceItem
 from .models import (
@@ -220,7 +220,18 @@ class LabChargeViewSet(viewsets.ModelViewSet):
             
         return response
 
+    @transaction.atomic
+    def perform_create(self, serializer):
+        # Atomic so that a lab charge and the invoice line it generates (via
+        # sync_lab_charge_to_invoice) are committed together -- a charge that
+        # exists without its bill entry is money nobody will ever collect.
+        serializer.save()
+
+    @transaction.atomic
     def perform_update(self, serializer):
+        # This method deducts lab inventory, updates billing and re-routes the
+        # visit. Without a transaction a late failure would leave stock already
+        # deducted and the invoice already changed, with the visit never routed.
         # Capture old status from the instance before it is updated
         old_status = serializer.instance.status
         
