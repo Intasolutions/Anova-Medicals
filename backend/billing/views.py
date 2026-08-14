@@ -196,9 +196,15 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
         if proposed_total <= 0:
             if balance_due <= Decimal('0'):
-                if invoice.payment_status != 'PAID':
-                    invoice.payment_status = 'PAID'
-                    invoice.save(update_fields=['payment_status'])
+                # Nothing left to collect -- e.g. a discount that covers the whole
+                # bill. Mark it paid AND close the visit, exactly as a real payment
+                # would; otherwise the patient owes nothing but sits in the pending
+                # queue forever.
+                with transaction.atomic():
+                    if invoice.payment_status != 'PAID':
+                        invoice.payment_status = 'PAID'
+                        invoice.save(update_fields=['payment_status'])
+                    self._close_visit_if_fully_paid(invoice)
                 return Response({'status': 'success', 'message': 'Invoice marked as paid'})
             return Response({'error': 'Payment amount must be greater than zero.'}, status=400)
 
