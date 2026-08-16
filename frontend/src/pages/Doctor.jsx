@@ -262,6 +262,8 @@ const Doctor = () => {
     const [viewingHistory, setViewingHistory] = useState(null);
     const [doctorsList, setDoctorsList] = useState([]);
     const [saving, setSaving] = useState(false);
+    const [savingProgress, setSavingProgress] = useState(false);
+    const [lastSavedAt, setLastSavedAt] = useState(null);
 
     const [notes, setNotes] = useState({ complaints: '', examination: '', diagnosis: '', notes: '' });
     const [vitals, setVitals] = useState({ bp: '', temp: '', pulse: '', spo2: '', weight: '', grbs: '' });
@@ -280,6 +282,9 @@ const Doctor = () => {
     const [existingNoteId, setExistingNoteId] = useState(null);
     const [localSearch, setLocalSearch] = useState('');
     const activeVisitRef = useRef(null);
+    // Holds the draft for the patient currently on screen, so it can be written
+    // out immediately when switching away rather than waiting on the debounce.
+    const pendingDraftRef = useRef(null);
 
     // ── Qty Calculator ────────────────────────────────────────────────────────
     const calculateQty = (dosage, duration) => {
@@ -541,6 +546,68 @@ const Doctor = () => {
     // Human-readable referral label
     const referralLabel = { LAB: 'Lab', PHARMACY: 'Pharmacy', DOCTOR: 'Another Doctor', BILLING: 'Billing', NONE: 'Discharge' };
 
+    // Save whatever has been entered so far to the SERVER, without any of the
+    // completion validations. Lets a doctor park a half-finished consultation
+    // and move to another patient without losing work -- the browser draft
+    // alone is not enough (it is per-browser, and a 1s debounce can be
+    // cancelled by switching patients before it fires).
+    const handleSaveProgress = async ({ silent = false } = {}) => {
+        if (!selectedVisit || savingProgress) return false;
+        const vId = selectedVisit.v_id || selectedVisit.id;
+        setSavingProgress(true);
+        try {
+            // Medical history lives on the patient, not the note -- save it too,
+            // and surface a failure instead of only logging it.
+            if (medicalHistory !== (selectedVisit.patient_medical_history || '')) {
+                await api.patch(`/reception/patients/${selectedVisit.patient}/`, { medical_history: medicalHistory });
+            }
+
+            const prescriptionObj = {};
+            selectedMeds.forEach(m => {
+                let desc = `${m.dosage} | ${m.duration} | Qty: ${m.count}`;
+                if (m.note) desc += ` | Note: ${m.note}`;
+                prescriptionObj[m.name] = desc;
+            });
+
+            const payload = {
+                visit: vId,
+                diagnosis: notes.diagnosis || '',
+                notes: notes.notes || '',
+                complaints: notes.complaints || '',
+                examination: notes.examination || '',
+                prescription: prescriptionObj,
+                lab_referral_details: selectedTests.map(t => t.name).join(', '),
+            };
+
+            let noteId = existingNoteId;
+            if (noteId) {
+                await api.patch(`/medical/doctor-notes/${noteId}/`, payload);
+            } else {
+                const { data } = await api.post('/medical/doctor-notes/', payload);
+                noteId = data?.note_id || data?.id;
+                if (noteId) setExistingNoteId(noteId);
+            }
+
+            // Vitals sit on the visit itself.
+            await api.patch(`/reception/visits/${vId}/`, { vitals });
+
+            // Keep the local draft in step so a later reload restores the same thing.
+            localStorage.setItem(`doctor_draft_visit_${vId}`, JSON.stringify({
+                notes, vitals, selectedMeds, selectedTests, referral, referredDoctorId, medicalHistory,
+            }));
+
+            setLastSavedAt(new Date());
+            if (!silent) showToast('success', 'Progress saved');
+            return true;
+        } catch (e) {
+            console.error('save progress failed:', e);
+            showToast('error', 'Could not save progress. Please try again before switching patients.');
+            return false;
+        } finally {
+            setSavingProgress(false);
+        }
+    };
+
     const handleSaveConsultation = async () => {
         if (!selectedVisit || saving) return;
 
@@ -699,16 +766,27 @@ const Doctor = () => {
     }, [user, page, globalSearch, selectedVisit]);
 
     useEffect(() => {
+        // Flush the OUTGOING patient's draft synchronously before anything is
+        // reset below. The debounced autosave may not have fired yet, and the
+        // reset that follows would otherwise destroy those values first --
+        // which is exactly how work was being lost when switching quickly.
+        const pending = pendingDraftRef.current;
+        if (pending && pending.key !== `doctor_draft_visit_${selectedVisit?.v_id || selectedVisit?.id}`) {
+            try { localStorage.setItem(pending.key, JSON.stringify(pending.data)); } catch (e) { /* ignore */ }
+            pendingDraftRef.current = null;
+        }
+
         if (!selectedVisit) { setPatientHistory([]); return; }
         const currentVId = selectedVisit.v_id || selectedVisit.id;
         activeVisitRef.current = currentVId;
-        
+
         setNotes({ complaints: '', examination: '', diagnosis: '', notes: '' });
         setVitals(selectedVisit.vitals && Object.values(selectedVisit.vitals).some(Boolean)
             ? selectedVisit.vitals : { bp: '', temp: '', pulse: '', spo2: '', weight: '', grbs: '' });
         setMedicalHistory(selectedVisit.patient_medical_history || '');
         setSelectedMeds([]); setSelectedTests([]); setReferral('NONE'); setReferredDoctorId('');
         setExistingNoteId(null); setMedSearch(''); setMedResults([]); setLabSearch(''); setLabResults([]);
+        setLastSavedAt(null);
 
         // Try restoring draft first
         const draftKey = `doctor_draft_visit_${selectedVisit.v_id || selectedVisit.id}`;
@@ -727,6 +805,9 @@ const Doctor = () => {
                 if (draft.selectedTests) setSelectedTests(draft.selectedTests);
                 if (draft.referral) setReferral(draft.referral);
                 if (draft.referredDoctorId) setReferredDoctorId(draft.referredDoctorId);
+                // Restore the doctor's edited medical history rather than
+                // silently falling back to the stored patient record.
+                if (draft.medicalHistory !== undefined) setMedicalHistory(draft.medicalHistory);
                 draftLoaded = true;
             } catch (e) { console.error('Error parsing draft', e); }
         }
@@ -740,14 +821,20 @@ const Doctor = () => {
         if (!selectedVisit) return;
         const vId = selectedVisit.v_id || selectedVisit.id;
         const draftKey = `doctor_draft_visit_${vId}`;
-        const dataToSave = { notes, vitals, selectedMeds, selectedTests, referral, referredDoctorId };
-        
+        // medicalHistory MUST be included -- it was previously left out entirely,
+        // so it was lost every single time the doctor switched patients.
+        const dataToSave = { notes, vitals, selectedMeds, selectedTests, referral, referredDoctorId, medicalHistory };
+
+        // Keep a live copy so the patient-switch handler can flush the CURRENT
+        // values even if this debounce has not fired yet.
+        pendingDraftRef.current = { key: draftKey, data: dataToSave };
+
         const timer = setTimeout(() => {
             localStorage.setItem(draftKey, JSON.stringify(dataToSave));
-        }, 1000); // 1s debounce
-        
+        }, 400); // short debounce -- long gaps lose keystrokes on a fast switch
+
         return () => clearTimeout(timer);
-    }, [notes, vitals, selectedMeds, selectedTests, referral, referredDoctorId, selectedVisit]);
+    }, [notes, vitals, selectedMeds, selectedTests, referral, referredDoctorId, medicalHistory, selectedVisit]);
 
     const totalPages = Math.ceil((visitsData.count || 0) / 10);
 
@@ -865,13 +952,16 @@ const Doctor = () => {
                     {selectedVisit ? (
                         <>
                             {/* Patient Header */}
-                            <div className="px-8 py-5 border-b border-slate-100 bg-slate-50/30 flex justify-between items-center shrink-0 flex-wrap gap-3">
-                                <div className="flex items-center gap-4">
+                            <div className="px-8 py-5 border-b border-slate-100 bg-slate-50/30 flex justify-between items-center shrink-0 gap-4">
+                                {/* min-w-0 lets this block shrink instead of shoving the
+                                    action buttons onto a second line when the patient
+                                    name or medical history is long. */}
+                                <div className="flex items-center gap-4 min-w-0 flex-1">
                                     <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shrink-0">
                                         <User size={24} />
                                     </div>
-                                    <div>
-                                        <h2 className="text-xl font-bold text-slate-900">{selectedVisit.patient_name}</h2>
+                                    <div className="min-w-0">
+                                        <h2 className="text-xl font-bold text-slate-900 truncate">{selectedVisit.patient_name}</h2>
                                         <div className="flex items-center gap-2 text-xs font-bold text-slate-500 mt-0.5 uppercase flex-wrap">
                                             <span>ID: {selectedVisit.patient_registration_number || (selectedVisit.v_id || selectedVisit.id)}</span>
                                             <span className="text-blue-600">
@@ -879,16 +969,29 @@ const Doctor = () => {
                                                 {selectedVisit.patient_age_months > 0 ? ` ${selectedVisit.patient_age_months} Mos` : ''}
                                             </span>
                                         </div>
-                                        {selectedVisit.patient_medical_history && (
-                                            <div className="mt-1 text-xs font-bold bg-rose-50 text-rose-800 px-2 py-1 rounded-lg inline-flex items-center gap-1 border border-rose-200">
-                                                <Activity size={10} className="text-rose-600" /> PMH: {selectedVisit.patient_medical_history}
+                                        {/* Reads the live edited value, not the copy loaded with
+                                            the visit -- otherwise the badge keeps showing the old
+                                            history after an edit and looks like it did not save.
+                                            Truncated so a long history cannot push the action
+                                            buttons onto a second line; full text on hover. */}
+                                        {(medicalHistory || selectedVisit.patient_medical_history) && (
+                                            <div
+                                                title={medicalHistory || selectedVisit.patient_medical_history}
+                                                className="mt-1 max-w-full text-xs font-bold bg-rose-50 text-rose-800 px-2 py-1 rounded-lg flex items-center gap-1 border border-rose-200 overflow-hidden"
+                                            >
+                                                <Activity size={10} className="text-rose-600 shrink-0" />
+                                                <span className="truncate">
+                                                    PMH: {medicalHistory || selectedVisit.patient_medical_history}
+                                                </span>
                                             </div>
                                         )}
                                     </div>
                                 </div>
-                                <div className="flex gap-2 items-center flex-wrap">
+                                {/* shrink-0 keeps the action buttons on one line regardless of
+                                    how long the patient name or medical history is. */}
+                                <div className="flex gap-2 items-center shrink-0">
                                     <select value={referral} onChange={e => { setReferral(e.target.value); if (e.target.value !== 'DOCTOR') setReferredDoctorId(''); }}
-                                        className="h-10 pl-3 pr-8 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-blue-500 cursor-pointer">
+                                        className="h-10 pl-3 pr-8 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-blue-500 cursor-pointer shrink-0">
                                         <option value="NONE">No Referral (Discharge)</option>
                                         <option value="LAB">→ Lab</option>
                                         <option value="PHARMACY">→ Pharmacy</option>
@@ -907,11 +1010,23 @@ const Doctor = () => {
                                         </select>
                                     )}
                                     <button onClick={() => setSelectedVisit(null)}
-                                        className="px-4 py-2 rounded-xl text-slate-500 font-bold text-xs hover:bg-slate-100 transition-colors border border-slate-200">
+                                        className="px-4 py-2 rounded-xl text-slate-500 font-bold text-xs hover:bg-slate-100 transition-colors border border-slate-200 whitespace-nowrap shrink-0">
                                         ← Back
                                     </button>
+                                    {lastSavedAt && !savingProgress && (
+                                        <span className="text-[10px] font-bold text-emerald-600 whitespace-nowrap">
+                                            Saved {lastSavedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                    )}
+                                    <button onClick={() => handleSaveProgress()} disabled={savingProgress || saving}
+                                        title="Save what you have entered so far and keep this patient in the queue"
+                                        className="px-5 py-2 rounded-xl font-bold text-xs border-2 border-emerald-500 text-emerald-600 hover:bg-emerald-50 transition-all flex items-center gap-2 active:scale-95 disabled:opacity-60 whitespace-nowrap shrink-0">
+                                        {savingProgress
+                                            ? <><RefreshCw size={14} className="animate-spin" /> Saving...</>
+                                            : <><ClipboardList size={14} /> Save Progress</>}
+                                    </button>
                                     <button onClick={handleSaveConsultation} disabled={saving}
-                                        className={`px-6 py-2 text-white rounded-xl font-bold text-xs shadow-lg transition-all flex items-center gap-2 active:scale-95 disabled:opacity-60 ${referral !== 'NONE' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-900 hover:bg-blue-600'}`}>
+                                        className={`px-6 py-2 text-white rounded-xl font-bold text-xs shadow-lg transition-all flex items-center gap-2 active:scale-95 disabled:opacity-60 whitespace-nowrap shrink-0 ${referral !== 'NONE' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-900 hover:bg-blue-600'}`}>
                                         {saving ? <><RefreshCw size={14} className="animate-spin" /> Saving...</> : <><Send size={14} /> {referral !== 'NONE' ? 'Refer & Release' : 'Finalize & Discharge'}</>}
                                     </button>
                                 </div>
