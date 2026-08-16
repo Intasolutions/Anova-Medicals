@@ -1060,15 +1060,20 @@ const Doctor = () => {
                                             </label>
                                             <div className="flex flex-wrap gap-2 mb-3">
                                                 {['Diabetes', 'Hypertension', 'Asthma', 'Thyroid', 'Heart Disease'].map(cond => {
-                                                    const isA = (medicalHistory || '').includes(cond);
+                                                    // Compare whole entries, not substrings. Using
+                                                    // .includes() meant "Pre-Diabetes" counted as
+                                                    // "Diabetes" (chip wrongly ticked), and removing
+                                                    // "Diabetes" also deleted "Pre-Diabetes" -- a
+                                                    // different condition -- from the patient record.
+                                                    const entries = (medicalHistory || '').split(',').map(s => s.trim()).filter(Boolean);
+                                                    const matches = (entry) => entry.toLowerCase() === cond.toLowerCase();
+                                                    const isA = entries.some(matches);
                                                     return (
                                                         <button key={cond} type="button" onClick={() => {
                                                             if (isA) {
-                                                                const ps = medicalHistory.split(',').map(s => s.trim()).filter(s => s && !s.includes(cond));
-                                                                setMedicalHistory(ps.join(', '));
+                                                                setMedicalHistory(entries.filter(e => !matches(e)).join(', '));
                                                             } else {
-                                                                const ps = medicalHistory.split(',').map(s => s.trim()).filter(Boolean);
-                                                                ps.push(cond); setMedicalHistory(ps.join(', '));
+                                                                setMedicalHistory([...entries, cond].join(', '));
                                                             }
                                                         }}
                                                             className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all ${isA ? 'bg-rose-500 text-white border-rose-500' : 'bg-white text-slate-600 border-slate-200 hover:border-rose-300 hover:bg-rose-50'}`}>
