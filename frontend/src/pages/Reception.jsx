@@ -171,6 +171,7 @@ const Reception = () => {
     // Dashboard Stats
     const [stats, setStats] = useState({
         newPatients: 0,
+        totalVisits: 0,
         activeVisits: 0,
         todayRevenue: 0,
         recentVisits: []
@@ -324,7 +325,12 @@ const Reception = () => {
 
             const newPatients = patientsRes.data.count || patientsRes.data.results?.length || 0;
             const activeVisits = visitsRes.data.count || visitsRes.data.results?.length || 0;
-            
+
+            // Every visit in the range, not just first-time registrations. A
+            // returning patient creates a Visit but no new Patient row, so
+            // counting patients hid most of the day's actual footfall.
+            const totalVisits = dashboardStatsRes.data?.visits_today || 0;
+
             // Correct revenue from backend (sums all PaymentTransactions today)
             const todayRevenue = dashboardStatsRes.data?.revenue_today || 0;
 
@@ -333,6 +339,7 @@ const Reception = () => {
 
             setStats({
                 newPatients,
+                totalVisits,
                 activeVisits,
                 todayRevenue,
                 recentVisits: new Array(paidInvoicesCount) // Hack to keep the .length logic working without changing UI state structure
@@ -810,19 +817,26 @@ const Reception = () => {
 
                         {/* --- Dashboard Stats Section --- */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                            {/* New Patients */}
+                            {/* Patients Visited -- every visit in the selected range.
+                                New registrations are shown underneath, since a
+                                returning patient never creates a new Patient row. */}
                             <div className="bg-white rounded-xl p-6 border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="p-2.5 bg-blue-600 rounded-lg shadow-sm">
                                         <UserPlus className="w-5 h-5 text-white" />
                                     </div>
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Today</span>
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                        {dateRange.start === dateRange.end ? 'Today' : 'Selected Range'}
+                                    </span>
                                 </div>
                                 <div>
                                     <h3 className="text-3xl font-black text-slate-900 mb-1">
-                                        {statsLoading ? '...' : stats.newPatients}
+                                        {statsLoading ? '...' : stats.totalVisits}
                                     </h3>
-                                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">New Patients</p>
+                                    <p className="text-xs font-bold uppercase tracking-wider text-slate-500">Patients Visited</p>
+                                    <p className="text-[11px] font-semibold text-slate-400 mt-1">
+                                        {statsLoading ? ' ' : `${stats.newPatients} new registration${stats.newPatients === 1 ? '' : 's'}`}
+                                    </p>
                                 </div>
                             </div>
 

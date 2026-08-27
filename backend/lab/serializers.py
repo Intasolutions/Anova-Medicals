@@ -1,21 +1,45 @@
 from django.db import transaction
 from rest_framework import serializers
+from pharmacy.models import Supplier as SharedSupplier
 from .models import (
-    LabInventory, LabCharge, LabInventoryLog, LabTest, LabTestParameter, 
+    LabInventory, LabCharge, LabInventoryLog, LabTest, LabTestParameter,
     LabTestRequiredItem, LabCategory, LabSupplier, LabPurchase, LabPurchaseItem, LabBatch
 )
 
 
 class LabSupplierSerializer(serializers.ModelSerializer):
+    """
+    Serves the SHARED clinic-wide supplier directory (pharmacy.Supplier), which
+    admin maintains in one place. The lab no longer keeps its own separate list;
+    this endpoint is kept so existing lab screens continue to work unchanged.
+    """
     class Meta:
-        model = LabSupplier
+        model = SharedSupplier
         fields = '__all__'
 
 
 class LabBatchSerializer(serializers.ModelSerializer):
+    supplier_name = serializers.CharField(source='supplier.supplier_name',
+                                          read_only=True, default=None)
+    unit = serializers.CharField(source='inventory_item.unit', read_only=True)
+    expiry_status = serializers.SerializerMethodField()
+
     class Meta:
         model = LabBatch
         fields = '__all__'
+
+    def get_expiry_status(self, obj):
+        """EXPIRED / EXPIRING (within 90 days) / OK / NONE -- drives the UI badge."""
+        if not obj.expiry_date:
+            return 'NONE'
+        from django.utils import timezone
+        from datetime import timedelta
+        today = timezone.now().date()
+        if obj.expiry_date < today:
+            return 'EXPIRED'
+        if obj.expiry_date <= today + timedelta(days=90):
+            return 'EXPIRING'
+        return 'OK'
 
 
 class LabCategorySerializer(serializers.ModelSerializer):
@@ -107,13 +131,22 @@ class LabInventorySerializer(serializers.ModelSerializer):
     is_low_stock = serializers.BooleanField(read_only=True)
     logs = LabInventoryLogSerializer(many=True, read_only=True)
     batches = LabBatchSerializer(many=True, read_only=True)
+    # Readable supplier name for lists and tables; `supplier` itself stays writable
+    # so the form can post the selected supplier id.
+    supplier_name = serializers.CharField(source='supplier.supplier_name',
+                                          read_only=True, default=None)
+    # e.g. "495 ml (4.95 x 100ml)" so the UI can show volume AND bottles.
+    qty_display = serializers.CharField(read_only=True)
+    packs_remaining = serializers.FloatField(read_only=True)
 
     class Meta:
         model = LabInventory
         fields = [
-            'item_id', 'item_name', 'category', 'qty', 'cost_per_unit', 'reorder_level', 
+            'item_id', 'item_name', 'category', 'qty', 'cost_per_unit', 'reorder_level',
             'is_low_stock', 'logs', 'batches',
-            'manufacturer', 'unit', 'is_liquid', 'pack_size', 'items_per_pack',
+            'manufacturer', 'supplier', 'supplier_name',
+            'unit', 'is_liquid', 'pack_size', 'items_per_pack',
+            'qty_display', 'packs_remaining',
             'gst_percent', 'discount_percent', 'hsn', 'mrp',
             'created_at', 'updated_at'
         ]
@@ -125,7 +158,9 @@ class LabPurchaseItemSerializer(serializers.ModelSerializer):
     category = serializers.CharField(write_only=True, required=False)
     unit = serializers.CharField(write_only=True, required=False)
     is_liquid = serializers.BooleanField(write_only=True, required=False)
-    items_per_pack = serializers.IntegerField(write_only=True, required=False, default=1)
+    # Decimal: a container may hold 2.5 ml, which an integer would truncate.
+    items_per_pack = serializers.DecimalField(max_digits=12, decimal_places=3,
+                                              write_only=True, required=False, default=1)
     inventory_item_name = serializers.CharField(source='inventory_item.item_name', read_only=True)
 
     class Meta:
@@ -153,7 +188,9 @@ class LabPurchaseSerializer(serializers.ModelSerializer):
         total_amount = 0
         for item in items_data:
             rate = float(item.get('unit_cost', 0))
-            qty = int(item.get('qty', 0))
+            # float, not int: liquids arrive as 750.5 ml and int() truncated the
+            # fraction, under-valuing the purchase.
+            qty = float(item.get('qty', 0))
             gst_percent = float(item.get('gst_percent', 0))
             discount_percent = float(item.get('discount_percent', 0))
             
@@ -199,15 +236,23 @@ class LabPurchaseSerializer(serializers.ModelSerializer):
                     'gst_percent': item_data.get('gst_percent', 0),
                     'discount_percent': item_data.get('discount_percent', 0),
                     'mrp': item_data.get('mrp', 0),
+                    # The purchase recorded the supplier but never stamped it on
+                    # the item, so the inventory list showed a blank supplier
+                    # even though the stock plainly came from someone.
+                    'supplier': purchase.supplier,
                     'qty': 0 # start with 0, will add batch qty
                 }
             )
-            
+
             if not created:
                 # Update latest cost and details
                 inventory_item.cost_per_unit = item_data.get('unit_cost', inventory_item.cost_per_unit)
                 inventory_item.is_liquid = is_liquid # Ensure liquid status is updated/consistent
                 inventory_item.items_per_pack = items_per_pack
+                # Track who supplied it most recently. Per-batch supplier history
+                # is preserved on LabBatch, so nothing is lost by moving this on.
+                if purchase.supplier:
+                    inventory_item.supplier = purchase.supplier
                 inventory_item.save()
 
             # 2. Create Batch

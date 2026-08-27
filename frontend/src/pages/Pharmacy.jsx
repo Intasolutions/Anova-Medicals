@@ -79,6 +79,28 @@ const ReceiptTemplate = ({ sale }) => (
     </div>
 );
 
+// Age and sex are dosing information for the pharmacist -- a paediatric or
+// elderly patient needs a different check on the same prescription. Infants
+// are shown in months, since "0 yrs" tells the pharmacist nothing useful.
+const formatPatientAge = (years, months, gender) => {
+    // Number(null) is 0, so null/undefined/'' must be rejected before the
+    // numeric check -- otherwise a patient with no age recorded is shown as
+    // a newborn, which is worse than showing nothing.
+    const given = (val) => val !== null && val !== undefined && val !== '' && Number.isFinite(Number(val));
+    const y = Number(years);
+    const m = Number(months);
+    const hasY = given(years);
+    const hasM = given(months);
+    let age = null;
+    if (hasY && y > 0) age = `${y} yr${y === 1 ? '' : 's'}`;
+    else if (hasM && m > 0) age = `${m} mo`;
+    // A genuine newborn is 0y 0m; an unknown age arrives as null/undefined.
+    // Only the first should print -- never invent "0 yrs" for missing data.
+    else if (hasY && hasM && y === 0 && m === 0) age = '0 mo';
+    const sex = gender ? String(gender).charAt(0).toUpperCase() : null;
+    return [age, sex].filter(Boolean).join(' • ') || null;
+};
+
 const Pharmacy = () => {
     const { showToast } = useToast();
     const { user } = useAuth();
@@ -675,7 +697,7 @@ const Pharmacy = () => {
         }
     };
     const loadPrescription = async (visit) => {
-        setSelectedPatient({ id: visit.patient, p_id: visit.patient, full_name: visit.patient_name, v_id: visit.id, diagnosis: visit.diagnosis });
+        setSelectedPatient({ id: visit.patient, p_id: visit.patient, full_name: visit.patient_name, v_id: visit.id, diagnosis: visit.diagnosis, age: visit.patient_age, age_months: visit.patient_age_months, gender: visit.patient_gender });
         if (visit.doctor_name) setSelectedDoctor({ username: visit.doctor_name, u_id: visit.doctor }); else setSelectedDoctor({ username: 'Referral', u_id: null });
         if (!visit.prescription) { showToast('info', 'No digital prescription.'); return; }
         setLoading(true); const newCart = [...cart];
@@ -1052,7 +1074,7 @@ const Pharmacy = () => {
                                         <button
                                             key={visit.id}
                                             onClick={() => {
-                                                setSelectedPatient({ id: visit.patient, p_id: visit.patient, full_name: visit.patient_name, v_id: visit.id, diagnosis: visit.diagnosis });
+                                                setSelectedPatient({ id: visit.patient, p_id: visit.patient, full_name: visit.patient_name, v_id: visit.id, diagnosis: visit.diagnosis, age: visit.patient_age, age_months: visit.patient_age_months, gender: visit.patient_gender });
                                                 if (visit.doctor_name) setSelectedDoctor({ username: visit.doctor_name, u_id: visit.doctor }); 
                                                 else setSelectedDoctor({ username: 'N/A', u_id: null });
                                                 setActiveTab('pos');
@@ -1065,6 +1087,11 @@ const Pharmacy = () => {
                                                     {visit.patient?.registration_number || 'N/A'}
                                                 </span>
                                             </div>
+                                            {formatPatientAge(visit.patient_age, visit.patient_age_months, visit.patient_gender) && (
+                                                <p className="text-[11px] font-bold text-blue-600 mb-0.5">
+                                                    {formatPatientAge(visit.patient_age, visit.patient_age_months, visit.patient_gender)}
+                                                </p>
+                                            )}
                                             <p className="text-xs font-medium text-slate-500 line-clamp-1">
                                                 {visit.assigned_role} • {visit.doctor_name || 'No Doctor'}
                                             </p>
@@ -1112,6 +1139,11 @@ const Pharmacy = () => {
                                                     <h4 className="font-bold text-sm text-gray-900 line-clamp-1">{v.patient_name}</h4>
                                                     <span className="text-[10px] font-black bg-amber-100 text-amber-800 px-2 py-1 rounded uppercase tracking-wider shrink-0">WAITING</span>
                                                 </div>
+                                                {formatPatientAge(v.patient_age, v.patient_age_months, v.patient_gender) && (
+                                                    <p className="text-[11px] font-black text-blue-600 -mt-1">
+                                                        {formatPatientAge(v.patient_age, v.patient_age_months, v.patient_gender)}
+                                                    </p>
+                                                )}
                                                 <p className="text-[10px] font-bold text-slate-500 truncate uppercase mt-1">Ref: Dr. {v.doctor_name || 'Walk-in'}</p>
                                             </div>
                                         ))
@@ -1281,6 +1313,11 @@ const Pharmacy = () => {
                                         <div>
                                             <p className="text-[10px] text-slate-500 font-black uppercase tracking-wider">Dispensing To</p>
                                             <p className="text-xl font-black text-gray-900 leading-tight">{selectedPatient.full_name}</p>
+                                            {formatPatientAge(selectedPatient.age, selectedPatient.age_months, selectedPatient.gender) && (
+                                                <p className="text-sm font-black text-blue-600 mt-0.5">
+                                                    {formatPatientAge(selectedPatient.age, selectedPatient.age_months, selectedPatient.gender)}
+                                                </p>
+                                            )}
                                         </div>
                                         <button onClick={() => setSelectedPatient(null)} className="text-slate-400 hover:text-red-600 transition-colors p-2 rounded-lg hover:bg-red-50"><X size={18} /></button>
                                     </div>

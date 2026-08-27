@@ -1,17 +1,25 @@
+import logging
+from decimal import Decimal
+
 from rest_framework import viewsets, permissions, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db import models, transaction
+from django.db.models import F
+
+logger = logging.getLogger(__name__)
 
 from billing.models import Invoice, InvoiceItem
+from pharmacy.models import Supplier as SharedSupplier
 from .models import (
     LabInventory, LabCharge, LabInventoryLog, LabTest, LabCategory, 
     LabSupplier, LabPurchase, LabBatch
 )
 from .serializers import (
     LabInventorySerializer, LabChargeSerializer, LabInventoryLogSerializer, 
-    LabTestSerializer, LabCategorySerializer, LabSupplierSerializer, LabPurchaseSerializer
+    LabTestSerializer, LabCategorySerializer, LabSupplierSerializer, LabPurchaseSerializer,
+    LabBatchSerializer
 )
 
 from rest_framework.pagination import PageNumberPagination
@@ -37,7 +45,10 @@ class LabCategoryViewSet(viewsets.ModelViewSet):
 
 
 class LabSupplierViewSet(viewsets.ModelViewSet):
-    queryset = LabSupplier.objects.all().order_by('supplier_name')
+    # Serves the SHARED clinic-wide supplier directory that admin maintains,
+    # so a supplier added under Manage appears in the lab automatically and
+    # nothing has to be entered twice.
+    queryset = SharedSupplier.objects.all().order_by('supplier_name')
     serializer_class = LabSupplierSerializer
     permission_classes = [IsLabOrAdmin]
     search_fields = ['supplier_name', 'phone', 'gst_no']
@@ -118,7 +129,7 @@ class LabInventoryViewSet(viewsets.ModelViewSet):
         
         # Deduct from batches (FIFO)
         remaining_to_deduct = qty
-        batches = LabBatch.objects.filter(inventory_item=item, qty__gt=0).order_by('expiry_date')
+        batches = LabBatch.objects.filter(inventory_item=item, qty__gt=0).order_by(F('expiry_date').asc(nulls_last=True))
         
         for batch in batches:
             if remaining_to_deduct <= 0:
@@ -139,6 +150,77 @@ class LabInventoryViewSet(viewsets.ModelViewSet):
         )
 
         return Response(self.get_serializer(item).data)
+
+
+class LabBatchViewSet(viewsets.ModelViewSet):
+    """
+    View / add / correct individual batches of a lab item.
+
+    Keeping the parent item's total in step with its batches is done here so
+    the two can never drift apart -- a mismatch would make FIFO deduct from
+    batches that the headline stock figure says are empty (or vice versa).
+    """
+    queryset = LabBatch.objects.all()
+    serializer_class = LabBatchSerializer
+    permission_classes = [IsLabOrAdmin]
+    pagination_class = None
+
+    def get_queryset(self):
+        qs = super().get_queryset().select_related('inventory_item', 'supplier')
+        item_id = self.request.query_params.get('inventory_item')
+        if item_id:
+            qs = qs.filter(inventory_item_id=item_id)
+        # expiring soonest first; undated stock last
+        return qs.order_by(F('expiry_date').asc(nulls_last=True), 'batch_no')
+
+    def _resync_item_total(self, item):
+        """Master qty is always the sum of its batches."""
+        total = item.batches.aggregate(t=models.Sum('qty'))['t'] or Decimal('0')
+        item.qty = total
+        item.save(update_fields=['qty'])
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        batch = serializer.save()
+        item = batch.inventory_item
+        self._resync_item_total(item)
+        LabInventoryLog.objects.create(
+            item=item, transaction_type='STOCK_IN', qty=batch.qty,
+            cost=batch.purchase_rate or 0,
+            performed_by=str(getattr(self.request.user, 'username', 'System')),
+            notes=f'Batch added: {batch.batch_no or "(no batch no)"}'
+                  + (f' exp {batch.expiry_date}' if batch.expiry_date else ' (no expiry)'),
+        )
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        before = LabBatch.objects.get(pk=serializer.instance.pk).qty
+        batch = serializer.save()
+        item = batch.inventory_item
+        self._resync_item_total(item)
+        diff = (batch.qty or Decimal('0')) - (before or Decimal('0'))
+        if diff:
+            LabInventoryLog.objects.create(
+                item=item,
+                transaction_type='STOCK_IN' if diff > 0 else 'STOCK_OUT',
+                qty=abs(diff),
+                performed_by=str(getattr(self.request.user, 'username', 'System')),
+                notes=f'Batch {batch.batch_no or "(no batch no)"} corrected: '
+                      f'{before} -> {batch.qty}',
+            )
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        item = instance.inventory_item
+        qty = instance.qty
+        label = instance.batch_no or '(no batch no)'
+        instance.delete()
+        self._resync_item_total(item)
+        LabInventoryLog.objects.create(
+            item=item, transaction_type='STOCK_OUT', qty=qty,
+            performed_by=str(getattr(self.request.user, 'username', 'System')),
+            notes=f'Batch removed/discarded: {label}',
+        )
 
 
 class LabPurchaseViewSet(viewsets.ModelViewSet):
@@ -297,16 +379,24 @@ class LabChargeViewSet(viewsets.ModelViewSet):
                     # Manual/Actual Consumption Provided (Even if empty [])
                     for item in consumed_items:
                         inv_id = item.get('inventory_item')
-                        qty_used = int(item.get('qty', 0))
-                        
+                        qty_used = Decimal(str(item.get('qty', 0) or 0))
+
                         if inv_id and qty_used > 0:
                             inv_item = LabInventory.objects.get(id=inv_id)
-                            inv_item.qty = max(0, inv_item.qty - qty_used)
+                            # Only ever record what genuinely existed. Logging the
+                            # requested amount when stock was short invented
+                            # consumption that never happened and quietly inflated
+                            # usage reports.
+                            available = inv_item.qty or Decimal('0')
+                            actually_used = min(qty_used, available)
+                            shortfall = qty_used - actually_used
+
+                            inv_item.qty = available - actually_used
                             inv_item.save()
-                            
+
                             # FIFO Logic for batches
-                            remaining_to_deduct = qty_used
-                            batches = LabBatch.objects.filter(inventory_item=inv_item, qty__gt=0).order_by('expiry_date')
+                            remaining_to_deduct = actually_used
+                            batches = LabBatch.objects.filter(inventory_item=inv_item, qty__gt=0).order_by(F('expiry_date').asc(nulls_last=True))
                             for batch in batches:
                                 if remaining_to_deduct <= 0: break
                                 deduct = min(batch.qty, remaining_to_deduct)
@@ -314,12 +404,16 @@ class LabChargeViewSet(viewsets.ModelViewSet):
                                 batch.save()
                                 remaining_to_deduct -= deduct
 
+                            note = f'Test Consumption: {instance.test_name} (Patient: {instance.visit.patient.full_name})'
+                            if shortfall > 0:
+                                note += (f' | SHORT BY {shortfall} {inv_item.unit}: '
+                                         f'{qty_used} needed, only {actually_used} in stock')
                             LabInventoryLog.objects.create(
                                 item=inv_item,
                                 transaction_type='STOCK_OUT',
-                                qty=qty_used,
+                                qty=actually_used,
                                 performed_by=instance.technician_name or 'System (Auto)',
-                                notes=f'Test Consumption: {instance.test_name} (Patient: {instance.visit.patient.full_name})'
+                                notes=note
                             )
                 else:
                     # Fallback to Default Recipe
@@ -327,32 +421,56 @@ class LabChargeViewSet(viewsets.ModelViewSet):
                     if lab_test:
                         for requirement in lab_test.required_items.all():
                             inventory_item = requirement.inventory_item
-                            qty_needed = requirement.qty_per_test
-                            
-                            # Deduct Stock (Master)
-                            inventory_item.qty = max(0, inventory_item.qty - qty_needed)
+                            qty_needed = requirement.qty_per_test or Decimal('0')
+
+                            # Record only what was actually available -- never log
+                            # stock that did not exist (see note in the manual path).
+                            available = inventory_item.qty or Decimal('0')
+                            actually_used = min(qty_needed, available)
+                            shortfall = qty_needed - actually_used
+
+                            inventory_item.qty = available - actually_used
                             inventory_item.save()
-                            
+
                             # FIFO Logic for batches
-                            remaining_to_deduct = qty_needed
-                            batches = LabBatch.objects.filter(inventory_item=inventory_item, qty__gt=0).order_by('expiry_date')
+                            remaining_to_deduct = actually_used
+                            batches = LabBatch.objects.filter(inventory_item=inventory_item, qty__gt=0).order_by(F('expiry_date').asc(nulls_last=True))
                             for batch in batches:
                                 if remaining_to_deduct <= 0: break
                                 deduct = min(batch.qty, remaining_to_deduct)
                                 batch.qty -= deduct
                                 batch.save()
                                 remaining_to_deduct -= deduct
-                            
+
                             # Log Transaction
+                            note = f'Auto-deduction for Test: {instance.test_name} (Patient: {instance.visit.patient.full_name})'
+                            if shortfall > 0:
+                                note += (f' | SHORT BY {shortfall} {inventory_item.unit}: '
+                                         f'{qty_needed} needed, only {actually_used} in stock')
                             LabInventoryLog.objects.create(
                                 item=inventory_item,
                                 transaction_type='STOCK_OUT',
-                                qty=qty_needed,
+                                qty=actually_used,
                                 performed_by=instance.technician_name or 'System (Auto)',
-                                notes=f'Auto-deduction for Test: {instance.test_name} (Patient: {instance.visit.patient.full_name})'
+                                notes=note
                             )
+            except LabInventory.DoesNotExist:
+                # A recipe pointing at a deleted item shouldn't block the result
+                # being recorded, but it must be visible rather than silent.
+                logger.error(
+                    "Lab stock deduction skipped for test '%s' (charge %s): "
+                    "a required inventory item no longer exists.",
+                    instance.test_name, instance.id,
+                )
             except Exception as e:
-                print(f"Inventory Auto-Stockout Error: {e}")
+                # Anything else is a genuine failure. Re-raise so the surrounding
+                # transaction rolls back and the technician is told, instead of
+                # the test being marked complete with stock silently untouched.
+                logger.exception(
+                    "Lab stock deduction FAILED for test '%s' (charge %s): %s",
+                    instance.test_name, instance.id, e,
+                )
+                raise
 
             # --- AUTO RETURN TO DOCTOR & BILLING ---
             # These were previously here. We moved AUTO RETURN out of the COMPLETED block

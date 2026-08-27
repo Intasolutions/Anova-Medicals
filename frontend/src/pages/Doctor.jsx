@@ -723,8 +723,33 @@ const Doctor = () => {
             fetchQueue();
         } catch (e) {
             console.error('Save consultation error:', e);
-            // Parse backend error into human-readable message
             const errData = e.response?.data;
+
+            // The patient still owes money, so the visit cannot be discharged.
+            // Everything else on the consultation already saved above -- only
+            // the routing was rejected -- so send them to Billing instead of
+            // making the doctor redo the whole form.
+            // DRF wraps ValidationError values in arrays, so unwrap before comparing.
+            const unwrap = (val) => (Array.isArray(val) ? val[0] : val);
+            const routeTo = unwrap(errData?.route_to);
+            const owed = unwrap(errData?.outstanding_balance);
+            if (routeTo === 'BILLING') {
+                try {
+                    await api.patch(`/reception/visits/${selectedVisit.v_id || selectedVisit.id}/`,
+                        { status: 'OPEN', assigned_role: 'BILLING' });
+                    localStorage.removeItem(`doctor_draft_visit_${selectedVisit.v_id || selectedVisit.id}`);
+                    showToast('info', `Pending balance of ₹${owed} — sent to Billing instead of discharge`);
+                    setSelectedVisit(null);
+                    fetchQueue();
+                    return;
+                } catch (routeErr) {
+                    console.error('Billing reroute failed:', routeErr);
+                    showToast('error', `Patient owes ₹${owed}. Please send them to Billing.`);
+                    return;
+                }
+            }
+
+            // Parse backend error into human-readable message
             let msg = 'Failed to save consultation';
             if (errData) {
                 if (typeof errData === 'string') msg = errData;

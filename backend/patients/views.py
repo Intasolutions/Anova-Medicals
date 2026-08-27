@@ -149,8 +149,12 @@ class VisitViewSet(viewsets.ModelViewSet):
         billing_queue = self.request.query_params.get('billing_queue')
         if billing_queue == 'true':
             from django.db.models import Q
+            # Anyone parked at the billing desk must be visible there, whether or
+            # not they still owe money -- a patient who prepaid at the lab and was
+            # then sent on by the doctor has a fully-paid invoice, and requiring
+            # invoices__isnull=True made them vanish from the counter entirely.
             qs = qs.filter(
-                Q(assigned_role='BILLING', status='OPEN', invoices__isnull=True) |
+                Q(assigned_role='BILLING', status='OPEN') |
                 Q(invoices__payment_status__in=['DRAFT', 'PENDING', 'PARTIAL'])
             ).distinct()
             

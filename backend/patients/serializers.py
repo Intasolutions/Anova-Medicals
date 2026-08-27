@@ -1,3 +1,4 @@
+from decimal import Decimal
 from rest_framework import serializers
 from .models import Patient, Visit, ReferringDoctor
 
@@ -86,6 +87,7 @@ class VisitSerializer(serializers.ModelSerializer):
     patient_gender = serializers.CharField(source='patient.gender', read_only=True)
     patient_registration_number = serializers.CharField(source='patient.registration_number', read_only=True)
     patient_medical_history = serializers.CharField(source='patient.medical_history', read_only=True)
+    outstanding_balance = serializers.SerializerMethodField()
 
     class Meta:
         model = Visit
@@ -93,7 +95,7 @@ class VisitSerializer(serializers.ModelSerializer):
             'id', 'v_id', 'patient', 'patient_name', 'doctor', 'doctor_name', 'consultation_fee', 'assigned_role',
             'status', 'vitals', 'prescription', 'diagnosis', 'lab_referral_details', 'pharmacy_items', 'pharmacy_returns', 'lab_results', 'lab_charges_data',
             'casualty_medicines', 'casualty_services', 'casualty_observations',
-            'patient_age', 'patient_age_months', 'patient_gender', 'patient_registration_number', 'patient_medical_history', 'referred_by', 'created_at', 'updated_at'
+            'patient_age', 'patient_age_months', 'patient_gender', 'patient_registration_number', 'patient_medical_history', 'outstanding_balance', 'referred_by', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'v_id', 'created_at', 'updated_at']
 
@@ -305,6 +307,28 @@ class VisitSerializer(serializers.ModelSerializer):
         from casualty.serializers import CasualtyObservationSerializer
         return CasualtyObservationSerializer(obj.casualty_observations.all(), many=True).data
 
+    @staticmethod
+    def _outstanding_balance(visit):
+        """
+        What the patient still owes across every live bill on this visit.
+
+        Mirrors billing's own calculation: total minus discount, refund and
+        everything actually paid. Cancelled bills are not money owed.
+        """
+        total = Decimal('0')
+        for inv in visit.invoices.exclude(payment_status='CANCELLED'):
+            paid = sum((p.amount for p in inv.payments.all()), Decimal('0'))
+            discount = inv.discount_amount or Decimal('0')
+            refund = inv.refund_amount or Decimal('0')
+            total += (inv.total_amount or Decimal('0')) - discount - refund - paid
+        return total
+
+    def get_outstanding_balance(self, obj):
+        try:
+            return str(self._outstanding_balance(obj).quantize(Decimal('0.01')))
+        except Exception:
+            return '0.00'
+
     def validate_doctor(self, doctor):
         # Allow doctor to be null or any user
         # The frontend should ensure only doctors are selectable
@@ -314,6 +338,25 @@ class VisitSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if not request:
             return attrs
+
+        # A visit must not be closed while the patient still owes money.
+        # The doctor's "No referral / Discharge" option closes the visit
+        # directly, and it only looks at what the doctor added in THIS
+        # session -- so a lab test ordered before the consultation, or an
+        # unpaid consultation fee, would let the patient walk out with an
+        # open bill and a closed visit nobody can find.
+        if self.instance is not None and attrs.get('status') == 'CLOSED':
+            outstanding = self._outstanding_balance(self.instance)
+            if outstanding > Decimal('0.5'):
+                raise serializers.ValidationError({
+                    'status': [
+                        'This patient still owes Rs %s. Send them to Billing to '
+                        'collect payment -- the visit closes automatically once '
+                        'the bill is settled.' % outstanding.quantize(Decimal('0.01'))
+                    ],
+                    'outstanding_balance': str(outstanding.quantize(Decimal('0.01'))),
+                    'route_to': 'BILLING',
+                })
 
         # Only run validation on creation
         if getattr(self.instance, 'pk', None) is not None:

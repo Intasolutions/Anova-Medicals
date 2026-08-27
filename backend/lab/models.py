@@ -20,14 +20,39 @@ class LabSupplier(BaseModel):
 class LabInventory(BaseModel):
     item_name = models.CharField(max_length=255)
     category = models.CharField(max_length=50)
-    qty = models.PositiveIntegerField(default=0)
+    # Stock on hand, expressed in `unit` (ml for liquids, pieces for solids).
+    # Decimal so a liquid can hold part-used volumes like 495.5 ml -- an integer
+    # field made "5 bottles of 100ml" indistinguishable from "5 ml", and using
+    # 5ml of reagent wiped out all five bottles.
+    qty = models.DecimalField(max_digits=12, decimal_places=3, default=0)
     cost_per_unit = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     reorder_level = models.PositiveIntegerField(default=10)
-    items_per_pack = models.PositiveIntegerField(default=1) # e.g., 50 strips per box
+    # Container size in `unit`: 50 strips per box, or 100 ml per bottle.
+    # Decimal so a 2.5 ml vial is representable.
+    items_per_pack = models.DecimalField(max_digits=12, decimal_places=3, default=1)
 
     # New Premium Fields
     manufacturer = models.CharField(max_length=255, blank=True)
-    unit = models.CharField(max_length=50, default='units')  # e.g. ml, strips, count
+    # Default supplier for this item. Uses the SHARED supplier list managed by
+    # admin (pharmacy.Supplier) so there is one directory of suppliers for the
+    # whole clinic rather than a separate lab-only one. SET_NULL so removing a
+    # supplier never deletes stock records.
+    supplier = models.ForeignKey('pharmacy.Supplier', on_delete=models.SET_NULL,
+                                 null=True, blank=True, related_name='lab_inventory_items')
+    UNIT_CHOICES = (
+        ('units', 'Units'),
+        ('ml', 'ml (millilitre)'),
+        ('litre', 'Litre'),
+        ('strips', 'Strips'),
+        ('tests', 'Tests'),
+        ('vials', 'Vials'),
+        ('bottles', 'Bottles'),
+        ('boxes', 'Boxes'),
+        ('packs', 'Packs'),
+        ('pieces', 'Pieces'),
+        ('grams', 'Grams'),
+    )
+    unit = models.CharField(max_length=50, choices=UNIT_CHOICES, default='units')
     is_liquid = models.BooleanField(default=False)
     pack_size = models.CharField(max_length=50, blank=True) # e.g. "1x100ml"
     
@@ -44,6 +69,29 @@ class LabInventory(BaseModel):
     def is_low_stock(self):
         return self.qty <= self.reorder_level
 
+    @property
+    def packs_remaining(self):
+        """
+        Stock expressed in whole containers, e.g. 495 ml with a 100 ml bottle
+        size reads as 4.95 bottles. Returns None when the item isn't packaged
+        (items_per_pack of 1 means the unit IS the container).
+        """
+        size = self.items_per_pack or 1
+        if size <= 1:
+            return None
+        return round(float(self.qty) / float(size), 2)
+
+    @property
+    def qty_display(self):
+        """Human-readable stock, e.g. '495 ml (4.95 x 100ml)'."""
+        qty = float(self.qty)
+        qty_txt = ('%g' % qty)
+        base = '%s %s' % (qty_txt, self.unit)
+        packs = self.packs_remaining
+        if packs is not None:
+            return '%s (%g x %g%s)' % (base, packs, float(self.items_per_pack), self.unit)
+        return base
+
 
 class LabBatch(BaseModel):
     """
@@ -51,14 +99,19 @@ class LabBatch(BaseModel):
     Used for FIFO consumption and expiry tracking.
     """
     inventory_item = models.ForeignKey(LabInventory, on_delete=models.CASCADE, related_name='batches')
-    batch_no = models.CharField(max_length=50)
-    expiry_date = models.DateField()
+    # Optional: many lab consumables (tubes, gloves, bottles) carry no batch
+    # number or expiry at all. Stock without an expiry still counts towards the
+    # total and is consumed last, after everything that can actually expire.
+    batch_no = models.CharField(max_length=50, blank=True)
+    expiry_date = models.DateField(null=True, blank=True)
     
-    qty = models.PositiveIntegerField(default=0)
+    # In the item's unit (ml for liquids), decimal so part-used stock is exact.
+    qty = models.DecimalField(max_digits=12, decimal_places=3, default=0)
     mrp = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     purchase_rate = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     
-    supplier = models.ForeignKey(LabSupplier, on_delete=models.SET_NULL, null=True, blank=True)
+    supplier = models.ForeignKey('pharmacy.Supplier', on_delete=models.SET_NULL,
+                                 null=True, blank=True, related_name='lab_batches')
 
     def __str__(self):
         return f"{self.inventory_item.item_name} ({self.batch_no})"
@@ -70,7 +123,8 @@ class LabPurchase(BaseModel):
         ('CREDIT', 'Credit'),
     )
 
-    supplier = models.ForeignKey(LabSupplier, on_delete=models.PROTECT, related_name='purchases')
+    supplier = models.ForeignKey('pharmacy.Supplier', on_delete=models.PROTECT,
+                                 related_name='lab_purchases')
     supplier_invoice_no = models.CharField(max_length=50)
     invoice_date = models.DateField()
     credit_days = models.PositiveIntegerField(default=0)
@@ -92,11 +146,13 @@ class LabPurchaseItem(BaseModel):
     inventory_item = models.ForeignKey(LabInventory, on_delete=models.CASCADE, related_name='purchase_items')
     batch = models.ForeignKey(LabBatch, on_delete=models.SET_NULL, null=True, blank=True)
     
-    batch_no = models.CharField(max_length=50)
-    expiry_date = models.DateField()
-    
-    qty = models.PositiveIntegerField() # Quantity purchased
-    free_qty = models.PositiveIntegerField(default=0)
+    # Optional, matching LabBatch: many consumables carry no batch or expiry.
+    batch_no = models.CharField(max_length=50, blank=True)
+    expiry_date = models.DateField(null=True, blank=True)
+
+    # Decimal, in the item's unit -- a purchase can be 500.5 ml.
+    qty = models.DecimalField(max_digits=12, decimal_places=3, default=0)  # Quantity purchased
+    free_qty = models.DecimalField(max_digits=12, decimal_places=3, default=0)
     
     mrp = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     unit_cost = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)]) # Purchase Rate
@@ -116,7 +172,8 @@ class LabInventoryLog(BaseModel):
 
     item = models.ForeignKey(LabInventory, on_delete=models.CASCADE, related_name='logs')
     transaction_type = models.CharField(max_length=20, choices=TRANSACTION_CHOICES)
-    qty = models.PositiveIntegerField()
+    # In the item's unit; decimal so a 2.5 ml consumption is recorded exactly.
+    qty = models.DecimalField(max_digits=12, decimal_places=3, default=0)
     # For Stock In: Cost per unit or total cost. Interpreted as Total Cost for the batch.
     cost = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     performed_by = models.CharField(max_length=255, blank=True, null=True) # Name of user
@@ -222,7 +279,8 @@ class LabTestParameter(BaseModel):
 class LabTestRequiredItem(BaseModel):
     test = models.ForeignKey(LabTest, on_delete=models.CASCADE, related_name='required_items')
     inventory_item = models.ForeignKey(LabInventory, on_delete=models.CASCADE)
-    qty_per_test = models.PositiveIntegerField(default=1)
+    # Amount consumed per test, in the item's own unit (e.g. 2.5 ml).
+    qty_per_test = models.DecimalField(max_digits=12, decimal_places=3, default=1)
 
     def __str__(self):
-        return f"{self.test.name} needs {self.qty_per_test} x {self.inventory_item.item_name}"
+        return f"{self.test.name} needs {self.qty_per_test} {self.inventory_item.unit} of {self.inventory_item.item_name}"

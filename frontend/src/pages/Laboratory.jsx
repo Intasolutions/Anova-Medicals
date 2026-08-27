@@ -243,7 +243,15 @@ const Laboratory = () => {
     const [testForm, setTestForm] = useState({ test_name: '', amount: '' });
     const [selectedTests, setSelectedTests] = useState([]); // Array of { name, price, isCustom }
     const [stockForm, setStockForm] = useState({ qty: '', cost: '', notes: '' });
-    const [inventoryForm, setInventoryForm] = useState({ item_name: '', category: 'REAGENT', qty: 0, cost_per_unit: '', reorder_level: 10, items_per_pack: 1, num_packs: 0 });
+    const [inventoryForm, setInventoryForm] = useState({ item_name: '', category: 'REAGENT', qty: 0, cost_per_unit: '', reorder_level: 10, items_per_pack: 1, num_packs: 0, supplier: '', unit: 'units', is_liquid: false });
+    // liquid units are measured by volume, so the pack fields read as
+    // "ml per container" rather than "items per pack"
+    const isLiquidUnit = ['ml', 'litre'].includes(inventoryForm.unit);
+    // which inventory row has its batch list expanded, plus that row's batches
+    const [expandedItemId, setExpandedItemId] = useState(null);
+    const [itemBatches, setItemBatches] = useState([]);
+    const [batchesLoading, setBatchesLoading] = useState(false);
+    const [batchForm, setBatchForm] = useState(null); // null = closed
     const [visitSearch, setVisitSearch] = useState([]);
     const [visitQuery, setVisitQuery] = useState('');
     const [categoryForm, setCategoryForm] = useState({ name: '', description: '' });
@@ -534,7 +542,9 @@ const Laboratory = () => {
         if (field === 'num_packs' || field === 'items_per_pack') {
             const packs = field === 'num_packs' ? value : (updated[index].num_packs || 0);
             const perPack = field === 'items_per_pack' ? value : (updated[index].items_per_pack || 1);
-            updated[index].qty = parseInt(packs) * parseInt(perPack);
+            // parseFloat, not parseInt: a liquid container can hold 2.5 ml and
+            // whole numbers would silently truncate it (0.5 ml became 0)
+            updated[index].qty = (parseFloat(packs) || 0) * (parseFloat(perPack) || 0);
         }
 
         setManualInvoice({ ...manualInvoice, items: updated });
@@ -574,8 +584,8 @@ const Laboratory = () => {
             is_liquid: product.is_liquid || false,
             manufacturer: product.manufacturer || '',
             unit_cost: product.cost_per_unit || 0,
-            mrp: product.mrp || 0,
-            gst_percent: product.gst_percent || 0,
+            mrp: 0,
+            gst_percent: 0,
             discount_percent: product.discount_percent || 0,
             items_per_pack: product.items_per_pack || 1,
             num_packs: 1,
@@ -601,17 +611,25 @@ const Laboratory = () => {
                 items: manualInvoice.items.map(item => {
                     // Convert Pack Rate to Unit Cost for Backend
                     const packRate = parseFloat(item.unit_cost) || 0;
-                    const itemsPerPack = parseInt(item.items_per_pack) || 1;
-                    const totalQty = parseInt(item.qty) || (parseInt(item.num_packs || 0) * itemsPerPack);
+                    // parseFloat throughout: a container can hold 2.5 ml, and
+                    // whole numbers silently truncated those volumes
+                    const itemsPerPack = parseFloat(item.items_per_pack) || 1;
+                    const totalQty = parseFloat(item.qty) || (parseFloat(item.num_packs || 0) * itemsPerPack);
                     const perUnitCost = packRate / itemsPerPack;
 
                     return {
                         ...item,
-                        expiry_date: item.expiry_date || new Date().toISOString().split('T')[0],
+                        // No expiry means NO expiry (tubes, gloves). Defaulting to
+                        // today marked them as expiring immediately and pushed them
+                        // to the front of the FIFO queue.
+                        expiry_date: item.expiry_date || null,
                         qty: totalQty,
                         unit_cost: perUnitCost,
-                        mrp: parseFloat(item.mrp) || 0,
-                        gst_percent: parseFloat(item.gst_percent) || 0,
+                        // Lab stock is never resold, so there is no MRP and no
+                        // tax on it. Kept at 0 so the cost is the only figure
+                        // that carries through to the inventory value.
+                        mrp: 0,
+                        gst_percent: 0,
                         discount_percent: parseFloat(item.discount_percent) || 0
                     };
                 }),
@@ -857,13 +875,18 @@ const Laboratory = () => {
         setItemSubmitting(true);
         try {
             // Calculate final Qty if packs are used
+            // parseFloat, not parseInt -- a liquid can hold 2.5 ml and integers
+            // would silently truncate it
             const finalQty = inventoryForm.num_packs > 0
-                ? parseInt(inventoryForm.num_packs) * parseInt(inventoryForm.items_per_pack)
-                : parseInt(inventoryForm.qty);
+                ? parseFloat(inventoryForm.num_packs) * parseFloat(inventoryForm.items_per_pack)
+                : parseFloat(inventoryForm.qty);
 
             const payload = {
                 ...inventoryForm,
-                qty: finalQty
+                qty: finalQty,
+                // an empty select must go to the API as null, not "" -- a blank
+                // string is not a valid foreign key and the save would fail
+                supplier: inventoryForm.supplier || null,
             };
 
             if (inventoryForm.id) {
@@ -876,12 +899,80 @@ const Laboratory = () => {
                 showToast('success', 'New Item Added Successfully');
             }
             setShowInventoryModal(false);
-            setInventoryForm({ item_name: '', category: 'REAGENT', qty: 0, cost_per_unit: '', reorder_level: 10, items_per_pack: 1, num_packs: 0 });
+            setInventoryForm({ item_name: '', category: 'REAGENT', qty: 0, cost_per_unit: '', reorder_level: 10, items_per_pack: 1, num_packs: 0, supplier: '', unit: 'units', is_liquid: false });
             fetchInventory();
         } catch (err) { 
             showToast('error', "Failed to save item"); 
         } finally {
             setItemSubmitting(false);
+        }
+    };
+
+    // ── Batch management ──────────────────────────────────────────────────
+    const toggleItemBatches = async (item) => {
+        const id = item.item_id || item.id;
+        if (expandedItemId === id) { setExpandedItemId(null); setItemBatches([]); return; }
+        setExpandedItemId(id);
+        setBatchesLoading(true);
+        try {
+            const { data } = await api.get(`lab/batches/?inventory_item=${id}`);
+            setItemBatches(data.results || data || []);
+        } catch (err) {
+            showToast('error', 'Could not load batches');
+            setItemBatches([]);
+        } finally {
+            setBatchesLoading(false);
+        }
+    };
+
+    const refreshBatches = async (itemId) => {
+        try {
+            const { data } = await api.get(`lab/batches/?inventory_item=${itemId}`);
+            setItemBatches(data.results || data || []);
+        } catch { /* handled by the caller's toast */ }
+        fetchInventory();
+    };
+
+    const handleSaveBatch = async (e) => {
+        e.preventDefault();
+        if (!batchForm) return;
+        try {
+            const payload = {
+                inventory_item: batchForm.inventory_item,
+                batch_no: batchForm.batch_no || '',
+                // blank date must go as null, not "" -- an empty string is not a date
+                expiry_date: batchForm.expiry_date || null,
+                qty: parseFloat(batchForm.qty || 0),
+                purchase_rate: parseFloat(batchForm.purchase_rate || 0),
+                supplier: batchForm.supplier || null,
+            };
+            if (batchForm.id) {
+                await api.patch(`lab/batches/${batchForm.id}/`, payload);
+                showToast('success', 'Batch updated');
+            } else {
+                await api.post('lab/batches/', payload);
+                showToast('success', 'Batch added');
+            }
+            const itemId = batchForm.inventory_item;
+            setBatchForm(null);
+            await refreshBatches(itemId);
+        } catch (err) {
+            showToast('error', 'Failed to save batch');
+        }
+    };
+
+    const handleDeleteBatch = async (batch) => {
+        const ok = await confirm({
+            title: 'Remove batch',
+            message: `Remove ${batch.batch_no || 'this batch'} (${batch.qty} ${batch.unit || ''})? The item total will be reduced.`,
+        });
+        if (!ok) return;
+        try {
+            await api.delete(`lab/batches/${batch.id}/`);
+            showToast('success', 'Batch removed');
+            await refreshBatches(batch.inventory_item);
+        } catch (err) {
+            showToast('error', 'Failed to remove batch');
         }
     };
 
@@ -894,7 +985,12 @@ const Laboratory = () => {
             cost_per_unit: item.cost_per_unit || '',
             reorder_level: item.reorder_level,
             items_per_pack: item.items_per_pack || 1,
-            num_packs: item.items_per_pack > 1 ? Math.floor(item.qty / item.items_per_pack) : 0
+            num_packs: item.items_per_pack > 1 ? Math.floor(item.qty / item.items_per_pack) : 0,
+            // carry these through, otherwise editing an item silently wipes its
+            // supplier and resets its unit back to the default
+            supplier: item.supplier || '',
+            unit: item.unit || 'units',
+            is_liquid: item.is_liquid || false,
         });
         setShowInventoryModal(true);
     };
@@ -973,7 +1069,9 @@ const Laboratory = () => {
                     <div>
                         <h1 className="text-2xl font-bold tracking-tight text-slate-950">Laboratory</h1>
                         <div className="flex items-center gap-6 mt-2">
-                            {['queue', 'inventory', 'test_catalog', 'categories', 'suppliers'].map(tab => (
+                            {/* Suppliers are maintained once by admin under Manage and shared
+                                clinic-wide, so the lab no longer keeps its own separate tab. */}
+                            {['queue', 'inventory', 'test_catalog', 'categories'].map(tab => (
                                 <button
                                     key={tab}
                                     onClick={() => setActiveTab(tab)}
@@ -1324,14 +1422,37 @@ const Laboratory = () => {
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
                                         {inventoryData.results.map(item => (
-                                            <tr key={item.item_id} className="hover:bg-slate-50 transition-colors group">
-                                                <td className="px-6 py-4 font-bold text-slate-900 text-sm">{item.item_name}</td>
+                                            <React.Fragment key={item.item_id}>
+                                            <tr className="hover:bg-slate-50 transition-colors group">
+                                                <td className="px-6 py-4 font-bold text-slate-900 text-sm">
+                                                    <button
+                                                        onClick={() => toggleItemBatches(item)}
+                                                        className="flex items-center gap-2 hover:text-blue-600 transition-colors text-left"
+                                                        title="Show batches"
+                                                    >
+                                                        <ChevronRight
+                                                            size={14}
+                                                            className={`text-slate-400 transition-transform ${expandedItemId === item.item_id ? 'rotate-90' : ''}`}
+                                                        />
+                                                        <span>
+                                                            {item.item_name}
+                                                            {item.supplier_name && (
+                                                                <span className="block text-[10px] font-medium text-slate-400 normal-case">
+                                                                    {item.supplier_name}
+                                                                </span>
+                                                            )}
+                                                        </span>
+                                                    </button>
+                                                </td>
                                                 <td className="px-6 py-4">
                                                     <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-bold uppercase">{item.category}</span>
                                                 </td>
-                                                <td className="px-6 py-4 font-mono font-bold text-slate-700">{item.qty} Units</td>
-                                                <td className="px-6 py-4 font-bold text-slate-700">₹{(item.qty * (parseFloat(item.cost_per_unit) || 0) * (1 + ((parseFloat(item.gst_percent) || 0) / 100))).toFixed(2)}</td>
-                                                <td className="px-6 py-4 text-sm text-slate-500 font-medium">{item.reorder_level} Units</td>
+                                                <td className="px-6 py-4 font-mono font-bold text-slate-700">
+                                                    {item.qty_display || `${item.qty} ${item.unit || 'units'}`}
+                                                </td>
+                                                {/* Stock value at cost -- no GST, lab stock is not resold. */}
+                                                <td className="px-6 py-4 font-bold text-slate-700">₹{((parseFloat(item.qty) || 0) * (parseFloat(item.cost_per_unit) || 0)).toFixed(2)}</td>
+                                                <td className="px-6 py-4 text-sm text-slate-500 font-medium">{item.reorder_level} {item.unit || 'units'}</td>
                                                 <td className="px-6 py-4">
                                                     {item.is_low_stock ? (
                                                         <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-red-50 text-red-600 text-[10px] font-black uppercase tracking-wide">
@@ -1341,6 +1462,12 @@ const Laboratory = () => {
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <button
+                                                            onClick={() => handleEditItem(item)}
+                                                            className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-600 font-bold text-xs hover:bg-blue-100 transition-colors"
+                                                        >
+                                                            Edit
+                                                        </button>
                                                         <button
                                                             onClick={() => setStockModal({ show: true, type: 'IN', item: item })}
                                                             className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-600 font-bold text-xs hover:bg-emerald-100 transition-colors"
@@ -1356,6 +1483,92 @@ const Laboratory = () => {
                                                     </div>
                                                 </td>
                                             </tr>
+
+                                            {/* Batches for this item: quantity + expiry per batch,
+                                                so the same reagent can be held in several bottles
+                                                with different expiry dates. */}
+                                            {expandedItemId === item.item_id && (
+                                                <tr>
+                                                    <td colSpan={6} className="px-6 py-4 bg-slate-50/70 border-l-4 border-blue-200">
+                                                        <div className="flex justify-between items-center mb-3">
+                                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                                Batches &middot; consumed nearest-expiry first
+                                                            </span>
+                                                            <button
+                                                                onClick={() => setBatchForm({
+                                                                    inventory_item: item.item_id, batch_no: '',
+                                                                    expiry_date: '', qty: '', purchase_rate: '',
+                                                                    supplier: item.supplier || '', unit: item.unit,
+                                                                })}
+                                                                className="px-3 py-1.5 rounded-lg bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 transition-colors"
+                                                            >
+                                                                + Add Batch
+                                                            </button>
+                                                        </div>
+
+                                                        {batchesLoading ? (
+                                                            <p className="text-xs text-slate-400 font-bold py-2">Loading batches…</p>
+                                                        ) : itemBatches.length === 0 ? (
+                                                            <p className="text-xs text-slate-400 font-medium py-2">
+                                                                No batches recorded. Stock added without a batch has no expiry tracking.
+                                                            </p>
+                                                        ) : (
+                                                            <table className="w-full text-left">
+                                                                <thead>
+                                                                    <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                                                                        <th className="py-1">Batch No</th>
+                                                                        <th className="py-1">Quantity</th>
+                                                                        <th className="py-1">Expiry</th>
+                                                                        <th className="py-1">Supplier</th>
+                                                                        <th className="py-1 text-right">Actions</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody className="divide-y divide-slate-200/60">
+                                                                    {itemBatches.map(b => (
+                                                                        <tr key={b.id} className="text-sm">
+                                                                            <td className="py-2 font-bold text-slate-700">{b.batch_no || <span className="text-slate-300 font-medium">— none —</span>}</td>
+                                                                            <td className="py-2 font-mono font-bold text-slate-700">{parseFloat(b.qty)} {b.unit || item.unit}</td>
+                                                                            <td className="py-2">
+                                                                                {b.expiry_date ? (
+                                                                                    <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                                                                                        b.expiry_status === 'EXPIRED' ? 'bg-red-100 text-red-700'
+                                                                                        : b.expiry_status === 'EXPIRING' ? 'bg-amber-100 text-amber-700'
+                                                                                        : 'bg-emerald-50 text-emerald-600'}`}>
+                                                                                        {b.expiry_date}
+                                                                                        {b.expiry_status === 'EXPIRED' ? ' · expired' : b.expiry_status === 'EXPIRING' ? ' · soon' : ''}
+                                                                                    </span>
+                                                                                ) : <span className="text-slate-300 text-xs font-medium">no expiry</span>}
+                                                                            </td>
+                                                                            <td className="py-2 text-xs text-slate-500 font-medium">{b.supplier_name || '—'}</td>
+                                                                            <td className="py-2 text-right">
+                                                                                <button
+                                                                                    onClick={() => setBatchForm({
+                                                                                        id: b.id, inventory_item: item.item_id,
+                                                                                        batch_no: b.batch_no || '',
+                                                                                        expiry_date: b.expiry_date || '',
+                                                                                        qty: b.qty, purchase_rate: b.purchase_rate || '',
+                                                                                        supplier: b.supplier || '', unit: b.unit || item.unit,
+                                                                                    })}
+                                                                                    className="px-2 py-1 rounded-md text-blue-600 hover:bg-blue-50 font-bold text-xs"
+                                                                                >
+                                                                                    Edit
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => handleDeleteBatch({ ...b, inventory_item: item.item_id, unit: b.unit || item.unit })}
+                                                                                    className="px-2 py-1 rounded-md text-rose-600 hover:bg-rose-50 font-bold text-xs"
+                                                                                >
+                                                                                    Remove
+                                                                                </button>
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            )}
+                                            </React.Fragment>
                                         ))}
                                     </tbody>
                                 </table>
@@ -2864,15 +3077,11 @@ const Laboratory = () => {
                                             <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[8%]">Mfr</th>
                                             <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[8%]">Batch</th>
                                             <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[8%]">Expiry</th>
-                                            <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[5%]">Unit</th>
-                                            <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[4%]">Liq?</th>
-                                            <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[6%]">Packs</th>
-                                            <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[6%]">Itm/Pk</th>
+                                            <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[7%]">Unit</th>
+                                            <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[7%]">Qty</th>
+                                            <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[7%]">Size</th>
                                             <th className="px-4 py-3 text-[10px] font-black text-blue-500 uppercase tracking-widest w-[6%]">Total</th>
                                             <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[8%]">Cost</th>
-                                            <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[8%]">Rate(GST)</th>
-                                            <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[8%]">MRP</th>
-                                            <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[5%]">Tax%</th>
                                             <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest w-[8%] text-right">Amt</th>
                                             <th className="px-4 py-3 w-[4%]"></th>
                                         </tr>
@@ -2902,27 +3111,61 @@ const Laboratory = () => {
                                                 <td className="px-4 py-2"><input value={item.manufacturer} onChange={e => handleManualItemChange(idx, 'manufacturer', e.target.value)} className="w-full font-bold text-xs bg-transparent outline-none" placeholder="Mfr" /></td>
                                                 <td className="px-4 py-2"><input value={item.batch_no} onChange={e => handleManualItemChange(idx, 'batch_no', e.target.value)} className="w-full font-mono font-bold text-xs bg-transparent outline-none" placeholder="BATCH" /></td>
                                                 <td className="px-4 py-2"><input type="date" value={item.expiry_date} onChange={e => handleManualItemChange(idx, 'expiry_date', e.target.value)} className="w-full font-bold text-xs bg-transparent outline-none" /></td>
-                                                <td className="px-4 py-2"><input value={item.unit} onChange={e => handleManualItemChange(idx, 'unit', e.target.value)} className="w-16 font-bold text-xs bg-transparent outline-none" placeholder="units" /></td>
-                                                <td className="px-4 py-2 text-center"><input type="checkbox" checked={item.is_liquid} onChange={e => handleManualItemChange(idx, 'is_liquid', e.target.checked)} className="w-4 h-4 accent-blue-600 rounded" /></td>
+                                                {/* Dropdown, not free text: typing "ML" or "mls" created
+                                                    units the system couldn't match. Choosing a volume
+                                                    unit also sets the liquid flag, so there is no
+                                                    separate checkbox to get out of step with it. */}
+                                                <td className="px-4 py-2">
+                                                    <select
+                                                        value={item.unit || 'units'}
+                                                        onChange={e => {
+                                                            const u = e.target.value;
+                                                            handleManualItemChange(idx, 'unit', u);
+                                                            handleManualItemChange(idx, 'is_liquid', ['ml', 'litre'].includes(u));
+                                                        }}
+                                                        className="w-20 font-bold text-xs bg-transparent outline-none cursor-pointer"
+                                                    >
+                                                        <option value="units">units</option>
+                                                        <option value="ml">ml</option>
+                                                        <option value="litre">litre</option>
+                                                        <option value="strips">strips</option>
+                                                        <option value="tests">tests</option>
+                                                        <option value="vials">vials</option>
+                                                        <option value="bottles">bottles</option>
+                                                        <option value="boxes">boxes</option>
+                                                        <option value="packs">packs</option>
+                                                        <option value="pieces">pieces</option>
+                                                        <option value="grams">grams</option>
+                                                    </select>
+                                                </td>
 
-                                                {/* NEW COLUMNS */}
+                                                {/* These two columns mean different things per row --
+                                                    "5 bottles x 100 ml" vs "2 boxes x 50 strips" -- so the
+                                                    caption is driven by that row's own unit rather than a
+                                                    fixed header that can only describe one of them. */}
                                                 <td className="px-4 py-2">
                                                     <input
-                                                        type="number"
+                                                        type="number" step="any" min="0"
                                                         value={item.num_packs}
                                                         onChange={e => handleManualItemChange(idx, 'num_packs', e.target.value)}
                                                         className="w-full font-bold text-sm bg-slate-50 border border-slate-200 rounded p-1 text-center outline-none focus:border-blue-500"
-                                                        placeholder="Pks"
+                                                        placeholder={['ml', 'litre'].includes(item.unit) ? 'Btl' : 'Pks'}
                                                     />
+                                                    <span className="block text-[9px] text-slate-400 font-bold text-center mt-0.5">
+                                                        {['ml', 'litre'].includes(item.unit) ? 'bottles' : 'packs'}
+                                                    </span>
                                                 </td>
                                                 <td className="px-4 py-2">
                                                     <input
-                                                        type="number"
+                                                        type="number" step="any" min="0"
                                                         value={item.items_per_pack}
                                                         onChange={e => handleManualItemChange(idx, 'items_per_pack', e.target.value)}
                                                         className="w-full font-bold text-sm bg-slate-50 border border-slate-200 rounded p-1 text-center outline-none focus:border-blue-500"
-                                                        placeholder="Itm"
+                                                        placeholder={['ml', 'litre'].includes(item.unit) ? item.unit : 'Itm'}
                                                     />
+                                                    <span className="block text-[9px] text-slate-400 font-bold text-center mt-0.5">
+                                                        {item.unit || 'units'} each
+                                                    </span>
                                                 </td>
                                                 <td className="px-4 py-2">
                                                     <input
@@ -2931,16 +3174,27 @@ const Laboratory = () => {
                                                         readOnly
                                                         className="w-full font-black text-lg bg-emerald-50 text-emerald-900 rounded px-2 py-1 outline-none border border-emerald-200 text-center shadow-inner cursor-not-allowed"
                                                     />
+                                                    <span className="block text-[9px] text-emerald-600 font-bold text-center mt-0.5">
+                                                        {item.unit || 'units'} total
+                                                    </span>
                                                 </td>
 
-                                                <td className="px-4 py-2"><input type="number" value={item.unit_cost} onChange={e => handleManualItemChange(idx, 'unit_cost', e.target.value)} className="w-full font-bold text-sm bg-transparent outline-none text-right" /></td>
-                                                <td className="px-4 py-2 font-black text-xs text-slate-500 text-right">
-                                                    {(parseFloat(item.unit_cost || 0) * (1 + (parseFloat(item.gst_percent || 0) / 100))).toFixed(2)}
+                                                {/* Lab stock is consumed internally, never resold, so
+                                                    MRP / GST / tax have no meaning here -- only what it
+                                                    cost us. Amount is simply cost x containers. */}
+                                                <td className="px-4 py-2">
+                                                    <input
+                                                        type="number" step="any" min="0"
+                                                        value={item.unit_cost}
+                                                        onChange={e => handleManualItemChange(idx, 'unit_cost', e.target.value)}
+                                                        className="w-full font-bold text-sm bg-transparent outline-none text-right"
+                                                    />
+                                                    <span className="block text-[9px] text-slate-400 font-bold text-right mt-0.5">
+                                                        per container
+                                                    </span>
                                                 </td>
-                                                <td className="px-4 py-2"><input type="number" value={item.mrp} onChange={e => handleManualItemChange(idx, 'mrp', e.target.value)} className="w-full font-bold text-sm bg-transparent outline-none text-right" /></td>
-                                                <td className="px-4 py-2"><input type="number" value={item.gst_percent} onChange={e => handleManualItemChange(idx, 'gst_percent', e.target.value)} className="w-full font-bold text-xs bg-transparent outline-none" /></td>
                                                 <td className="px-4 py-2 font-black text-slate-900 text-right">
-                                                    ₹{((item.unit_cost * item.num_packs) * (1 + (item.gst_percent / 100))).toFixed(2)}
+                                                    ₹{((parseFloat(item.unit_cost) || 0) * (parseFloat(item.num_packs) || 0)).toFixed(2)}
                                                 </td>
                                                 <td className="px-4 py-2"><button onClick={() => removeManualItem(idx)} className="p-1 hover:bg-red-50 text-slate-300 hover:text-red-500 rounded"><Trash2 size={16} /></button></td>
                                             </tr>
@@ -2963,7 +3217,7 @@ const Laboratory = () => {
                                 <div className="text-right">
                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Grand Total</p>
                                     <p className="text-3xl font-black text-slate-900">
-                                        ₹{Math.round(manualInvoice.items.reduce((acc, item) => acc + (item.unit_cost * item.num_packs * (1 + item.gst_percent / 100)), 0) - manualInvoice.cash_discount + manualInvoice.courier_charge)}
+                                        ₹{Math.round(manualInvoice.items.reduce((acc, item) => acc + ((parseFloat(item.unit_cost) || 0) * (parseFloat(item.num_packs) || 0)), 0) - (parseFloat(manualInvoice.cash_discount) || 0) + (parseFloat(manualInvoice.courier_charge) || 0))}
                                     </p>
                                 </div>
                                 <Button onClick={submitManualPurchase} className="h-14 px-8 bg-blue-600 text-white font-black uppercase tracking-widest shadow-xl shadow-blue-600/20 rounded-xl">Save Purchase</Button>
@@ -2998,14 +3252,104 @@ const Laboratory = () => {
 
             {/* Inventory Creation Modal (Existing) */}
             < AnimatePresence >
+                {/* Add / edit a single batch. Batch number and expiry are optional,
+                    because tubes, gloves and plain bottles often carry neither. */}
+                {batchForm && (
+                    <div className="fixed inset-0 z-[110] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
+                        <form onSubmit={handleSaveBatch} className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-6 sm:p-8 space-y-5 max-h-[90vh] overflow-y-auto">
+                            <div>
+                                <h3 className="text-xl font-black text-slate-900">
+                                    {batchForm.id ? 'Edit Batch' : 'Add Batch'}
+                                </h3>
+                                <p className="text-xs font-bold text-slate-400 mt-1">
+                                    Quantity in {batchForm.unit || 'units'}. Leave batch no. and expiry blank if the item has none.
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Batch No <span className="text-slate-300">(optional)</span></label>
+                                    <input
+                                        className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:border-blue-500 font-bold"
+                                        placeholder="e.g. GLU-2214"
+                                        value={batchForm.batch_no}
+                                        onChange={e => setBatchForm({ ...batchForm, batch_no: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Expiry <span className="text-slate-300">(optional)</span></label>
+                                    <input
+                                        type="date"
+                                        className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:border-blue-500 font-bold"
+                                        value={batchForm.expiry_date || ''}
+                                        onChange={e => setBatchForm({ ...batchForm, expiry_date: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                                        Quantity ({batchForm.unit || 'units'})
+                                    </label>
+                                    <input
+                                        type="number" step="any" min="0" required
+                                        className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:border-blue-500 font-bold"
+                                        placeholder="e.g. 100"
+                                        value={batchForm.qty}
+                                        onChange={e => setBatchForm({ ...batchForm, qty: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Cost / unit</label>
+                                    <input
+                                        type="number" step="any" min="0"
+                                        className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:border-blue-500 font-bold"
+                                        placeholder="0.00"
+                                        value={batchForm.purchase_rate}
+                                        onChange={e => setBatchForm({ ...batchForm, purchase_rate: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Supplier</label>
+                                <select
+                                    value={batchForm.supplier || ''}
+                                    onChange={e => setBatchForm({ ...batchForm, supplier: e.target.value })}
+                                    className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:border-blue-500 font-bold"
+                                >
+                                    <option value="">-- No supplier --</option>
+                                    {labSuppliers.map(s => (
+                                        <option key={s.id} value={s.id}>{s.supplier_name}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="flex gap-3 pt-2">
+                                <button type="button" onClick={() => setBatchForm(null)}
+                                    className="flex-1 py-3 rounded-xl border-2 border-slate-200 text-slate-600 font-bold hover:bg-slate-50 transition-colors">
+                                    Cancel
+                                </button>
+                                <button type="submit"
+                                    className="flex-1 py-3 rounded-xl bg-blue-600 text-white font-bold hover:bg-blue-700 transition-colors">
+                                    {batchForm.id ? 'Save Changes' : 'Add Batch'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                )}
+
                 {showInventoryModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-slate-950/40 backdrop-blur-sm no-print">
-                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden flex flex-col">
-                            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                        {/* max-h + scrolling body: this form grew past a laptop screen,
+                            leaving the Save button unreachable. Header stays pinned. */}
+                        <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[2rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 shrink-0">
                                 <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">{inventoryForm.id ? 'Edit Item' : 'Add New Item'}</h3>
                                 <button onClick={() => setShowInventoryModal(false)} className="p-2 rounded-full hover:bg-slate-200 transition-colors"><X size={20} className="text-slate-500" /></button>
                             </div>
-                            <form onSubmit={handleSaveItem} className="p-8 space-y-6">
+                            <form onSubmit={handleSaveItem} className="p-8 space-y-6 overflow-y-auto">
                                 <div className="space-y-4">
                                     <div className="space-y-2">
                                         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Item Name</label>
@@ -3040,24 +3384,81 @@ const Laboratory = () => {
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Supplier</label>
+                                            <div className="relative">
+                                                <select
+                                                    value={inventoryForm.supplier || ''}
+                                                    onChange={e => setInventoryForm({ ...inventoryForm, supplier: e.target.value })}
+                                                    className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-slate-800 focus:border-blue-500 outline-none transition-all appearance-none"
+                                                >
+                                                    <option value="">-- No supplier --</option>
+                                                    {labSuppliers.map(s => (
+                                                        <option key={s.id} value={s.id}>{s.supplier_name}</option>
+                                                    ))}
+                                                </select>
+                                                <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-slate-400 pointer-events-none" size={16} />
+                                            </div>
+                                        </div>
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Unit</label>
+                                            <div className="relative">
+                                                <select
+                                                    value={inventoryForm.unit || 'units'}
+                                                    onChange={e => {
+                                                        const u = e.target.value;
+                                                        setInventoryForm({
+                                                            ...inventoryForm,
+                                                            unit: u,
+                                                            // keep the liquid flag consistent with the chosen unit
+                                                            is_liquid: ['ml', 'litre'].includes(u),
+                                                        });
+                                                    }}
+                                                    className="w-full px-4 py-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-slate-800 focus:border-blue-500 outline-none transition-all appearance-none"
+                                                >
+                                                    <option value="units">Units</option>
+                                                    <option value="ml">ml (millilitre)</option>
+                                                    <option value="litre">Litre</option>
+                                                    <option value="strips">Strips</option>
+                                                    <option value="tests">Tests</option>
+                                                    <option value="vials">Vials</option>
+                                                    <option value="bottles">Bottles</option>
+                                                    <option value="boxes">Boxes</option>
+                                                    <option value="packs">Packs</option>
+                                                    <option value="pieces">Pieces</option>
+                                                    <option value="grams">Grams</option>
+                                                </select>
+                                                <ChevronRight className="absolute right-4 top-1/2 -translate-y-1/2 rotate-90 text-slate-400 pointer-events-none" size={16} />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* For a liquid these read as "100 ml per bottle x 5 bottles";
+                                        for a solid, "1 per pack x 10 packs". Same two numbers,
+                                        wording that matches what the user is actually holding. */}
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div>
-                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Items Per Pack</label>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                                                {isLiquidUnit ? `${inventoryForm.unit} per container` : 'Items Per Pack'}
+                                            </label>
                                             <input
                                                 type="number"
                                                 className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:border-blue-500 font-bold"
-                                                placeholder="e.g. 1"
+                                                placeholder={isLiquidUnit ? 'e.g. 100' : 'e.g. 1'}
                                                 value={inventoryForm.items_per_pack}
                                                 onChange={(e) => setInventoryForm({ ...inventoryForm, items_per_pack: e.target.value })}
                                                 min="1"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">No. of Packs</label>
+                                            <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                                                {isLiquidUnit ? 'No. of containers' : 'No. of Packs'}
+                                            </label>
                                             <input
                                                 type="number"
                                                 className="w-full p-3 bg-slate-50 rounded-xl border border-slate-200 outline-none focus:border-blue-500 font-bold"
-                                                placeholder="e.g. 10"
+                                                placeholder="e.g. 5"
                                                 value={inventoryForm.num_packs}
                                                 onChange={(e) => setInventoryForm({ ...inventoryForm, num_packs: e.target.value })}
                                             />
@@ -3067,11 +3468,11 @@ const Laboratory = () => {
                                     <div className="p-4 bg-blue-50/50 rounded-xl border border-blue-100 flex justify-between items-center">
                                         <span className="text-sm font-bold text-slate-600">Calculated Total Stock</span>
                                         <span className="text-xl font-black text-blue-600">
-                                            {(parseInt(inventoryForm.num_packs || 0) * parseInt(inventoryForm.items_per_pack || 1)) || inventoryForm.qty} Units
+                                            {(parseFloat(inventoryForm.num_packs || 0) * parseFloat(inventoryForm.items_per_pack || 1)) || inventoryForm.qty} {inventoryForm.unit || 'units'}
                                         </span>
                                     </div>
 
-                                    <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div className="space-y-2">
                                             <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Initial Qty</label>
                                             <Input type="number" placeholder="0" value={inventoryForm.qty} onChange={e => setInventoryForm({ ...inventoryForm, qty: e.target.value })} required className="bg-slate-50 border-2 border-slate-100 rounded-xl font-bold" />
@@ -3082,8 +3483,13 @@ const Laboratory = () => {
                                         </div>
                                     </div>
                                     <div className="space-y-2">
-                                        <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Reorder Level</label>
-                                        <Input type="number" placeholder="10" value={inventoryForm.reorder_level} onChange={e => setInventoryForm({ ...inventoryForm, reorder_level: e.target.value })} required className="bg-slate-50 border-2 border-slate-100 rounded-xl font-bold" />
+                                        <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">
+                                            Reorder Level ({inventoryForm.unit || 'units'})
+                                        </label>
+                                        <Input type="number" step="any" min="0" placeholder="10" value={inventoryForm.reorder_level} onChange={e => setInventoryForm({ ...inventoryForm, reorder_level: e.target.value })} required className="bg-slate-50 border-2 border-slate-100 rounded-xl font-bold" />
+                                        <p className="text-[10px] text-slate-400 font-medium ml-1">
+                                            Warn me when stock falls to this level
+                                        </p>
                                     </div>
                                 </div>
                                 <div className="flex justify-end gap-3 pt-4">

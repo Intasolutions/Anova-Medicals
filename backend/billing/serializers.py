@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.db import models
 from rest_framework import serializers
 from .models import Invoice, InvoiceItem, PaymentTransaction
@@ -210,6 +211,28 @@ class InvoiceSerializer(serializers.ModelSerializer):
         # not whatever the client sent, and must reflect any items sync above.
         instance.recalculate_total(save=False)
         self._check_discount_not_exceeding_total(instance)
+
+        # Adding items to a settled bill makes it unsettled again. Without this
+        # the invoice kept its old PAID flag while money was genuinely owed --
+        # so the patient looked square at the counter and could walk out, and
+        # the visit-closing check (which trusts the real balance) disagreed with
+        # what staff saw on screen. Only a client-sent status is respected.
+        if 'payment_status' not in validated_data:
+            paid_amount = sum((p.amount for p in instance.payments.all()), Decimal('0'))
+            discount = instance.discount_amount or Decimal('0')
+            refund = instance.refund_amount or Decimal('0')
+            due = (instance.total_amount or Decimal('0')) - discount - refund
+
+            if instance.payment_status != 'CANCELLED':
+                if due <= Decimal('0'):
+                    instance.payment_status = 'PENDING' if instance.total_amount == 0 else 'PAID'
+                elif paid_amount >= due:
+                    instance.payment_status = 'PAID'
+                elif paid_amount > 0:
+                    instance.payment_status = 'PARTIAL'
+                else:
+                    instance.payment_status = 'PENDING'
+
         instance.save()
 
         # Emit Socket Event
