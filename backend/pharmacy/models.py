@@ -185,6 +185,7 @@ class PharmacyStock(BaseModel):
     
     MEDICINE_TYPE_CHOICES = (
         ('TABLET', 'Tablet'),
+        ('CAPSULE', 'Capsule'),
         ('SYRUP', 'Syrup'),
         ('DROP', 'Drop'),
         ('INJECTION', 'Injection'),

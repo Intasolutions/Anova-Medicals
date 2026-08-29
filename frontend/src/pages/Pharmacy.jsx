@@ -207,7 +207,9 @@ const Pharmacy = () => {
         category: 'PHARMACY',
         cash_discount: 0, courier_charge: 0 // New Extra Expenses
     });
-    const medicineTypes = ['TABLET', 'SYRUP', 'DROP', 'INJECTION', 'GEL', 'CREAM', 'OINTMENT', 'POWDER', 'SPRAY', 'OTHER', 'MEDICINE'];
+    // Must stay in step with PharmacyStock.MEDICINE_TYPE_CHOICES on the backend --
+    // a type offered here but missing there is rejected on save.
+    const medicineTypes = ['TABLET', 'CAPSULE', 'SYRUP', 'DROP', 'INJECTION', 'GEL', 'CREAM', 'OINTMENT', 'POWDER', 'SPRAY', 'OTHER', 'MEDICINE'];
     const [scannedBarcode, setScannedBarcode] = useState('');
     const [manualProductSearch, setManualProductSearch] = useState({ rowIdx: null, results: [] });
 
@@ -506,8 +508,9 @@ const Pharmacy = () => {
         // !CRITICAL: RESTORED MISSING LINE - Fixes typing issue
         newItems[idx][field] = value;
 
-        if (field === 'medicine_type' && value !== 'TABLET') {
-            // Smart Default: If Type is NOT Tablet, TPS usually 1
+        // Smart Default: a syrup or gel is sold as one unit, so units-per-pack is 1.
+        // Capsules are strip-packed exactly like tablets, so they keep the strip size.
+        if (field === 'medicine_type' && !['TABLET', 'CAPSULE'].includes(value)) {
             newItems[idx].tablets_per_strip = 1;
         }
 
@@ -911,7 +914,7 @@ const Pharmacy = () => {
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={16} />
                             <input
                                 className="pl-9 pr-4 py-2 bg-white border border-slate-200 text-slate-700 text-xs rounded-xl focus:ring-2 focus:ring-gray-900/20 focus:border-gray-900 outline-none font-bold shadow-sm w-48 md:w-64 transition-all"
-                                placeholder="Search inventory..."
+                                placeholder="Search name, content, batch or barcode..."
                                 value={inventorySearch}
                                 onChange={(e) => setInventorySearch(e.target.value)}
                             />
@@ -1247,18 +1250,24 @@ const Pharmacy = () => {
                                 <div className="relative mb-4 shrink-0 flex gap-4">
                                     <div className="relative flex-1">
                                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                                        <input className="w-full pl-10 pr-4 py-3 bg-white border-2 border-gray-300 rounded-xl text-sm font-bold text-gray-900 placeholder:text-slate-400 focus:border-gray-900 outline-none shadow-sm transition-colors" placeholder="Search medicine..." value={medSearch} onChange={e => searchMeds(e.target.value)} autoFocus />
+                                        <input className="w-full pl-10 pr-4 py-3 bg-white border-2 border-gray-300 rounded-xl text-sm font-bold text-gray-900 placeholder:text-slate-400 focus:border-gray-900 outline-none shadow-sm transition-colors" placeholder="Search by name or content (salt)..." value={medSearch} onChange={e => searchMeds(e.target.value)} autoFocus />
                                     </div>
                                 </div>
                                 <div className="flex-1 overflow-y-auto pr-2">
                                     {medResults.length > 0 ? (
                                         <div className="grid grid-cols-2 gap-3 pb-12">
                                             {medResults.map(m => (
-                                                <div key={m.med_id} onClick={() => addToCart(m)} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:border-gray-900 cursor-pointer transition-colors group flex flex-col justify-between h-28">
+                                                <div key={m.med_id} onClick={() => addToCart(m)} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:border-gray-900 cursor-pointer transition-colors group flex flex-col justify-between min-h-28">
                                                     <div className="flex justify-between items-start">
                                                         <div>
                                                             <h4 className="font-bold text-gray-900 line-clamp-1 text-sm">{m.name}</h4>
-                                                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mt-0.5">{m.manufacturer || 'Generic'}</p>
+                                                            {/* Content (the salt) is searchable, so show it -- otherwise a
+                                                                hit on a salt name looks like an unrelated brand and the
+                                                                pharmacist cannot tell why it matched or judge a substitute. */}
+                                                            {m.content ? (
+                                                                <p className="text-[10px] font-bold text-blue-600 line-clamp-1 mt-0.5">{m.content}</p>
+                                                            ) : null}
+                                                            <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mt-0.5 line-clamp-1">{m.manufacturer || 'Generic'}</p>
                                                         </div>
                                                         <div className="w-6 h-6 rounded-md bg-gray-100 text-gray-600 flex items-center justify-center group-hover:bg-gray-900 group-hover:text-white transition-colors border border-gray-200 group-hover:border-gray-900 shrink-0">
                                                             <Plus size={14} />

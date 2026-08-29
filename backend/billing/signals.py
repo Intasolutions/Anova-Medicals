@@ -3,6 +3,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from patients.models import Visit
 from lab.models import LabCharge
+from casualty.models import CasualtyService
 from .models import Invoice, InvoiceItem
 
 # An invoice is still "open" (safe to modify) in any of these states.
@@ -120,6 +121,24 @@ def create_or_update_consultation_invoice(sender, instance, created, **kwargs):
             visit=instance,
             payment_status__in=['PENDING', 'PARTIAL', 'DRAFT'],
         ).order_by('created_at').first()
+
+        # A doctor assigned AFTER the visit was created (casualty -> doctor, or
+        # a walk-in later routed to OP) had no invoice to add the fee to, so the
+        # consultation was never charged and the patient stayed invisible to
+        # billing. Give them a bill the same way a doctor-at-token visit gets one.
+        if not invoice and instance.doctor and amount > 0:
+            has_settled_consultation = InvoiceItem.objects.filter(
+                invoice__visit=instance, dept='CONSULTATION'
+            ).exists()
+            if not has_settled_consultation:
+                invoice = Invoice.objects.create(
+                    visit=instance,
+                    patient=instance.patient,
+                    patient_name=instance.patient.full_name if instance.patient else 'Unknown',
+                    total_amount=0,
+                    payment_status='PENDING',
+                )
+
         if invoice:
             cons_item = InvoiceItem.objects.filter(invoice=invoice, dept='CONSULTATION').first()
 
@@ -164,3 +183,67 @@ def create_or_update_consultation_invoice(sender, instance, created, **kwargs):
                 invoice.payment_status = 'PENDING'
 
             invoice.save()
+
+
+@receiver(post_save, sender=CasualtyService)
+def sync_casualty_service_to_invoice(sender, instance, created, **kwargs):
+    """
+    Put a casualty service on the patient's bill the moment it is recorded.
+
+    Previously nothing billed these automatically -- only the Billing screen
+    added them, by reading visit.casualty_services when staff opened the
+    patient. Any route that skipped Billing (discharge straight from casualty,
+    or a services-only visit with no doctor and therefore no invoice at all)
+    lost the charge entirely, and left the patient invisible to the billing
+    queue because that queue is driven by unpaid invoices.
+
+    Mirrors the lab-charge signal: bill at the moment the service is recorded,
+    guard against re-billing on every later save, and never touch a settled bill.
+    """
+    if not instance.visit:
+        return
+
+    amount = instance.total_charge or 0
+    if float(amount) <= 0:
+        return
+
+    # This service's line on ANY bill for this visit -- paid ones included.
+    # item_id ties the line to this exact service row; the description
+    # fallback catches lines the Billing screen created without an item_id.
+    service_name = instance.service_definition.name if instance.service_definition else 'Casualty Service'
+    this_services_line = InvoiceItem.objects.filter(
+        invoice__visit=instance.visit, dept='CASUALTY'
+    ).filter(
+        Q(item_id=instance.id)
+        | Q(item_id__isnull=True, description=service_name)
+    )
+
+    # Already billed somewhere? Nothing to do. Without this guard the signal
+    # would re-add the line on every status change (PENDING -> COMPLETED).
+    if this_services_line.exists():
+        return
+
+    open_invoice = Invoice.objects.filter(
+        visit=instance.visit,
+        payment_status__in=OPEN_INVOICE_STATUSES,
+    ).order_by('created_at').first()
+
+    if not open_invoice:
+        open_invoice = Invoice.objects.create(
+            visit=instance.visit,
+            patient=instance.visit.patient,
+            patient_name=instance.visit.patient.full_name if instance.visit.patient else 'Unknown',
+            total_amount=0,
+            payment_status='PENDING',
+        )
+
+    InvoiceItem.objects.create(
+        invoice=open_invoice,
+        item_id=instance.id,
+        dept='CASUALTY',
+        description=service_name,
+        qty=instance.qty or 1,
+        unit_price=instance.unit_charge or 0,
+        amount=amount,
+    )
+    open_invoice.recalculate_total()
