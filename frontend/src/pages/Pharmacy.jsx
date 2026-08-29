@@ -101,6 +101,18 @@ const formatPatientAge = (years, months, gender) => {
     return [age, sex].filter(Boolean).join(' • ') || null;
 };
 
+// Days until a batch expires; negative means already expired.
+// Returns null when no expiry is recorded, so "unknown" is never treated as "expired".
+const daysUntilExpiry = (expiryDate) => {
+    if (!expiryDate) return null;
+    const exp = new Date(expiryDate);
+    if (isNaN(exp.getTime())) return null;
+    const today = new Date();
+    exp.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
+    return Math.round((exp - today) / 86400000);
+};
+
 const Pharmacy = () => {
     const { showToast } = useToast();
     const { user } = useAuth();
@@ -379,6 +391,16 @@ const Pharmacy = () => {
         } catch (err) { setMedResults([]); }
     };
     const addToCart = (med) => {
+        // Expired stock is warned about, never blocked: the pharmacist checks the
+        // physical pack and decides. A hard block would stop legitimate dispensing
+        // when a date is mistyped, which is worse at a live counter.
+        const days = daysUntilExpiry(med.expiry_date);
+        if (days !== null && days < 0) {
+            showToast('error', `EXPIRED ${Math.abs(days)} day${Math.abs(days) === 1 ? '' : 's'} ago (${med.batch_no || 'no batch'}) - check the pack before dispensing`);
+        } else if (days !== null && days <= 30) {
+            showToast('info', `Expires in ${days} day${days === 1 ? '' : 's'} (${med.batch_no || 'no batch'}) - please verify`);
+        }
+
         const existing = cart.find(item => item.med_id === med.med_id);
         const tps = med.tablets_per_strip || 1;
 
@@ -702,8 +724,14 @@ const Pharmacy = () => {
     const loadPrescription = async (visit) => {
         setSelectedPatient({ id: visit.patient, p_id: visit.patient, full_name: visit.patient_name, v_id: visit.id, diagnosis: visit.diagnosis, age: visit.patient_age, age_months: visit.patient_age_months, gender: visit.patient_gender });
         if (visit.doctor_name) setSelectedDoctor({ username: visit.doctor_name, u_id: visit.doctor }); else setSelectedDoctor({ username: 'Referral', u_id: null });
+        // Each patient's cart stands alone. This used to seed newCart from the
+        // EXISTING cart, so clicking a second patient appended their medicines
+        // to the first patient's -- one cart holding two people's drugs, billed
+        // and stock-deducted against whoever was selected last. Always start
+        // empty so the cart only ever shows the patient just clicked.
+        setCart([]);
         if (!visit.prescription) { showToast('info', 'No digital prescription.'); return; }
-        setLoading(true); const newCart = [...cart];
+        setLoading(true); const newCart = [];
         try {
             const rawPrescription = visit.prescription;
             let medList = [];
@@ -744,11 +772,16 @@ const Pharmacy = () => {
                 (visit.pharmacy_items || []).map(pi => pi.name.toLowerCase())
             );
             
-            const itemsInCart = new Set(cart.map(c => c.name.toLowerCase()));
+            // Tracks what THIS load has added -- the cart starts empty now,
+            // so reading `cart` here would always be stale.
+            const itemsInCart = new Set();
 
             for (const med of medList) {
                 const { name, dosage, duration, qty, note } = med;
                 if (alreadySoldNames.has(name.toLowerCase()) || itemsInCart.has(name.toLowerCase())) continue;
+                // Mark it before the lookup: an Rx listing the same drug twice
+                // would otherwise add two lines for it.
+                itemsInCart.add(name.toLowerCase());
 
                 const { data } = await api.get(`pharmacy/stock/?search=${encodeURIComponent(name)}`);
                 const results = data.results || data || [];
@@ -1077,8 +1110,12 @@ const Pharmacy = () => {
                                         <button
                                             key={visit.id}
                                             onClick={() => {
+                                                // Same rule as loading an Rx: the cart belongs to one
+                                                // patient, so selecting someone else starts it fresh
+                                                // rather than carrying the previous patient's items over.
+                                                setCart([]);
                                                 setSelectedPatient({ id: visit.patient, p_id: visit.patient, full_name: visit.patient_name, v_id: visit.id, diagnosis: visit.diagnosis, age: visit.patient_age, age_months: visit.patient_age_months, gender: visit.patient_gender });
-                                                if (visit.doctor_name) setSelectedDoctor({ username: visit.doctor_name, u_id: visit.doctor }); 
+                                                if (visit.doctor_name) setSelectedDoctor({ username: visit.doctor_name, u_id: visit.doctor });
                                                 else setSelectedDoctor({ username: 'N/A', u_id: null });
                                                 setActiveTab('pos');
                                             }}
@@ -1258,14 +1295,18 @@ const Pharmacy = () => {
                                         <div className="grid grid-cols-2 gap-3 pb-12">
                                             {medResults.map(m => (
                                                 <div key={m.med_id} onClick={() => addToCart(m)} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:border-gray-900 cursor-pointer transition-colors group flex flex-col justify-between min-h-28">
-                                                    <div className="flex justify-between items-start">
-                                                        <div>
+                                                    <div className="flex justify-between items-start gap-2">
+                                                        {/* min-w-0 lets the text block shrink instead of pushing the
+                                                            + button out of the card when a salt name is long. */}
+                                                        <div className="min-w-0 flex-1">
                                                             <h4 className="font-bold text-gray-900 line-clamp-1 text-sm">{m.name}</h4>
                                                             {/* Content (the salt) is searchable, so show it -- otherwise a
                                                                 hit on a salt name looks like an unrelated brand and the
-                                                                pharmacist cannot tell why it matched or judge a substitute. */}
+                                                                pharmacist cannot tell why it matched or judge a substitute.
+                                                                Two lines: a full composition rarely fits on one, and a
+                                                                half-shown salt is no use for judging a substitute. */}
                                                             {m.content ? (
-                                                                <p className="text-[10px] font-bold text-blue-600 line-clamp-1 mt-0.5">{m.content}</p>
+                                                                <p className="text-[10px] font-bold text-blue-600 line-clamp-2 leading-snug mt-0.5 break-words" title={m.content}>{m.content}</p>
                                                             ) : null}
                                                             <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider mt-0.5 line-clamp-1">{m.manufacturer || 'Generic'}</p>
                                                         </div>
@@ -1274,10 +1315,27 @@ const Pharmacy = () => {
                                                         </div>
                                                     </div>
                                                     <div className="flex justify-between items-end mt-2">
-                                                        <div className="flex flex-col">
+                                                        <div className="flex flex-col gap-1">
                                                             <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${m.qty_available < 10 ? 'border border-red-500 text-red-700 bg-red-50' : 'border border-gray-300 text-gray-800 bg-gray-50'}`}>
                                                                 Stock: {m.qty_available} Tab
                                                             </span>
+                                                            {/* Expiry is visible before the click, not only as a toast after --
+                                                                a toast can be missed at a busy counter. */}
+                                                            {(() => {
+                                                                const d = daysUntilExpiry(m.expiry_date);
+                                                                if (d === null) return null;
+                                                                if (d < 0) return (
+                                                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-red-600 text-white uppercase tracking-wide">
+                                                                        Expired
+                                                                    </span>
+                                                                );
+                                                                if (d <= 30) return (
+                                                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 uppercase tracking-wide">
+                                                                        Exp {d}d
+                                                                    </span>
+                                                                );
+                                                                return null;
+                                                            })()}
                                                         </div>
                                                         <div className="text-right">
                                                             <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Rate / Tab</span>
