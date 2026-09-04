@@ -223,13 +223,20 @@ def sync_casualty_service_to_invoice(sender, instance, created, **kwargs):
     if this_services_line.exists():
         return
 
-    open_invoice = Invoice.objects.filter(
+    # Reuse this visit's most recent invoice regardless of payment status --
+    # NOT just an open one. A visit is one running tab: a patient who pays
+    # for each service as it's added (very ordinary front-desk behaviour)
+    # would otherwise get a brand-new invoice number for every single item,
+    # since the previous one is PAID and therefore "not open" by the time
+    # the next charge lands. Reopening the same invoice and recalculating
+    # its payment_status below is what correctly turns a settled bill back
+    # into "PARTIAL / owes a bit more" instead of spawning a parallel one.
+    invoice = Invoice.objects.filter(
         visit=instance.visit,
-        payment_status__in=OPEN_INVOICE_STATUSES,
-    ).order_by('created_at').first()
+    ).exclude(payment_status='CANCELLED').order_by('-created_at').first()
 
-    if not open_invoice:
-        open_invoice = Invoice.objects.create(
+    if not invoice:
+        invoice = Invoice.objects.create(
             visit=instance.visit,
             patient=instance.visit.patient,
             patient_name=instance.visit.patient.full_name if instance.visit.patient else 'Unknown',
@@ -238,7 +245,7 @@ def sync_casualty_service_to_invoice(sender, instance, created, **kwargs):
         )
 
     InvoiceItem.objects.create(
-        invoice=open_invoice,
+        invoice=invoice,
         item_id=instance.id,
         dept='CASUALTY',
         description=service_name,
@@ -246,4 +253,23 @@ def sync_casualty_service_to_invoice(sender, instance, created, **kwargs):
         unit_price=instance.unit_charge or 0,
         amount=amount,
     )
-    open_invoice.recalculate_total()
+    invoice.recalculate_total(save=False)
+
+    # Re-derive payment_status from the new total -- mirrors the same
+    # balance formula used in InvoiceSerializer.create and
+    # create_or_update_consultation_invoice, so this can't disagree with
+    # them about what a given invoice's status should be.
+    paid_amount = sum(p.amount for p in invoice.payments.all())
+    discount = invoice.discount_amount or 0
+    refund = invoice.refund_amount or 0
+
+    if invoice.total_amount == 0:
+        invoice.payment_status = 'PENDING'
+    elif paid_amount >= invoice.total_amount - discount - refund:
+        invoice.payment_status = 'PAID'
+    elif paid_amount > 0:
+        invoice.payment_status = 'PARTIAL'
+    else:
+        invoice.payment_status = 'PENDING'
+
+    invoice.save()

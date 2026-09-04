@@ -303,8 +303,6 @@ const Laboratory = () => {
             socket.on('lab_update', onLabUpdate);
 
             return () => {
-                socket.off('lab_update', fetchCharges);
-                socket.off('reception_update', fetchPendingVisits);
                 socket.off('doctor_notes_update', onDoctorUpdate);
                 socket.off('lab_update', onLabUpdate);
             };

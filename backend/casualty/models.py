@@ -9,6 +9,11 @@ class CasualtyLog(BaseModel):
     treatment_notes = models.TextField()
     vitals = models.JSONField(default=dict, blank=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['created_at']),
+        ]
+
     def __str__(self):
         return f"Casualty Log {self.id}"
 
@@ -30,6 +35,12 @@ class CasualtyService(BaseModel):
     notes = models.TextField(blank=True)
     status = models.CharField(max_length=20, choices=(('PENDING', 'Pending'), ('COMPLETED', 'Completed')), default='PENDING')
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['created_at']),
+            models.Index(fields=['visit', 'status']),
+        ]
+
     def save(self, *args, **kwargs):
         self.total_charge = self.unit_charge * self.qty
         super().save(*args, **kwargs)
@@ -43,6 +54,11 @@ class CasualtyMedicine(BaseModel):
     dosage = models.CharField(max_length=100, blank=True)
     administered_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['created_at']),
+        ]
+
     def save(self, *args, **kwargs):
         self.total_price = self.unit_price * self.qty
         super().save(*args, **kwargs)
@@ -54,3 +70,9 @@ class CasualtyObservation(BaseModel):
     planned_duration_minutes = models.PositiveIntegerField(default=60)
     observation_notes = models.TextField(blank=True)
     is_active = models.BooleanField(default=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['created_at']),
+            models.Index(fields=['visit', 'is_active']),
+        ]

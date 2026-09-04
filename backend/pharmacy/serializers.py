@@ -208,13 +208,16 @@ class PurchaseInvoiceSerializer(serializers.ModelSerializer):
 
             # --- Notification Cleanup ---
             try:
-                # If stock is now healthy (above reorder level + buffer), clear low stock alerts
+                # If stock is now healthy (above reorder level + buffer), clear low stock alerts.
+                # Matched via related_id (exact FK-style match) rather than
+                # message text -- see pharmacy/signals.py for why. Notifications
+                # created before this change won't have related_id set and are
+                # simply left alone here, same as any other notification.
                 if stock.qty_available > stock.reorder_level:
                     from core.models import Notification
-                    # Use Q for cleaner syntax
                     Notification.objects.filter(
-                        Q(message__icontains=f"Low stock alert: {stock.name}") &
-                        Q(message__icontains=stock.batch_no)
+                        related_id=stock.id,
+                        type='WARNING'
                     ).delete()
             except Exception as e:
                 print(f"Failed to clear notifications: {e}")

@@ -257,13 +257,14 @@ class PharmacyBulkUploadView(APIView):
                         if item.barcode: stock.barcode = item.barcode
                         stock.save()
 
-                    # Notification Cleanup
+                    # Notification Cleanup -- matched via related_id, see
+                    # pharmacy/signals.py for why this replaced message-text matching.
                     try:
                         if stock.qty_available > stock.reorder_level:
                             from core.models import Notification
                             Notification.objects.filter(
-                                Q(message__icontains=f"Low stock alert: {stock.name}") &
-                                Q(message__icontains=stock.batch_no)
+                                related_id=stock.id,
+                                type='WARNING'
                             ).delete()
                     except: pass
 
@@ -376,8 +377,9 @@ class PharmacyStockViewSet(viewsets.ModelViewSet):
             PharmacyStock.objects
             .filter(is_deleted=False)
             .filter(Q(name__icontains=query) | Q(content__icontains=query))
-            .values('name', 'content')
+            .values('name')
             .annotate(total_qty=Sum('qty_available'))
+            .filter(total_qty__gt=0)
             .order_by('name')
         )
 
@@ -469,17 +471,23 @@ class PharmacySaleViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         search = self.request.query_params.get('search')
         
-        # Support searching by Invoice ID (UUID string match) or Patient Name
+        # Support searching by Sale ID, central Invoice number, or Patient details
         if search:
             # Also search by central invoice number
             from billing.models import InvoiceItem
             matching_sale_ids = InvoiceItem.objects.filter(
-                invoice__invoice_number__icontains=search, 
+                invoice__invoice_number__icontains=search,
                 dept='PHARMACY'
             ).values_list('item_id', flat=True)
 
+            # Sale ID is an integer PK -- `icontains` casts it to text and
+            # substring-matches, which can never use an index and staff read
+            # the exact ID off a receipt anyway. Exact match when the search
+            # term is all-digits; falls through to the other fields otherwise.
+            id_match = models.Q(id=int(search)) if search.isdigit() else models.Q()
+
             qs = qs.filter(
-                models.Q(id__icontains=search) | 
+                id_match |
                 models.Q(patient__full_name__icontains=search) |
                 models.Q(patient__phone__icontains=search) |
                 models.Q(patient__registration_number__icontains=search) |

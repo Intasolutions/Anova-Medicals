@@ -44,6 +44,25 @@ class CasualtyServiceViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return CasualtyService.objects.all().order_by('-created_at')
 
+    def perform_create(self, serializer):
+        instance = serializer.save()
+        self._emit_socket_update(instance)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        self._emit_socket_update(instance)
+
+    def _emit_socket_update(self, service):
+        try:
+            from asgiref.sync import async_to_sync
+            from revive_cms.sio import sio
+            async_to_sync(sio.emit)('casualty_service_update', {
+                'service_id': str(service.id),
+                'status': service.status,
+            })
+        except Exception as e:
+            print(f"Socket emit error: {e}")
+
 class CasualtyMedicineViewSet(viewsets.ModelViewSet):
     serializer_class = CasualtyMedicineSerializer
     permission_classes = [IsCasualtyOrAdmin]

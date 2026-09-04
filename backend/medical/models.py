@@ -15,6 +15,11 @@ class DoctorNote(BaseModel):
     notes = models.TextField(blank=True)
     lab_referral_details = models.TextField(blank=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['created_at']),
+        ]
+
     def __str__(self):
         return f"Note for Visit {getattr(self.visit, 'id', self.visit.id)}"
 

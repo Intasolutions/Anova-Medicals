@@ -767,12 +767,15 @@ const CasualtyPage = () => {
         fetchDoctors();
         fetchMetadata();
 
+        // Fallback poll (60s) -- catches any update missed if a socket event
+        // was dropped during a brief disconnect. Real-time updates come from
+        // the visit_update socket listener below.
         const interval = setInterval(() => {
             if (viewMode === 'QUEUE') {
                 fetchQueue(false);
                 fetchStats();
             }
-        }, 4000);
+        }, 60000);
 
         const onVisitUpdate = () => {
             fetchQueue(false);

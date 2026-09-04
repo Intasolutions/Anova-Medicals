@@ -72,7 +72,15 @@ class InvoiceSerializer(serializers.ModelSerializer):
         
         invoice = None
         if visit:
-            invoice = Invoice.objects.filter(visit=visit).order_by('created_at').first()
+            # Most recent non-cancelled invoice, matching the same rule the
+            # billing signals use (sync_casualty_service_to_invoice /
+            # sync_lab_charge_to_invoice) -- a visit is one running tab, so
+            # whichever code path touches it next must agree on which
+            # invoice is "the" active one. A CANCELLED invoice must never be
+            # silently reused/reopened; a fresh one is created instead.
+            invoice = Invoice.objects.filter(visit=visit).exclude(
+                payment_status='CANCELLED'
+            ).order_by('-created_at').first()
             
         if invoice:
 

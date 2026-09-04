@@ -309,7 +309,8 @@ const Doctor = () => {
 
     // ── Medicine handlers ────────────────────────────────────────────────────
     const addMedicine = (med) => {
-        if (selectedMeds.find(m => m.name === med.name)) {
+        const normalizedName = med.name.trim().toLowerCase();
+        if (selectedMeds.find(m => m.name.trim().toLowerCase() === normalizedName)) {
             showToast('info', `${med.name} already in prescription`);
             setMedSearch(''); setMedResults([]); return;
         }
@@ -325,8 +326,9 @@ const Doctor = () => {
             isTablet = false;
         }
         const count = isTablet ? '' : '1';
+        const _id = (crypto.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.random()}`;
         setSelectedMeds(prev => [...prev, {
-            name: med.name, dosage: '', duration: '', count: count, note: '',
+            _id, name: med.name, dosage: '', duration: '', count: count, note: '',
             stock: med.qty_available || 0, mrp: med.mrp || 0, tps: med.tablets_per_strip || 1,
             isTablet: isTablet, content: med.content || ''
         }]);
@@ -337,15 +339,15 @@ const Doctor = () => {
         setMedSearch(''); setMedResults([]);
     };
 
-    const removeMedicine = (name) => {
-        const rem = selectedMeds.filter(m => m.name !== name);
+    const removeMedicine = (_id) => {
+        const rem = selectedMeds.filter(m => m._id !== _id);
         setSelectedMeds(rem);
         if (rem.length === 0 && referral === 'PHARMACY') setReferral('NONE');
     };
 
-    const handleMedFieldChange = (name, field, value) => {
+    const handleMedFieldChange = (_id, field, value) => {
         setSelectedMeds(prev => prev.map(m => {
-            if (m.name !== name) return m;
+            if (m._id !== _id) return m;
             const updated = { ...m, [field]: value };
             if (field === 'dosage' || field === 'duration') {
                 if (m.isTablet !== false) {
@@ -466,7 +468,8 @@ const Doctor = () => {
                     } else if (nameUpper.includes('SYP') || nameUpper.includes('SYRUP') || nameUpper.includes('INJ') || nameUpper.includes('GEL') || nameUpper.includes('OINT') || nameUpper.includes('CREAM') || nameUpper.includes('DROP') || nameUpper.includes('POWDER') || nameUpper.includes('SPRAY')) {
                         isTablet = false;
                     }
-                    return { name, dosage, duration, count, stock, note, isTablet, mrp: match?.mrp || 0, tps: match?.tablets_per_strip || 1 };
+                    const _id = (crypto.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.random()}`;
+                    return { _id, name, dosage, duration, count, stock, note, isTablet, mrp: match?.mrp || 0, tps: match?.tablets_per_strip || 1 };
                 });
                 const resolved = (await Promise.all(medPromises)).filter(Boolean);
                 if (activeVisitRef.current !== vId) return;
@@ -824,8 +827,11 @@ const Doctor = () => {
                 if (draft.notes) setNotes(draft.notes);
                 if (draft.vitals) setVitals(draft.vitals);
                 if (draft.selectedMeds) {
-                    setSelectedMeds(draft.selectedMeds);
-                    draftMeds = draft.selectedMeds;
+                    const medsWithIds = draft.selectedMeds.map(m => m._id ? m : {
+                        ...m, _id: (crypto.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.random()}`
+                    });
+                    setSelectedMeds(medsWithIds);
+                    draftMeds = medsWithIds;
                 }
                 if (draft.selectedTests) setSelectedTests(draft.selectedTests);
                 if (draft.referral) setReferral(draft.referral);
@@ -1358,7 +1364,7 @@ const Doctor = () => {
                                                             const isOOS = stock === 0;
                                                             const isLow = stock > 0 && stock < 10 && !isIns;
                                                             return (
-                                                                <motion.div key={med.name}
+                                                                <motion.div key={med._id || med.name}
                                                                     initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
                                                                     className={`bg-white p-4 rounded-xl border-2 shadow-sm flex flex-col gap-3 ${isIns || isOOS ? 'border-red-300 bg-red-50/30' : 'border-slate-200'}`}>
                                                                     <div className="flex items-center justify-between w-full">
@@ -1387,7 +1393,7 @@ const Doctor = () => {
                                                                                     <span className="text-xs font-black text-slate-900">Est: ₹{((med.mrp / (med.tps || 1)) * pQty).toFixed(2)}</span>
                                                                                 </div>
                                                                             )}
-                                                                            <button onClick={() => removeMedicine(med.name)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                                                                            <button onClick={() => removeMedicine(med._id || med.name)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
                                                                         </div>
                                                                     </div>
                                                                     <div className="flex items-center gap-2 w-full">
@@ -1398,7 +1404,7 @@ const Doctor = () => {
                                                                             <div key={inp.field} className="relative flex-1">
                                                                                 <label className="absolute -top-2 left-2 px-1 bg-white text-[9px] font-bold text-slate-400 uppercase z-10">{inp.l}</label>
                                                                                 <input list={inp.lid} value={med[inp.field]} placeholder={inp.ph}
-                                                                                    onChange={e => handleMedFieldChange(med.name, inp.field, e.target.value)}
+                                                                                    onChange={e => handleMedFieldChange(med._id || med.name, inp.field, e.target.value)}
                                                                                     className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold text-center focus:border-blue-500 focus:bg-white outline-none" />
                                                                                 <datalist id={inp.lid}>{inp.opts.map(o => <option key={o} value={o} />)}</datalist>
                                                                             </div>
@@ -1406,14 +1412,14 @@ const Doctor = () => {
                                                                         <div className="relative flex-1">
                                                                             <label className="absolute -top-2 left-2 px-1 bg-white text-[9px] font-bold text-slate-400 uppercase z-10">Qty</label>
                                                                             <input type="number" min="1" value={med.count}
-                                                                                onChange={e => handleMedFieldChange(med.name, 'count', e.target.value)}
+                                                                                onChange={e => handleMedFieldChange(med._id || med.name, 'count', e.target.value)}
                                                                                 className={`w-full px-3 py-2 bg-slate-50 border-2 rounded-lg text-xs font-bold text-center outline-none transition-all focus:bg-white ${isIns ? 'border-red-400 text-red-700' : 'border-slate-200 focus:border-blue-500'}`} />
                                                                         </div>
                                                                     </div>
                                                                     <div className="relative w-full">
                                                                         <label className="absolute -top-2 left-2 px-1 bg-white text-[9px] font-bold text-slate-400 uppercase z-10">Note</label>
                                                                         <input type="text" value={med.note || ''} placeholder="Add instructions, quantity marks..."
-                                                                            onChange={e => handleMedFieldChange(med.name, 'note', e.target.value)}
+                                                                            onChange={e => handleMedFieldChange(med._id || med.name, 'note', e.target.value)}
                                                                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold focus:border-blue-500 focus:bg-white outline-none transition-all" />
                                                                     </div>
                                                                 </motion.div>

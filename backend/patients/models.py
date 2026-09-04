@@ -21,13 +21,26 @@ class Patient(BaseModel):
     id_proof = models.CharField(max_length=50, blank=True, null=True)
     medical_history = models.TextField(blank=True, null=True, help_text="Pre-existing conditions like BP, Diabetes, etc.")
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['created_at']),
+            models.Index(fields=['full_name']),
+            models.Index(fields=['phone']),
+            models.Index(fields=['registration_number']),
+        ]
+
     def save(self, *args, **kwargs):
         if not self.registration_number or self.registration_number == 'TEMP':
-            last_patient = Patient.objects.order_by('created_at').last()
-            if last_patient and last_patient.registration_number and last_patient.registration_number.isdigit():
-                self.registration_number = str(int(last_patient.registration_number) + 1)
-            else:
-                self.registration_number = "10001"
+            # Take the HIGHEST existing number, not the most-recently-created row.
+            # Mirrors Invoice.save() -- ordering by created_at can hand back a
+            # number that isn't actually the largest (e.g. after a manual
+            # correction or bulk import), silently creating a duplicate
+            # registration number since this field isn't unique-constrained.
+            existing = Patient.objects.exclude(
+                registration_number__isnull=True
+            ).exclude(registration_number__in=['', 'TEMP']).values_list('registration_number', flat=True)
+            numbers = [int(n) for n in existing if str(n).isdigit()]
+            self.registration_number = str(max(numbers) + 1) if numbers else "10001"
         super().save(*args, **kwargs)
 
     def __str__(self):
@@ -82,6 +95,12 @@ class Visit(BaseModel):
                 condition=models.Q(status__in=['OPEN', 'IN_PROGRESS']),
                 name='one_active_visit_per_patient',
             ),
+        ]
+        indexes = [
+            models.Index(fields=['created_at']),
+            models.Index(fields=['updated_at']),
+            models.Index(fields=['patient', 'status']),
+            models.Index(fields=['assigned_role', 'status']),
         ]
 
     def __str__(self):

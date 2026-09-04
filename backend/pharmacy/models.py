@@ -13,6 +13,11 @@ class Supplier(BaseModel):
     gst_no = models.CharField(max_length=20, blank=True)
     is_active = models.BooleanField(default=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['supplier_name']),
+        ]
+
     def __str__(self):
         return self.supplier_name
 
@@ -47,6 +52,11 @@ class PurchaseInvoice(BaseModel):
     category = models.CharField(max_length=20, choices=CATEGORY_CHOICES, default='PHARMACY')
 
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['invoice_date']),
+        ]
 
     def calculate_total(self):
         """Deprecated: Use calculate_distribution instead for accurate GST/Discount logic."""
@@ -227,6 +237,12 @@ class PharmacyStock(BaseModel):
                 name='unique_stock_name_batch'
             )
         ]
+        indexes = [
+            models.Index(fields=['is_deleted', 'name']),
+            models.Index(fields=['name', 'expiry_date']),
+            models.Index(fields=['barcode']),
+            models.Index(fields=['expiry_date']),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.batch_no})"
@@ -262,6 +278,11 @@ class PurchaseItem(BaseModel):
     gst_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['created_at']),
+        ]
+
     def __str__(self):
         return f"{self.product_name} - {self.batch_no}"
 
@@ -294,6 +315,12 @@ class PharmacySale(BaseModel):
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0)])
     payment_status = models.CharField(max_length=20, default='PENDING', choices=PAYMENT_STATUS)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['sale_date']),
+            models.Index(fields=['patient', 'payment_status']),
+        ]
+
     def __str__(self):
         return f"Sale {self.id}"
 
@@ -310,6 +337,11 @@ class PharmacySaleItem(BaseModel):
     # Optional fields populated from Doctor's prescription
     dosage = models.CharField(max_length=255, blank=True)
     timing = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['created_at']),
+        ]
 
     def __str__(self):
         return f"{self.med_stock.name} x {self.qty}"

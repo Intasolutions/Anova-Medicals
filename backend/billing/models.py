@@ -15,6 +15,12 @@ class Invoice(BaseModel):
     remarks = models.TextField(null=True, blank=True)
     invoice_number = models.CharField(max_length=50, unique=True, blank=True, null=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['created_at']),
+            models.Index(fields=['payment_status', 'created_at']),
+        ]
+
     def save(self, *args, **kwargs):
         if not self.invoice_number:
             # Take the HIGHEST existing number, not the most recently created row.
@@ -74,6 +80,12 @@ class InvoiceItem(BaseModel):
     stock_deducted = models.BooleanField(default=False)
     deducted_qty = models.IntegerField(default=0)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['created_at']),
+            models.Index(fields=['invoice', 'dept']),
+        ]
+
     def __str__(self):
         return f"{self.dept}: {self.description}"
 
@@ -83,6 +95,11 @@ class PaymentTransaction(BaseModel):
     mode = models.CharField(max_length=20, choices=(('CASH', 'Cash'), ('UPI', 'Google Pay / UPI'), ('CARD', 'Card')))
     remarks = models.TextField(null=True, blank=True)
     transaction_id = models.CharField(max_length=100, null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['created_at']),
+        ]
 
     def __str__(self):
         return f"{self.mode}: {self.amount} for Inv #{self.invoice.id}"

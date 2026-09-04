@@ -159,15 +159,17 @@ const Billing = ({ dateRange: externalDateRange }) => {
     fetchData();
     fetchMetadata(); // Call fetchMetadata once on mount
 
-    // Polling - 4 seconds
+    // Fallback poll (60s) -- catches any update missed if a socket event
+    // was dropped during a brief disconnect. Real-time updates come from
+    // the socket listeners below.
     const interval = setInterval(() => {
       fetchInvoices(false);
       fetchUnpaidInvoices(false);
       fetchStats(false);
       fetchPendingVisits(false);
-    }, 4000);
+    }, 60000);
 
-    // Socket Listener
+    // Socket Listeners
     const onPharmacySale = (data) => {
       console.log("Socket: Pharmacy Sale Update", data);
       fetchPendingVisits(false);
@@ -176,11 +178,21 @@ const Billing = ({ dateRange: externalDateRange }) => {
       showToast("info", "New billing entry available");
     };
 
+    const onBillingUpdate = (data) => {
+      console.log("Socket: Billing Update", data);
+      fetchInvoices(false);
+      fetchUnpaidInvoices(false);
+      fetchStats(false);
+      fetchPendingVisits(false);
+    };
+
     socket.on("pharmacy_sale_update", onPharmacySale);
+    socket.on("billing_update", onBillingUpdate);
 
     return () => {
       clearInterval(interval);
       socket.off("pharmacy_sale_update", onPharmacySale);
+      socket.off("billing_update", onBillingUpdate);
     };
   }, [page, globalSearch, dateRange]);
 

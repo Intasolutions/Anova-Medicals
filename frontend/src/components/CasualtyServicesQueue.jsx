@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Activity, Clock, CheckCircle2, RotateCcw, User } from 'lucide-react';
 import api from '../api/axios';
 import { useToast } from '../context/ToastContext';
+import { socket } from '../socket';
 import Pagination from './Pagination';
 
 const CasualtyServicesQueue = () => {
@@ -28,8 +29,22 @@ const CasualtyServicesQueue = () => {
 
     useEffect(() => {
         fetchServices(true);
-        const iv = setInterval(() => fetchServices(false), 5000);
-        return () => clearInterval(iv);
+
+        // Fallback poll (60s) -- catches any update missed if a socket event
+        // was dropped during a brief disconnect. Real-time updates come from
+        // the casualty_service_update socket listener below.
+        const iv = setInterval(() => fetchServices(false), 60000);
+
+        const onServiceUpdate = (data) => {
+            console.log("Socket: Casualty Service Update", data);
+            fetchServices(false);
+        };
+        socket.on('casualty_service_update', onServiceUpdate);
+
+        return () => {
+            clearInterval(iv);
+            socket.off('casualty_service_update', onServiceUpdate);
+        };
     }, [page, activeTab]);
 
     const handleUpdateStatus = async (id, newStatus) => {

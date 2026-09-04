@@ -92,6 +92,11 @@ class LabInventory(BaseModel):
             return '%s (%g x %g%s)' % (base, packs, float(self.items_per_pack), self.unit)
         return base
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['item_name']),
+        ]
+
 
 class LabBatch(BaseModel):
     """
@@ -112,6 +117,11 @@ class LabBatch(BaseModel):
     
     supplier = models.ForeignKey('pharmacy.Supplier', on_delete=models.SET_NULL,
                                  null=True, blank=True, related_name='lab_batches')
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['inventory_item', 'expiry_date']),
+        ]
 
     def __str__(self):
         return f"{self.inventory_item.item_name} ({self.batch_no})"
@@ -136,6 +146,11 @@ class LabPurchase(BaseModel):
     courier_charge = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['invoice_date']),
+        ]
 
     def __str__(self):
         return f"Inv {self.supplier_invoice_no} - {self.supplier.supplier_name}"
@@ -208,6 +223,13 @@ class LabCharge(BaseModel):
     technician_name = models.CharField(max_length=255, blank=True, null=True)
     specimen = models.CharField(max_length=100, default='BLOOD', blank=True, null=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['created_at']),
+            models.Index(fields=['visit', 'status']),
+            models.Index(fields=['test_name']),
+        ]
+
     def __str__(self):
         return f"{self.test_name} - {getattr(self.visit, 'id', self.visit.id)}"
 
@@ -259,6 +281,11 @@ class LabTest(BaseModel):
     description = models.TextField(blank=True, null=True, help_text="Common description/interpretation for the whole test")
     is_package = models.BooleanField(default=False)
     package_tests = models.ManyToManyField('self', symmetrical=False, blank=True, related_name='packages')
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['name']),
+        ]
 
     def __str__(self):
         return f"{self.name} ({self.category})"

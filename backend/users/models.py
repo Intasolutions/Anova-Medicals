@@ -16,5 +16,10 @@ class User(AbstractUser, BaseModel):
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='RECEPTION')
     consultation_fee = models.DecimalField(max_digits=10, decimal_places=2, default=500.00)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['role', 'is_active']),
+        ]
+
     def __str__(self):
         return self.username
