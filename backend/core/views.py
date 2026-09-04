@@ -85,6 +85,14 @@ class DashboardStatsView(APIView):
         
         module_revenue = {item['dept']: float(item['total']) for item in module_revenue_raw}
 
+        # 7. Payment Mode Breakdown (Cash / UPI / Card)
+        payment_mode_raw = PaymentTransaction.objects.filter(
+            created_at__date__gte=start_date,
+            created_at__date__lte=end_date
+        ).values('mode').annotate(total=Sum('amount'))
+
+        payment_mode_breakdown = {item['mode']: float(item['total']) for item in payment_mode_raw}
+
         data = {
             "patients_today": new_patients_today,  # Matches the "Total Patients" label on the dashboard card.
             "visits_today": visits_today,
@@ -95,7 +103,8 @@ class DashboardStatsView(APIView):
             "pending_labs": pending_labs,
             "recent_visits": recent_visits_data,
             "revenue_trend": [{ "date": item['date'], "amount": float(item['total']) } for item in weekly_revenue],
-            "module_revenue": module_revenue
+            "module_revenue": module_revenue,
+            "payment_mode_breakdown": payment_mode_breakdown
         }
 
         return Response(data)

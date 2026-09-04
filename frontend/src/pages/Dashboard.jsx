@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import {
     Users, Activity, TrendingUp, Package, Clock,
     ChevronRight, RefreshCw, Calendar, DollarSign,
-    ArrowUpRight, ArrowDownRight, Stethoscope, Wallet, AlertTriangle
+    ArrowUpRight, ArrowDownRight, Stethoscope, Wallet, AlertTriangle,
+    Banknote, Smartphone, CreditCard
 } from 'lucide-react';
 import {
     AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -428,6 +429,57 @@ const Dashboard = () => {
                         ) : (
                             <div className="col-span-full py-8 text-center">
                                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No department revenue data available for this date.</p>
+                            </div>
+                        )}
+                    </div>
+                </motion.div>
+            </div>
+
+            {/* --- Payment Method Breakdown --- */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-8">
+                <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.35 }}
+                    className="lg:col-span-3 bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50 p-8 flex flex-col"
+                >
+                    <div className="flex justify-between items-center mb-8">
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 bg-emerald-50 rounded-xl text-emerald-600"><Banknote size={20} /></div>
+                            <h2 className="text-xl font-black text-slate-900 tracking-tight font-outfit">Revenue by Payment Method</h2>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {stats?.payment_mode_breakdown && Object.keys(stats.payment_mode_breakdown).length > 0 ? (
+                            (() => {
+                                const modeMeta = {
+                                    CASH: { label: 'Cash', icon: Banknote, bar: 'bg-emerald-500' },
+                                    UPI: { label: 'GPay / UPI', icon: Smartphone, bar: 'bg-blue-500' },
+                                    CARD: { label: 'Card', icon: CreditCard, bar: 'bg-amber-500' },
+                                };
+                                const total = Object.values(stats.payment_mode_breakdown).reduce((sum, v) => sum + v, 0) || 1;
+                                return Object.entries(stats.payment_mode_breakdown).map(([mode, amount]) => {
+                                    const meta = modeMeta[mode] || { label: mode, icon: Wallet, bar: 'bg-slate-500' };
+                                    const ModeIcon = meta.icon;
+                                    return (
+                                        <div key={mode} className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col gap-3">
+                                            <div className="flex justify-between items-center">
+                                                <span className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase tracking-widest">
+                                                    <ModeIcon size={14} /> {meta.label}
+                                                </span>
+                                                <span className="text-lg font-black text-slate-900">₹{amount.toLocaleString()}</span>
+                                            </div>
+                                            <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                                                <div className={`h-full ${meta.bar} rounded-full`} style={{ width: `${Math.min((amount / total) * 100, 100)}%` }} />
+                                            </div>
+                                        </div>
+                                    );
+                                });
+                            })()
+                        ) : (
+                            <div className="col-span-full py-8 text-center">
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">No payment data available for this date.</p>
                             </div>
                         )}
                     </div>
