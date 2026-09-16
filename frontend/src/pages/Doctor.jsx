@@ -309,11 +309,6 @@ const Doctor = () => {
 
     // ── Medicine handlers ────────────────────────────────────────────────────
     const addMedicine = (med) => {
-        const normalizedName = med.name.trim().toLowerCase();
-        if (selectedMeds.find(m => m.name.trim().toLowerCase() === normalizedName)) {
-            showToast('info', `${med.name} already in prescription`);
-            setMedSearch(''); setMedResults([]); return;
-        }
         let isTablet = true;
         const nonTabletTypes = ['SYRUP', 'DROP', 'INJECTION', 'GEL', 'CREAM', 'OINTMENT', 'POWDER', 'SPRAY', 'LOTION', 'LIQUID'];
         if (med.medicine_type && nonTabletTypes.includes(med.medicine_type)) {
@@ -327,11 +322,34 @@ const Doctor = () => {
         }
         const count = isTablet ? '' : '1';
         const _id = (crypto.randomUUID && crypto.randomUUID()) || `${Date.now()}-${Math.random()}`;
-        setSelectedMeds(prev => [...prev, {
+
+        const newMed = {
             _id, name: med.name, dosage: '', duration: '', count: count, note: '',
             stock: med.qty_available || 0, mrp: med.mrp || 0, tps: med.tablets_per_strip || 1,
             isTablet: isTablet, content: med.content || ''
-        }]);
+        };
+
+        setSelectedMeds(prev => {
+            const normalizedName = med.name.trim().toLowerCase();
+            if (prev.find(m => m.name.trim().toLowerCase() === normalizedName)) {
+                // Return current state so it won't duplicate, though we lose the toast here 
+                // in the background. We can still show it outside or just fail silently 
+                // but the toast logic gets slightly tricky since functional updaters shouldn't 
+                // have side effects. But for the sake of functionality, showing the toast 
+                // safely outside or directly in it is usually fine for a small app.
+                // Let's do it right: return prev if duplicate.
+                return prev;
+            }
+            return [...prev, newMed];
+        });
+
+        // Safe external check just for the toast (stale check is okay for just showing a toast)
+        const normalizedName = med.name.trim().toLowerCase();
+        if (selectedMeds.find(m => m.name.trim().toLowerCase() === normalizedName)) {
+            showToast('info', `${med.name} already in prescription`);
+            setMedSearch(''); setMedResults([]); return;
+        }
+
         if (referral !== 'PHARMACY' && referral !== 'CASUALTY') {
             setReferral('PHARMACY'); showToast('info', 'Referral auto-set to Pharmacy');
         }
