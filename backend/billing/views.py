@@ -69,14 +69,20 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     def perform_create(self, serializer):
         invoice = serializer.save()
-        self._deduct_stock(invoice)
-        self._close_visit_if_fully_paid(invoice)
+        # Draft invoices are work-in-progress — do not deduct stock or close
+        # the visit until the invoice is actually finalised.
+        if invoice.payment_status != 'DRAFT':
+            self._deduct_stock(invoice)
+            self._close_visit_if_fully_paid(invoice)
 
     @transaction.atomic
     def perform_update(self, serializer):
         invoice = serializer.save()
-        self._deduct_stock(invoice)
-        self._close_visit_if_fully_paid(invoice)
+        # Draft invoices are work-in-progress — do not deduct stock or close
+        # the visit until the invoice is actually finalised.
+        if invoice.payment_status != 'DRAFT':
+            self._deduct_stock(invoice)
+            self._close_visit_if_fully_paid(invoice)
 
     def _close_visit_if_fully_paid(self, invoice):
         """

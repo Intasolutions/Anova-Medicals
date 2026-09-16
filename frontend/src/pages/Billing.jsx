@@ -53,51 +53,51 @@ const Billing = ({ dateRange: externalDateRange }) => {
   const globalSearch = searchTerm; // Map searchTerm to globalSearch for compatibility with the copied logic
 
   // --- Date Filter State ---
-  const [localDateRange, setLocalDateRange] = useState({ 
-    start: new Date().toISOString().split('T')[0], 
-    end: new Date().toISOString().split('T')[0] 
+  const [localDateRange, setLocalDateRange] = useState({
+    start: new Date().toISOString().split("T")[0],
+    end: new Date().toISOString().split("T")[0],
   });
-  
+
   const dateRange = externalDateRange || localDateRange;
   const isEmbedded = !!externalDateRange;
 
   const setPresetRange = (preset) => {
     const today = new Date();
-    const end = today.toISOString().split('T')[0];
+    const end = today.toISOString().split("T")[0];
     let start = end;
 
-    if (preset === 'week') {
+    if (preset === "week") {
       const lastWeek = new Date(today);
       lastWeek.setDate(today.getDate() - 7);
-      start = lastWeek.toISOString().split('T')[0];
-    } else if (preset === 'month') {
+      start = lastWeek.toISOString().split("T")[0];
+    } else if (preset === "month") {
       const lastMonth = new Date(today);
       lastMonth.setMonth(today.getMonth() - 1);
-      start = lastMonth.toISOString().split('T')[0];
-    } else if (preset === 'all') {
-      start = '2000-01-01';
+      start = lastMonth.toISOString().split("T")[0];
+    } else if (preset === "all") {
+      start = "2000-01-01";
     }
-    
+
     setLocalDateRange({ start, end });
   };
 
   const isPresetActive = (preset) => {
     const today = new Date();
-    const endStr = today.toISOString().split('T')[0];
-    
-    if (preset === 'all') return dateRange.start === '2000-01-01';
+    const endStr = today.toISOString().split("T")[0];
+
+    if (preset === "all") return dateRange.start === "2000-01-01";
     if (dateRange.end !== endStr) return false;
-    
-    if (preset === 'today') {
+
+    if (preset === "today") {
       return dateRange.start === endStr;
-    } else if (preset === 'week') {
+    } else if (preset === "week") {
       const d = new Date(today);
       d.setDate(today.getDate() - 7);
-      return dateRange.start === d.toISOString().split('T')[0];
-    } else if (preset === 'month') {
+      return dateRange.start === d.toISOString().split("T")[0];
+    } else if (preset === "month") {
       const d = new Date(today);
       d.setMonth(today.getMonth() - 1);
-      return dateRange.start === d.toISOString().split('T')[0];
+      return dateRange.start === d.toISOString().split("T")[0];
     }
     return false;
   };
@@ -217,7 +217,9 @@ const Billing = ({ dateRange: externalDateRange }) => {
   const fetchUnpaidInvoices = async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
-      const { data } = await api.get(`/billing/invoices/?unpaid=true${dateRange.start ? `&created_at__date__gte=${dateRange.start}&created_at__date__lte=${dateRange.end}` : ""}`);
+      const { data } = await api.get(
+        `/billing/invoices/?unpaid=true${dateRange.start ? `&created_at__date__gte=${dateRange.start}&created_at__date__lte=${dateRange.end}` : ""}`,
+      );
       setUnpaidInvoices(data.results || (Array.isArray(data) ? data : []));
     } catch (err) {
       console.error("Failed to load unpaid invoices", err);
@@ -230,7 +232,9 @@ const Billing = ({ dateRange: externalDateRange }) => {
     if (showLoading) setLoading(true);
     try {
       // Visits where assigned_role is BILLING OR have unpaid/draft invoices
-      const { data } = await api.get(`/reception/visits/?billing_queue=true${dateRange.start ? `&created_at__date__gte=${dateRange.start}&created_at__date__lte=${dateRange.end}` : ""}`);
+      const { data } = await api.get(
+        `/reception/visits/?billing_queue=true${dateRange.start ? `&created_at__date__gte=${dateRange.start}&created_at__date__lte=${dateRange.end}` : ""}`,
+      );
       setPendingVisits(data.results || data || []);
     } catch (err) {
       console.error("Failed to load pending bills", err);
@@ -479,9 +483,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
       visit.doctor &&
       !isCasualtyDirectLab
     ) {
-      const fee = (visit.consultation_fee !== undefined && visit.consultation_fee !== null)
-        ? parseFloat(visit.consultation_fee)
-        : 500;
+      const fee =
+        visit.consultation_fee !== undefined && visit.consultation_fee !== null
+          ? parseFloat(visit.consultation_fee)
+          : 500;
       newFormData.items.push({
         dept: "CONSULTATION",
         description: "General Consultation Fee",
@@ -641,8 +646,8 @@ const Billing = ({ dateRange: externalDateRange }) => {
     submitLock.current = true;
     const patId = overridePatientId || selectedPatientId;
     if (!patId) {
-        submitLock.current = false;
-        return showToast("error", "No patient selected.");
+      submitLock.current = false;
+      return showToast("error", "No patient selected.");
     }
 
     try {
@@ -863,13 +868,18 @@ const Billing = ({ dateRange: externalDateRange }) => {
       const invoiceData = {
         patient_name: formData.patient_name,
         patient: formData.patient || selectedPatientId || null,
-        payment_status: formData.payment_status === "PARTIAL" && status === "PENDING" ? "PARTIAL" : status,
+        payment_status:
+          formData.payment_status === "PARTIAL" && status === "PENDING"
+            ? "PARTIAL"
+            : status,
         total_amount: subtotal.toFixed(2),
         discount_amount: discount.toFixed(2),
-        items: validItems.map(({ id, created_at, updated_at, ref_id, mfr, ...rest }) => ({
-          ...rest,
-          id,
-        })),
+        items: validItems.map(
+          ({ id, created_at, updated_at, ref_id, mfr, ...rest }) => ({
+            ...rest,
+            id,
+          }),
+        ),
         visit:
           typeof formData.visit === "object" && formData.visit
             ? formData.visit.id
@@ -939,8 +949,14 @@ const Billing = ({ dateRange: externalDateRange }) => {
 
       if (status === "DRAFT") {
         showToast("success", "Invoice saved as Draft!");
-        // Update formData with the ID from the backend so subsequent saves are PATCHes
-        setFormData((prev) => ({ ...prev, id: savedInvoice.id }));
+        // Sync id, invoice_number and confirmed status back from the backend so
+        // subsequent saves PATCH the correct record and the UI stays consistent.
+        setFormData((prev) => ({
+          ...prev,
+          id: savedInvoice.id,
+          invoice_number: savedInvoice.invoice_number || prev.invoice_number,
+          payment_status: savedInvoice.payment_status || "DRAFT",
+        }));
       } else {
         setShowModal(false);
         setFormData({
@@ -1014,12 +1030,17 @@ const Billing = ({ dateRange: externalDateRange }) => {
         invoice.payment_status !== "CANCELLED"
       ) {
         // Sync Consultation Fee with latest backend calculation (e.g., 7-day free rule)
-        const fee = (visitData.consultation_fee !== undefined && visitData.consultation_fee !== null)
-          ? parseFloat(visitData.consultation_fee)
-          : 500;
-        
+        const fee =
+          visitData.consultation_fee !== undefined &&
+          visitData.consultation_fee !== null
+            ? parseFloat(visitData.consultation_fee)
+            : 500;
+
         baseItems = baseItems.map((i) => {
-          if (i.dept === "CONSULTATION" && i.description === "General Consultation Fee") {
+          if (
+            i.dept === "CONSULTATION" &&
+            i.description === "General Consultation Fee"
+          ) {
             return { ...i, unit_price: fee, amount: fee };
           }
           return i;
@@ -1101,7 +1122,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
         invoice.payment_status !== "CANCELLED"
       ) {
         const visitLabItems = ((visitData && visitData.lab_charges_data) || [])
-          .filter((item) => parseFloat(item.amount) > 0 && item.status !== "CANCELLED")
+          .filter(
+            (item) =>
+              parseFloat(item.amount) > 0 && item.status !== "CANCELLED",
+          )
           .map((item) => ({
             dept: "LAB",
             description: item.test_name,
@@ -1212,7 +1236,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
         : paymentData.invoice.total_amount;
 
     if (parseFloat(due) === 0 && paymentsList.length === 0) {
-      paymentsList.push({ mode: 'CASH', amount: 0 });
+      paymentsList.push({ mode: "CASH", amount: 0 });
     }
 
     if (paymentsList.length === 0) {
@@ -1415,7 +1439,9 @@ const Billing = ({ dateRange: externalDateRange }) => {
                         </span>
                         <span className="font-bold text-slate-700">
                           {item.queue_type === "visit" ? (
-                            <span className="text-[9px] uppercase font-black text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded tracking-wider">Unsaved</span>
+                            <span className="text-[9px] uppercase font-black text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded tracking-wider">
+                              Unsaved
+                            </span>
                           ) : (
                             `₹${parseFloat(item.total_amount || 0).toFixed(2)}`
                           )}
@@ -1570,42 +1596,52 @@ const Billing = ({ dateRange: externalDateRange }) => {
             {/* Date Range Selection - Hidden if embedded since parent provides it */}
             {!isEmbedded && (
               <div className="flex items-center gap-2 mr-2">
-                  <div className="flex bg-slate-100/50 rounded-lg p-1 border border-slate-200/50">
-                      {['Today', 'Week', 'Month', 'All'].map(preset => (
-                          <button
-                              key={preset}
-                              onClick={() => setPresetRange(preset.toLowerCase())}
-                              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
-                                  isPresetActive(preset.toLowerCase())
-                                      ? 'bg-white text-slate-800 shadow-sm border border-slate-200/60'
-                                      : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
-                              }`}
-                          >
-                              {preset}
-                          </button>
-                      ))}
-                  </div>
+                <div className="flex bg-slate-100/50 rounded-lg p-1 border border-slate-200/50">
+                  {["Today", "Week", "Month", "All"].map((preset) => (
+                    <button
+                      key={preset}
+                      onClick={() => setPresetRange(preset.toLowerCase())}
+                      className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                        isPresetActive(preset.toLowerCase())
+                          ? "bg-white text-slate-800 shadow-sm border border-slate-200/60"
+                          : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                      }`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
 
-                  <div className="flex items-center bg-white border border-slate-200/60 rounded-lg overflow-hidden shadow-sm h-[32px]">
-                      <div className="px-3 bg-slate-50 border-r border-slate-200/60 text-slate-400 h-full flex items-center justify-center">
-                          <Calendar size={14} />
-                      </div>
-                      <input 
-                          type="date"
-                          value={dateRange.start}
-                          onChange={(e) => setLocalDateRange(prev => ({ ...prev, start: e.target.value }))}
-                          className="px-2 bg-transparent text-xs font-bold text-slate-700 outline-none w-[110px] cursor-pointer"
-                          max={dateRange.end}
-                      />
-                      <span className="text-slate-300 font-bold">-</span>
-                      <input 
-                          type="date"
-                          value={dateRange.end}
-                          onChange={(e) => setLocalDateRange(prev => ({ ...prev, end: e.target.value }))}
-                          className="px-2 bg-transparent text-xs font-bold text-slate-700 outline-none w-[110px] cursor-pointer"
-                          max={new Date().toISOString().split('T')[0]}
-                      />
+                <div className="flex items-center bg-white border border-slate-200/60 rounded-lg overflow-hidden shadow-sm h-[32px]">
+                  <div className="px-3 bg-slate-50 border-r border-slate-200/60 text-slate-400 h-full flex items-center justify-center">
+                    <Calendar size={14} />
                   </div>
+                  <input
+                    type="date"
+                    value={dateRange.start}
+                    onChange={(e) =>
+                      setLocalDateRange((prev) => ({
+                        ...prev,
+                        start: e.target.value,
+                      }))
+                    }
+                    className="px-2 bg-transparent text-xs font-bold text-slate-700 outline-none w-[110px] cursor-pointer"
+                    max={dateRange.end}
+                  />
+                  <span className="text-slate-300 font-bold">-</span>
+                  <input
+                    type="date"
+                    value={dateRange.end}
+                    onChange={(e) =>
+                      setLocalDateRange((prev) => ({
+                        ...prev,
+                        end: e.target.value,
+                      }))
+                    }
+                    className="px-2 bg-transparent text-xs font-bold text-slate-700 outline-none w-[110px] cursor-pointer"
+                    max={new Date().toISOString().split("T")[0]}
+                  />
+                </div>
               </div>
             )}
 
@@ -1956,7 +1992,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
                           >
                             <input
                               readOnly={
-                                !!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status)
+                                !!formData.id &&
+                                !["DRAFT", "PENDING", "PARTIAL"].includes(
+                                  formData.payment_status,
+                                )
                               }
                               className={`w-full bg-transparent outline-none font-bold text-slate-700 placeholder:text-slate-300 ${!!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status) ? "cursor-not-allowed opacity-80" : ""}`}
                               placeholder="Item Name / Service"
@@ -2057,7 +2096,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
                           <td className="py-4 text-center">
                             <input
                               readOnly={
-                                !!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status)
+                                !!formData.id &&
+                                !["DRAFT", "PENDING", "PARTIAL"].includes(
+                                  formData.payment_status,
+                                )
                               }
                               type="number"
                               className={`w-full bg-transparent text-center font-bold outline-none ${!!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status) ? "cursor-not-allowed opacity-80" : ""}`}
@@ -2077,7 +2119,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
                           <td className="py-4 text-center">
                             <input
                               readOnly={
-                                !!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status)
+                                !!formData.id &&
+                                !["DRAFT", "PENDING", "PARTIAL"].includes(
+                                  formData.payment_status,
+                                )
                               }
                               type="number"
                               className={`w-full bg-transparent text-center font-medium outline-none text-slate-500 ${!!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status) ? "cursor-not-allowed opacity-80" : ""}`}
@@ -2094,7 +2139,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
                           <td className="py-4 text-right">
                             <input
                               readOnly={
-                                !!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status)
+                                !!formData.id &&
+                                !["DRAFT", "PENDING", "PARTIAL"].includes(
+                                  formData.payment_status,
+                                )
                               }
                               type="number"
                               className={`w-full bg-transparent text-right font-medium outline-none ${!!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status) ? "cursor-not-allowed opacity-80" : ""}`}
@@ -2114,7 +2162,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
                           <td className="py-4 text-right">
                             <input
                               readOnly={
-                                !!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status)
+                                !!formData.id &&
+                                !["DRAFT", "PENDING", "PARTIAL"].includes(
+                                  formData.payment_status,
+                                )
                               }
                               type="number"
                               className={`w-full bg-transparent text-right font-bold text-slate-900 outline-none placeholder:text-slate-300 ${!!formData.id && !["DRAFT", "PENDING", "PARTIAL"].includes(formData.payment_status) ? "cursor-not-allowed opacity-80" : ""}`}
@@ -2139,7 +2190,8 @@ const Billing = ({ dateRange: externalDateRange }) => {
                           <td className="py-4 text-center">
                             {(!formData.id ||
                               formData.payment_status === "DRAFT" ||
-                              formData.payment_status === "PENDING" || formData.payment_status === "PARTIAL") && (
+                              formData.payment_status === "PENDING" ||
+                              formData.payment_status === "PARTIAL") && (
                               <button
                                 onClick={() => {
                                   const newItems = formData.items.filter(
@@ -2157,7 +2209,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
                       ))}
                     </tbody>
                   </table>
-                  {(!formData.id || formData.payment_status === "DRAFT" || formData.payment_status === "PENDING" || formData.payment_status === "PARTIAL") && (
+                  {(!formData.id ||
+                    formData.payment_status === "DRAFT" ||
+                    formData.payment_status === "PENDING" ||
+                    formData.payment_status === "PARTIAL") && (
                     <div className="mt-3 flex gap-2">
                       <button
                         onClick={() => {
@@ -2245,7 +2300,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
               {/* Modal Footer */}
               <div className="p-6 border-t border-slate-100 bg-slate-50/80 flex justify-between items-center">
                 <div>
-                  {(!formData.id || formData.payment_status === "DRAFT" || formData.payment_status === "PENDING" || formData.payment_status === "PARTIAL") && (
+                  {(!formData.id ||
+                    formData.payment_status === "DRAFT" ||
+                    formData.payment_status === "PENDING" ||
+                    formData.payment_status === "PARTIAL") && (
                     <button
                       onClick={() => handleImportPrescription()}
                       disabled={!selectedPatientId}
@@ -2262,7 +2320,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
                   >
                     Cancel
                   </button>
-                  {(!formData.id || formData.payment_status === "DRAFT" || formData.payment_status === "PENDING" || formData.payment_status === "PARTIAL") && (
+                  {(!formData.id ||
+                    formData.payment_status === "DRAFT" ||
+                    formData.payment_status === "PENDING" ||
+                    formData.payment_status === "PARTIAL") && (
                     <button
                       onClick={() => handleCreateInvoice("DRAFT")}
                       disabled={isSubmitting}
@@ -2697,6 +2758,3 @@ const Billing = ({ dateRange: externalDateRange }) => {
 };
 
 export default Billing;
-
-
-

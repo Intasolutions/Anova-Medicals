@@ -112,19 +112,25 @@ class InvoiceSerializer(serializers.ModelSerializer):
             invoice.recalculate_total(save=False)
             self._check_discount_not_exceeding_total(invoice)
 
-            # Adjust payment status based on new total
-            paid_amount = sum(p.amount for p in invoice.payments.all())
-            discount = invoice.discount_amount or 0
-            
-            if invoice.total_amount == 0:
-                invoice.payment_status = 'PENDING'
-            elif paid_amount + discount >= invoice.total_amount:
-                invoice.payment_status = 'PAID'
-            elif paid_amount > 0:
-                invoice.payment_status = 'PARTIAL'
+            # Adjust payment status based on new total.
+            # If the client explicitly sent a payment_status (e.g. 'DRAFT'),
+            # honour it instead of auto-computing from payment history.
+            explicit_status = validated_data.get('payment_status')
+            if explicit_status:
+                invoice.payment_status = explicit_status
             else:
-                invoice.payment_status = 'PENDING'
-                
+                paid_amount = sum(p.amount for p in invoice.payments.all())
+                discount = invoice.discount_amount or 0
+
+                if invoice.total_amount == 0:
+                    invoice.payment_status = 'PENDING'
+                elif paid_amount + discount >= invoice.total_amount:
+                    invoice.payment_status = 'PAID'
+                elif paid_amount > 0:
+                    invoice.payment_status = 'PARTIAL'
+                else:
+                    invoice.payment_status = 'PENDING'
+
             invoice.save()
         else:
             # Create new invoice
