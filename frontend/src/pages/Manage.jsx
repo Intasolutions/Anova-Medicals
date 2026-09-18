@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, DollarSign, Save, Edit2, CheckCircle2, AlertCircle, Search } from 'lucide-react';
 import api from '../api/axios';
+import AdminInvoices from '../components/AdminInvoices';
 
 const ManagePage = () => {
     const [activeTab, setActiveTab] = useState('doctors');
@@ -112,7 +113,7 @@ const ManagePage = () => {
 
     const createService = async () => {
         if (!newService.name || !newService.base_charge) {
-            showToast('error', 'Name and Charge are required');
+            showToast('error', 'Name and Base Charge are required');
             return;
         }
         try {
@@ -127,23 +128,23 @@ const ManagePage = () => {
     };
 
     const deleteService = async (srvId) => {
-        if (!confirm('Are you sure you want to deactivate this service?')) return;
+        if (!confirm('Are you sure you want to remove this service?')) return;
         try {
-            await api.patch(`/casualty/service-definitions/${srvId}/`, { is_active: false });
-            showToast('success', 'Service deactivated');
+            await api.delete(`/casualty/service-definitions/${srvId}/`);
+            showToast('success', 'Service removed');
             fetchServices();
         } catch (error) {
-            showToast('error', 'Failed to deactivate service.');
+            showToast('error', 'Failed to remove service. It might be in use.');
         }
     };
 
-    // Pharmacy Supplier Handlers
+    // Supplier Handlers
     const startEditingSupplier = (sup) => {
         setEditingId(sup.id);
         setEditValue(sup.supplier_name);
-        setEditPhone(sup.phone);
-        setEditAddress(sup.address);
-        setEditGst(sup.gst_no);
+        setEditPhone(sup.phone || '');
+        setEditAddress(sup.address || '');
+        setEditGst(sup.gst_no || '');
     };
 
     const saveSupplier = async (supId) => {
@@ -195,14 +196,14 @@ const ManagePage = () => {
             <div className="px-8 py-6 bg-white border-b border-slate-200 flex justify-between items-center shadow-sm z-10">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900 tracking-tight">System Management</h1>
-                    <div className="flex items-center gap-6 mt-2">
-                        {['doctors', 'services', 'pharmacy_suppliers'].map(tab => (
+                    <div className="flex items-center gap-6 mt-2 overflow-x-auto custom-scrollbar">
+                        {['doctors', 'services', 'pharmacy_suppliers', 'invoices'].map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveTab(tab)}
-                                className={`pb-1 text-sm font-bold transition-all border-b-2 ${activeTab === tab ? 'text-blue-600 border-blue-600' : 'text-slate-400 border-transparent hover:text-slate-600'}`}
+                                className={`pb-1 text-sm font-bold transition-all whitespace-nowrap border-b-2 ${activeTab === tab ? 'text-blue-600 border-blue-600' : 'text-slate-400 border-transparent hover:text-slate-600'}`}
                             >
-                                {tab === 'doctors' ? 'Doctors & Fees' : tab === 'services' ? 'Services Catalog' : 'Pharmacy Suppliers'}
+                                {tab === 'doctors' ? 'Doctors & Fees' : tab === 'services' ? 'Services Catalog' : tab === 'pharmacy_suppliers' ? 'Pharmacy Suppliers' : 'Invoices (Admin)'}
                             </button>
                         ))}
                     </div>
@@ -475,6 +476,8 @@ const ManagePage = () => {
                                 </div>
                             )}
                         </div>
+                    ) : activeTab === 'invoices' ? (
+                        <AdminInvoices />
                     ) : null}
                 </div>
             </div>

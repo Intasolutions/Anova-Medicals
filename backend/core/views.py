@@ -61,12 +61,12 @@ class DashboardStatsView(APIView):
         revenue_today = PaymentTransaction.objects.filter(
             created_at__date__gte=start_date,
             created_at__date__lte=end_date
-        ).aggregate(Sum('amount'))['amount__sum'] or 0
+        ).exclude(invoice__payment_status='CANCELLED').aggregate(Sum('amount'))['amount__sum'] or 0
 
         weekly_revenue = PaymentTransaction.objects.filter(
             created_at__date__gte=start_date,
             created_at__date__lte=end_date
-        ).annotate(date=TruncDate('created_at')).values('date').annotate(total=Sum('amount')).order_by('date')
+        ).exclude(invoice__payment_status='CANCELLED').annotate(date=TruncDate('created_at')).values('date').annotate(total=Sum('amount')).order_by('date')
 
         # 4. Lab Stats
         pending_labs = LabCharge.objects.filter(status='PENDING').count()
@@ -89,7 +89,7 @@ class DashboardStatsView(APIView):
         payment_mode_raw = PaymentTransaction.objects.filter(
             created_at__date__gte=start_date,
             created_at__date__lte=end_date
-        ).values('mode').annotate(total=Sum('amount'))
+        ).exclude(invoice__payment_status='CANCELLED').values('mode').annotate(total=Sum('amount'))
 
         payment_mode_breakdown = {item['mode']: float(item['total']) for item in payment_mode_raw}
 

@@ -69,18 +69,18 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     def perform_create(self, serializer):
         invoice = serializer.save()
-        # Draft invoices are work-in-progress — do not deduct stock or close
-        # the visit until the invoice is actually finalised.
-        if invoice.payment_status != 'DRAFT':
+        # Draft and cancelled invoices must never deduct stock or close the visit.
+        # Draft = work-in-progress; Cancelled = order was not fulfilled.
+        if invoice.payment_status not in ('DRAFT', 'CANCELLED'):
             self._deduct_stock(invoice)
             self._close_visit_if_fully_paid(invoice)
 
     @transaction.atomic
     def perform_update(self, serializer):
         invoice = serializer.save()
-        # Draft invoices are work-in-progress — do not deduct stock or close
-        # the visit until the invoice is actually finalised.
-        if invoice.payment_status != 'DRAFT':
+        # Draft and cancelled invoices must never deduct stock or close the visit.
+        # Draft = work-in-progress; Cancelled = order was not fulfilled.
+        if invoice.payment_status not in ('DRAFT', 'CANCELLED'):
             self._deduct_stock(invoice)
             self._close_visit_if_fully_paid(invoice)
 
@@ -117,8 +117,17 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     def _deduct_stock(self, invoice):
         from django.db import transaction
         from rest_framework import serializers
+        from .models import InvoiceItem
 
-        items = invoice.items.all()
+        # Query InvoiceItem directly instead of using invoice.items.all().
+        # The viewset loads invoices with prefetch_related('items'), which caches
+        # the item list on the instance. After the serializer's update() deletes
+        # removed items and saves changed ones, the prefetch cache is STALE -- it
+        # still contains deleted items and old deducted_qty values. Iterating the
+        # cached queryset would try to deduct stock for items that no longer exist
+        # (and re-INSERT them via item.save()), causing silent double-deductions or
+        # integrity errors. Querying directly always reflects the current DB state.
+        items = InvoiceItem.objects.filter(invoice=invoice)
         for item in items:
             if item.dept == 'PHARMACY':
                 name = item.description.strip() if item.description else ""
@@ -284,7 +293,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         today = timezone.now().date()
         date_str = request.query_params.get('date')
         
-        monthly_payments = PaymentTransaction.objects.all()
+        monthly_payments = PaymentTransaction.objects.exclude(invoice__payment_status='CANCELLED')
         # Include PARTIAL invoices too -- they still have money outstanding,
         # same as a PENDING invoice, just with some payment already recorded.
         pending_query = Invoice.objects.filter(payment_status__in=['PENDING', 'PARTIAL'])
@@ -315,22 +324,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         upi_monthly = monthly_payments.filter(mode='UPI').aggregate(Sum('amount'))['amount__sum'] or 0
         card_monthly = monthly_payments.filter(mode='CARD').aggregate(Sum('amount'))['amount__sum'] or 0
 
-        # Collection Today (Actual payments received today) - Always TODAY regardless of filter?
-        # User request: "IF SELECT JAN SHOW JAN FULL DATA"
-        # Since 'revenue_today' is specifically 'today', it might be confusing if it shows January data when looking at January in March.
-        # But 'revenue_today' explicitly says TODAY. 
-        # However, typically filters apply to the whole view. 
-        # If filtering for a past month, 'revenue_today' (meaning 'revenue on that day') is ambiguous.
-        # It's safest to leave 'revenue_today' as ACTUALLY TODAY, because the user can see monthly totals in the summary.
-        # Or should 'revenue_today' become 'Revenue for Selected Period'?
-        # The UI shows "Financial Overview - [Current Date]". 
-        # Let's keep 'revenue_today' as ACTUAL TODAY to avoid confusion with the header date which is current date.
-        
-        collection_today = PaymentTransaction.objects.filter(created_at__date=today).aggregate(Sum('amount'))['amount__sum'] or 0
+        # Collection Today (Actual payments received today)
+        collection_today = PaymentTransaction.objects.filter(created_at__date=today).exclude(invoice__payment_status='CANCELLED').aggregate(Sum('amount'))['amount__sum'] or 0
 
         # total_pending needs to be calculated in python because balance_due is not a DB field.
-        # Uses the same formula as InvoiceSerializer.get_balance_due so this stat always
-        # agrees with what an individual invoice shows as its balance due.
         total_pending = 0
         for inv in pending_query.prefetch_related('payments'):
             paid = sum(p.amount for p in inv.payments.all())
@@ -338,7 +335,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             refund = inv.refund_amount or 0
             total_pending += max(0, inv.total_amount - discount - refund - paid)
         
-        count = Invoice.objects.filter(created_at__date=today).count()
+        count = Invoice.objects.filter(created_at__date=today).exclude(payment_status='CANCELLED').count()
 
         return Response({
             'revenue_today': collection_today,

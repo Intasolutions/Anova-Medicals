@@ -949,13 +949,19 @@ const Billing = ({ dateRange: externalDateRange }) => {
 
       if (status === "DRAFT") {
         showToast("success", "Invoice saved as Draft!");
-        // Sync id, invoice_number and confirmed status back from the backend so
-        // subsequent saves PATCH the correct record and the UI stays consistent.
+        // Sync id, invoice_number, confirmed status AND items back from the backend
+        // so the bill displayed in the modal matches what was actually stored.
+        // Signals (e.g. consultation fee sync, lab charge sync) may add or remove
+        // items during the save; ignoring savedInvoice.items left the frontend
+        // showing items the backend had already deleted, and vice-versa.
         setFormData((prev) => ({
           ...prev,
           id: savedInvoice.id,
           invoice_number: savedInvoice.invoice_number || prev.invoice_number,
           payment_status: savedInvoice.payment_status || "DRAFT",
+          items: savedInvoice.items && savedInvoice.items.length > 0
+            ? savedInvoice.items
+            : prev.items,
         }));
       } else {
         setShowModal(false);

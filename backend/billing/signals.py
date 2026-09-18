@@ -169,18 +169,23 @@ def create_or_update_consultation_invoice(sender, instance, created, **kwargs):
             # Adjust payment status -- must subtract refund_amount too, matching
             # the same balance formula used everywhere else (get_balance_due,
             # add_payment), so this signal can't disagree with them.
-            paid_amount = sum(p.amount for p in invoice.payments.all())
-            discount = invoice.discount_amount or 0
-            refund = invoice.refund_amount or 0
+            # Never overwrite DRAFT -- the billing screen saved it as a work-in-
+            # progress on purpose. Overwriting it here (triggered by a Visit.save
+            # that happens right after the draft PATCH) was silently resetting the
+            # status back to PENDING, which made "Save as Draft" appear broken.
+            if invoice.payment_status != 'DRAFT':
+                paid_amount = sum(p.amount for p in invoice.payments.all())
+                discount = invoice.discount_amount or 0
+                refund = invoice.refund_amount or 0
 
-            if invoice.total_amount == 0:
-                invoice.payment_status = 'PENDING'
-            elif paid_amount >= invoice.total_amount - discount - refund:
-                invoice.payment_status = 'PAID'
-            elif paid_amount > 0:
-                invoice.payment_status = 'PARTIAL'
-            else:
-                invoice.payment_status = 'PENDING'
+                if invoice.total_amount == 0:
+                    invoice.payment_status = 'PENDING'
+                elif paid_amount >= invoice.total_amount - discount - refund:
+                    invoice.payment_status = 'PAID'
+                elif paid_amount > 0:
+                    invoice.payment_status = 'PARTIAL'
+                else:
+                    invoice.payment_status = 'PENDING'
 
             invoice.save()
 
@@ -259,17 +264,19 @@ def sync_casualty_service_to_invoice(sender, instance, created, **kwargs):
     # balance formula used in InvoiceSerializer.create and
     # create_or_update_consultation_invoice, so this can't disagree with
     # them about what a given invoice's status should be.
-    paid_amount = sum(p.amount for p in invoice.payments.all())
-    discount = invoice.discount_amount or 0
-    refund = invoice.refund_amount or 0
+    # Never overwrite DRAFT -- see the note in create_or_update_consultation_invoice.
+    if invoice.payment_status != 'DRAFT':
+        paid_amount = sum(p.amount for p in invoice.payments.all())
+        discount = invoice.discount_amount or 0
+        refund = invoice.refund_amount or 0
 
-    if invoice.total_amount == 0:
-        invoice.payment_status = 'PENDING'
-    elif paid_amount >= invoice.total_amount - discount - refund:
-        invoice.payment_status = 'PAID'
-    elif paid_amount > 0:
-        invoice.payment_status = 'PARTIAL'
-    else:
-        invoice.payment_status = 'PENDING'
+        if invoice.total_amount == 0:
+            invoice.payment_status = 'PENDING'
+        elif paid_amount >= invoice.total_amount - discount - refund:
+            invoice.payment_status = 'PAID'
+        elif paid_amount > 0:
+            invoice.payment_status = 'PARTIAL'
+        else:
+            invoice.payment_status = 'PENDING'
 
     invoice.save()
