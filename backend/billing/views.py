@@ -68,115 +68,13 @@ class InvoiceViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def perform_create(self, serializer):
-        invoice = serializer.save()
-        # Draft and cancelled invoices must never deduct stock or close the visit.
-        # Draft = work-in-progress; Cancelled = order was not fulfilled.
-        if invoice.payment_status not in ('DRAFT', 'CANCELLED'):
-            self._deduct_stock(invoice)
-            self._close_visit_if_fully_paid(invoice)
+        serializer.save()
+        # Stock deduction and visit closing are now handled by signals in signals.py
 
     @transaction.atomic
     def perform_update(self, serializer):
-        invoice = serializer.save()
-        # Draft and cancelled invoices must never deduct stock or close the visit.
-        # Draft = work-in-progress; Cancelled = order was not fulfilled.
-        if invoice.payment_status not in ('DRAFT', 'CANCELLED'):
-            self._deduct_stock(invoice)
-            self._close_visit_if_fully_paid(invoice)
-
-    def _close_visit_if_fully_paid(self, invoice):
-        """
-        Close the visit only once the patient has paid for everything they used.
-
-        Checks the real outstanding balance on EVERY open invoice for the visit,
-        rather than trusting a single invoice's payment_status flag -- a flag can
-        say PAID while items added afterwards have pushed the total back up.
-
-        Pending lab RESULTS deliberately do not block closing: the charge for the
-        test is already on the bill (billed at order time), so once it's paid the
-        patient is square. The lab keeps the test in its own queue and sends the
-        result on afterwards.
-        """
-        from decimal import Decimal
-
-        visit = invoice.visit
-        if not visit:
-            return
-
-        for inv in visit.invoices.exclude(payment_status='CANCELLED'):
-            paid = sum(p.amount for p in inv.payments.all())
-            discount = inv.discount_amount or Decimal('0')
-            refund = inv.refund_amount or Decimal('0')
-            outstanding = inv.total_amount - discount - refund - paid
-            if outstanding > Decimal('0.5'):
-                return  # still owes money on something -- keep the visit open
-
-        visit.status = 'CLOSED'
-        visit.save()
-
-    def _deduct_stock(self, invoice):
-        from django.db import transaction
-        from rest_framework import serializers
-        from .models import InvoiceItem
-
-        # Query InvoiceItem directly instead of using invoice.items.all().
-        # The viewset loads invoices with prefetch_related('items'), which caches
-        # the item list on the instance. After the serializer's update() deletes
-        # removed items and saves changed ones, the prefetch cache is STALE -- it
-        # still contains deleted items and old deducted_qty values. Iterating the
-        # cached queryset would try to deduct stock for items that no longer exist
-        # (and re-INSERT them via item.save()), causing silent double-deductions or
-        # integrity errors. Querying directly always reflects the current DB state.
-        items = InvoiceItem.objects.filter(invoice=invoice)
-        for item in items:
-            if item.dept == 'PHARMACY':
-                name = item.description.strip() if item.description else ""
-                batch = item.batch.strip() if item.batch else ""
-                current_qty = int(item.qty)
-                already_deducted = int(item.deducted_qty)
-                delta = current_qty - already_deducted
-                
-                if delta == 0:
-                    continue
-                    
-                # Find Stock
-                stock = None
-                if batch:
-                    # Strict match by name and batch
-                    stock = PharmacyStock.objects.select_for_update().filter(
-                        name__iexact=name, 
-                        batch_no__iexact=batch,
-                        is_deleted=False
-                    ).first()
-                
-                if not stock and not batch:
-                    # Fallback to name only if batch is not provided (should be avoided in UI)
-                    stock = PharmacyStock.objects.select_for_update().filter(
-                        name__iexact=name,
-                        is_deleted=False
-                    ).order_by('expiry_date').first()
-                
-                if stock:
-                    if stock.qty_available < delta:
-                        raise serializers.ValidationError({
-                            "error": f"Insufficient stock for {name} (Batch: {batch or 'Any'}). Available: {stock.qty_available}, Requested: {delta}"
-                        })
-                        
-                    # Perform stock adjustment
-                    stock.qty_available -= delta
-                    stock.save()
-                    
-                    # Update item tracking
-                    item.deducted_qty = current_qty
-                    item.stock_deducted = True
-                    item.save()
-                else:
-                    # If it's a new manual entry and no stock found, we should probably warn or block
-                    # unless it's a non-pharmacy item mislabeled as dept='PHARMACY'
-                    if delta > 0:
-                         raise serializers.ValidationError({
-                            "error": f"No stock record found for {name} (Batch: {batch or 'N/A'})."
-                        })
+        serializer.save()
+        # Stock deduction and visit closing are now handled by signals in signals.py
 
     @action(detail=True, methods=['post'])
     def add_payment(self, request, pk=None):
@@ -219,7 +117,9 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                     if invoice.payment_status != 'PAID':
                         invoice.payment_status = 'PAID'
                         invoice.save(update_fields=['payment_status'])
-                    self._close_visit_if_fully_paid(invoice)
+                    else:
+                        # Ensure signal fires to check visit closing
+                        invoice.save(update_fields=['payment_status'])
                 return Response({'status': 'success', 'message': 'Invoice marked as paid'})
             return Response({'error': 'Payment amount must be greater than zero.'}, status=400)
 
@@ -268,24 +168,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 invoice.payment_status = 'PENDING'
 
             invoice.save()
-
-            # Close the visit only if the patient now owes nothing on ANY of
-            # their bills for this visit (shared rule -- see the helper).
-            self._close_visit_if_fully_paid(invoice)
+            # Visit closing is handled by post_save signal on Invoice
         
-        # Emit Socket Update
-        try:
-             from asgiref.sync import async_to_sync
-             from revive_cms.sio import sio
-             async_to_sync(sio.emit)('billing_update', {
-                 'invoice_id': str(invoice.id),
-                 'amount': float(invoice.total_amount),
-                 'status': invoice.payment_status,
-                 'paid': float(total_paid)
-             })
-        except:
-            pass
-
         return Response(InvoiceSerializer(invoice).data)
 
     @action(detail=False, methods=['get'])
@@ -320,10 +204,10 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         total_monthly_collection = monthly_payments.aggregate(Sum('amount'))['amount__sum'] or 0
         
         # 2. Breakdown
-        cash_monthly = monthly_payments.filter(mode='CASH').aggregate(Sum('amount'))['amount__sum'] or 0
-        upi_monthly = monthly_payments.filter(mode='UPI').aggregate(Sum('amount'))['amount__sum'] or 0
-        card_monthly = monthly_payments.filter(mode='CARD').aggregate(Sum('amount'))['amount__sum'] or 0
-
+        cash_monthly = monthly_payments.filter(mode__iexact='CASH').aggregate(Sum('amount'))['amount__sum'] or 0
+        upi_monthly = monthly_payments.filter(mode__in=['UPI', 'Google Pay', 'Googlepe', 'Gpay', 'PhonePe', 'Amazon Pay', 'Paytm', 'Google Pay / UPI']).aggregate(Sum('amount'))['amount__sum'] or 0
+        card_monthly = monthly_payments.filter(mode__iexact='CARD').aggregate(Sum('amount'))['amount__sum'] or 0
+        
         # Collection Today (Actual payments received today)
         collection_today = PaymentTransaction.objects.filter(created_at__date=today).exclude(invoice__payment_status='CANCELLED').aggregate(Sum('amount'))['amount__sum'] or 0
 

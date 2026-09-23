@@ -12,6 +12,7 @@ import {
 import api from '../api/axios';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
+import { socket } from '../socket';
 
 // --- Premium Stat Card ---
 const StatCard = ({ label, value, change, icon: Icon, color, trend }) => {
@@ -139,6 +140,19 @@ const Dashboard = () => {
         };
 
         if (user?.role === 'ADMIN') fetchStats();
+        
+        // Listen for real-time billing updates to refresh dashboard stats
+        const onBillingUpdate = () => {
+            if (user?.role === 'ADMIN') {
+                fetchStats();
+            }
+        };
+        
+        socket.on('billing_update', onBillingUpdate);
+        
+        return () => {
+            socket.off('billing_update', onBillingUpdate);
+        };
     }, [user, navigate, dateRange]);
 
     // --- Chart Data Processing (The Fix) ---

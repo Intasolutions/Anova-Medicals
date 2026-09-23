@@ -10,6 +10,8 @@ class PaymentTransactionSerializer(serializers.ModelSerializer):
         read_only_fields = ['invoice']
 
 class InvoiceItemSerializer(serializers.ModelSerializer):
+    id = serializers.IntegerField(required=False)
+
     class Meta:
         model = InvoiceItem
         fields = '__all__'
@@ -171,19 +173,6 @@ class InvoiceSerializer(serializers.ModelSerializer):
                     mode=getattr(invoice, 'payment_mode', 'CASH') or 'CASH',
                     remarks='Auto-generated from direct paid invoice'
                 )
-        
-        # Emit Socket Event
-        try:
-            from asgiref.sync import async_to_sync
-            from revive_cms.sio import sio
-            async_to_sync(sio.emit)('billing_update', {
-                'invoice_id': str(invoice.id),
-                'amount': float(invoice.total_amount),
-                'status': invoice.payment_status
-            })
-        except Exception as e:
-            print(f"Socket emit error: {e}")
-
         return invoice
 
     def update(self, instance, validated_data):
@@ -196,6 +185,8 @@ class InvoiceSerializer(serializers.ModelSerializer):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         instance.save()
+
+        # Syncing payment_mode is now handled by the post_save signal on Invoice
 
         if items_data is not None:
             # Sync Items: Keep existing, create new, remove missing
@@ -236,7 +227,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             discount = instance.discount_amount or Decimal('0')
             refund = instance.refund_amount or Decimal('0')
             due = (instance.total_amount or Decimal('0')) - discount - refund
-
+            
             if instance.payment_status != 'CANCELLED':
                 if due <= Decimal('0'):
                     instance.payment_status = 'PENDING' if instance.total_amount == 0 else 'PAID'
@@ -246,19 +237,20 @@ class InvoiceSerializer(serializers.ModelSerializer):
                     instance.payment_status = 'PARTIAL'
                 else:
                     instance.payment_status = 'PENDING'
+        else:
+            # If the user is manually forcing a status via the admin edit modal
+            if validated_data.get('payment_status') == 'PAID':
+                paid_amount = sum((p.amount for p in instance.payments.all()), Decimal('0'))
+                discount = instance.discount_amount or Decimal('0')
+                refund = instance.refund_amount or Decimal('0')
+                due = (instance.total_amount or Decimal('0')) - discount - refund - paid_amount
+                if due > 0:
+                    PaymentTransaction.objects.create(
+                        invoice=instance,
+                        amount=due,
+                        mode=getattr(instance, 'payment_mode', 'CASH') or 'CASH',
+                        remarks='Auto-generated from admin forced paid status'
+                    )
 
         instance.save()
-
-        # Emit Socket Event
-        try:
-            from asgiref.sync import async_to_sync
-            from revive_cms.sio import sio
-            async_to_sync(sio.emit)('billing_update', {
-                'invoice_id': str(instance.id),
-                'amount': float(instance.total_amount),
-                'status': instance.payment_status
-            })
-        except Exception as e:
-            print(f"Socket emit error: {e}")
-
         return instance

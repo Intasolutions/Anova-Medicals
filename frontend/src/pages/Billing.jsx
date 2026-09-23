@@ -1768,7 +1768,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
                                 <CreditCard size={10} />
                               )}
                               {invoice.payment_mode === "UPI"
-                                ? "GoogPe"
+                                ? "GooglePay"
                                 : invoice.payment_mode}
                             </span>
                           )

@@ -20,7 +20,8 @@ const AdminInvoices = () => {
         message: '',
         details: [],
         onConfirm: null,
-        type: 'warning'
+        type: 'warning',
+        error: null
     });
 
     useEffect(() => {
@@ -69,7 +70,9 @@ const AdminInvoices = () => {
             fetchInvoices();
         } catch (error) {
             console.error(error);
-            showToast('error', 'Failed to cancel invoice.');
+            const msg = error.response?.data?.error || error.response?.data?.detail || 'Failed to cancel invoice.';
+            setConfirmModal(prev => ({ ...prev, error: msg }));
+            showToast('error', msg);
         }
     };
 
@@ -130,6 +133,7 @@ const AdminInvoices = () => {
         } catch (error) {
             console.error(error);
             const msg = error.response?.data?.error || error.response?.data?.detail || 'Failed to update invoice.';
+            setConfirmModal(prev => ({ ...prev, error: msg }));
             showToast('error', msg);
         } finally {
             setIsSaving(false);
@@ -456,6 +460,13 @@ const AdminInvoices = () => {
                                     </div>
                                 ))}
                             </div>
+                            
+                            {confirmModal.error && (
+                                <div className="mt-6 p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-sm font-semibold flex items-start gap-2">
+                                    <Ban className="w-5 h-5 shrink-0 mt-0.5" />
+                                    <p>{confirmModal.error}</p>
+                                </div>
+                            )}
                         </div>
                         <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
                             <button 

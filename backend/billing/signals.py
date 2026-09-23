@@ -278,5 +278,110 @@ def sync_casualty_service_to_invoice(sender, instance, created, **kwargs):
             invoice.payment_status = 'PARTIAL'
         else:
             invoice.payment_status = 'PENDING'
-
     invoice.save()
+
+@receiver(post_save, sender=Invoice)
+def handle_invoice_updates(sender, instance, created, **kwargs):
+    from decimal import Decimal
+    from rest_framework.exceptions import ValidationError
+    from pharmacy.models import PharmacyStock
+
+    # 1. Sync Transaction Mode
+    if getattr(instance, 'payment_mode', None):
+        for payment in instance.payments.all():
+            if payment.mode != instance.payment_mode:
+                payment.mode = instance.payment_mode
+                payment.save(update_fields=['mode'])
+
+    # 2. Deduct Stock
+    if instance.payment_status not in ('DRAFT', 'CANCELLED'):
+        for item in instance.items.all():
+            if item.dept == 'PHARMACY':
+                name = item.description.strip() if item.description else ""
+                batch = item.batch.strip() if item.batch else ""
+                current_qty = int(item.qty)
+                already_deducted = int(item.deducted_qty)
+                delta = current_qty - already_deducted
+                
+                if delta != 0:
+                    stock = None
+                    if batch:
+                        stock = PharmacyStock.objects.select_for_update().filter(
+                            name__iexact=name, batch_no__iexact=batch, is_deleted=False
+                        ).first()
+                    if not stock and not batch:
+                        stock = PharmacyStock.objects.select_for_update().filter(
+                            name__iexact=name, is_deleted=False
+                        ).order_by('expiry_date').first()
+                        
+                    if stock:
+                        if stock.qty_available < delta:
+                            raise ValidationError({'error': f"Insufficient stock for {name}. Available: {stock.qty_available}, Requested: {delta}"})
+                        stock.qty_available -= delta
+                        stock.save()
+                        
+                        InvoiceItem.objects.filter(id=item.id).update(
+                            deducted_qty=current_qty, stock_deducted=True
+                        )
+
+    # 3. Close visit if fully paid
+    visit = instance.visit
+    if visit:
+        all_closed = True
+        for inv in visit.invoices.exclude(payment_status='CANCELLED'):
+            paid = sum(p.amount for p in inv.payments.all())
+            discount = inv.discount_amount or Decimal('0')
+            refund = inv.refund_amount or Decimal('0')
+            outstanding = inv.total_amount - discount - refund - paid
+            if outstanding > Decimal('0.5'):
+                all_closed = False
+                break
+        
+        if all_closed and visit.status != 'CLOSED':
+            visit.status = 'CLOSED'
+            visit.save()
+
+    # 4. Emit Socket Event
+    try:
+        from asgiref.sync import async_to_sync
+        from revive_cms.sio import sio
+        async_to_sync(sio.emit)('billing_update', {
+            'invoice_id': str(instance.id),
+            'amount': float(instance.total_amount),
+            'status': instance.payment_status
+        })
+    except Exception as e:
+        print(f"Socket emit error: {e}")
+
+from django.db.models.signals import pre_delete, post_delete
+
+@receiver(pre_delete, sender=InvoiceItem)
+def return_stock_on_item_delete(sender, instance, **kwargs):
+    from pharmacy.models import PharmacyStock
+    if instance.dept == 'PHARMACY' and instance.stock_deducted and instance.deducted_qty > 0:
+        name = instance.description.strip() if instance.description else ""
+        batch = instance.batch.strip() if instance.batch else ""
+        
+        stock = None
+        if batch:
+            stock = PharmacyStock.objects.select_for_update().filter(
+                name__iexact=name, batch_no__iexact=batch, is_deleted=False
+            ).first()
+        if not stock and not batch:
+            stock = PharmacyStock.objects.select_for_update().filter(
+                name__iexact=name, is_deleted=False
+            ).first()
+            
+        if stock:
+            stock.qty_available += instance.deducted_qty
+            stock.save()
+
+@receiver(post_save, sender=InvoiceItem)
+@receiver(post_delete, sender=InvoiceItem)
+def recalculate_invoice_total_on_item_change(sender, instance, **kwargs):
+    """
+    Ensure the parent invoice total is recalculated whenever an item is added,
+    modified, or deleted (e.g., via Django Admin).
+    """
+    if instance.invoice:
+        instance.invoice.recalculate_total()
