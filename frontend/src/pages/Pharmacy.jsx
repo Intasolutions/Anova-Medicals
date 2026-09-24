@@ -131,7 +131,7 @@ const Pharmacy = () => {
     const [filterSupplier, setFilterSupplier] = useState('');
     const [filterCategory, setFilterCategory] = useState('');
     const [filterExpiring, setFilterExpiring] = useState(false);
-    const [filterStockStatus, setFilterStockStatus] = useState('');
+    const [filterStockStatus, setFilterStockStatus] = useState('AVAILABLE');
     const [inventorySearch, setInventorySearch] = useState(''); // New State
     const [editingStockItem, setEditingStockItem] = useState(null);
 
@@ -963,7 +963,8 @@ const Pharmacy = () => {
                             {suppliers.map(s => <option key={s.id} value={s.id}>{s.supplier_name}</option>)}
                         </select>
                         <select className="bg-white border border-slate-200 text-slate-700 text-xs rounded-xl focus:ring-gray-900 focus:border-gray-900 block px-3 py-2 outline-none font-bold shadow-sm flex-shrink-0" value={filterStockStatus} onChange={(e) => setFilterStockStatus(e.target.value)}>
-                            <option value="">Filter: All Stock Levels</option>
+                            <option value="AVAILABLE">Available (&gt; 0)</option>
+                            <option value="">All Stock Levels</option>
                             <option value="IN_STOCK">In Stock (&ge; 10 Tabs)</option>
                             <option value="LOW">Low Stock (&lt; 10 Tabs)</option>
                             <option value="OOS">Out of Stock</option>

@@ -313,6 +313,8 @@ class PharmacyStockViewSet(viewsets.ModelViewSet):
             qs = qs.filter(qty_available__gt=0, qty_available__lt=10)
         elif stock_status == 'IN_STOCK':
             qs = qs.filter(qty_available__gte=10)
+        elif stock_status == 'AVAILABLE':
+            qs = qs.filter(qty_available__gt=0)
             
         return qs.order_by('expiry_date')
 
