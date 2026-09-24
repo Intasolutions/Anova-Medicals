@@ -329,17 +329,14 @@ def handle_invoice_updates(sender, instance, created, **kwargs):
     if visit:
         all_closed = True
         for inv in visit.invoices.exclude(payment_status='CANCELLED'):
-            paid = sum(p.amount for p in inv.payments.all())
-            discount = inv.discount_amount or Decimal('0')
-            refund = inv.refund_amount or Decimal('0')
-            outstanding = inv.total_amount - discount - refund - paid
-            if outstanding > Decimal('0.5'):
+            if inv.payment_status != 'PAID':
                 all_closed = False
                 break
         
         if all_closed and visit.status != 'CLOSED':
             visit.status = 'CLOSED'
             visit.save()
+
 
     # 4. Emit Socket Event
     try:

@@ -359,7 +359,8 @@ const Pharmacy = () => {
         else if (activeTab === 'purchases') { fetchRecentImports(); fetchSuppliers(); }
         else if (activeTab === 'pos') { fetchPendingVisits(); fetchSalesHistory(); }
         else if (activeTab === 'history') { fetchFullSalesHistory(); }
-    }, [activeTab, fetchStock, fetchRecentImports, fetchSuppliers, fetchPendingVisits, fetchSalesHistory, fetchFullSalesHistory]);
+        else if (activeTab === 'patients') { fetchActivePatients(); }
+    }, [activeTab, fetchStock, fetchRecentImports, fetchSuppliers, fetchPendingVisits, fetchSalesHistory, fetchFullSalesHistory, fetchActivePatients]);
 
     // --- LOGIC (Restored) ---
     const searchPatients = async (q) => {

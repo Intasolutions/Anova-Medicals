@@ -2451,22 +2451,22 @@ const Billing = ({ dateRange: externalDateRange }) => {
             <table className="w-full text-left border-collapse border border-slate-900">
               <thead>
                 <tr className="bg-slate-100">
-                  <th className="py-2 px-2 border-b border-r border-slate-900 text-[9px] font-black text-slate-900 uppercase tracking-widest w-[5%] text-center">
+                  <th className="py-2 px-2 border-b border-r border-slate-900 text-xs font-black text-slate-900 uppercase tracking-widest w-[5%] text-center">
                     #
                   </th>
-                  <th className="py-2 px-2 border-b border-r border-slate-900 text-[9px] font-black text-slate-900 uppercase tracking-widest w-[63%]">
+                  <th className="py-2 px-2 border-b border-r border-slate-900 text-xs font-black text-slate-900 uppercase tracking-widest w-[63%]">
                     Description
                   </th>
-                  <th className="py-2 px-2 border-b border-r border-slate-900 text-[9px] font-black text-slate-900 uppercase tracking-widest w-[7%] text-center">
+                  <th className="py-2 px-2 border-b border-r border-slate-900 text-xs font-black text-slate-900 uppercase tracking-widest w-[7%] text-center">
                     Qty
                   </th>
-                  <th className="py-2 px-2 border-b border-r border-slate-900 text-[9px] font-black text-slate-900 uppercase tracking-widest w-[7%] text-center">
+                  <th className="py-2 px-2 border-b border-r border-slate-900 text-xs font-black text-slate-900 uppercase tracking-widest w-[7%] text-center">
                     GST%
                   </th>
-                  <th className="py-2 px-2 border-b border-r border-slate-900 text-[9px] font-black text-slate-900 uppercase tracking-widest w-[9%] text-right">
+                  <th className="py-2 px-2 border-b border-r border-slate-900 text-xs font-black text-slate-900 uppercase tracking-widest w-[9%] text-right">
                     Price
                   </th>
-                  <th className="py-2 px-2 border-b border-slate-900 text-[9px] font-black text-slate-900 uppercase tracking-widest w-[9%] text-right">
+                  <th className="py-2 px-2 border-b border-slate-900 text-xs font-black text-slate-900 uppercase tracking-widest w-[9%] text-right">
                     Amount
                   </th>
                 </tr>
@@ -2485,7 +2485,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
                     <tr className="bg-slate-200/50 border-b border-slate-400">
                       <td
                         colSpan={6}
-                        className="py-1 px-2 text-[9px] font-black text-slate-700 tracking-widest uppercase"
+                        className="py-1 px-2 text-xs font-black text-slate-700 tracking-widest uppercase"
                       >
                         {dept === "CASUALTY"
                           ? "SERVICES"
@@ -2501,22 +2501,22 @@ const Billing = ({ dateRange: externalDateRange }) => {
                         key={globalIdx}
                         className="border-b border-slate-300 bg-white"
                       >
-                        <td className="py-2 px-2 border-r border-slate-300 text-[10px] font-medium text-slate-600 text-center">
+                        <td className="py-2 px-2 border-r border-slate-300 text-xs font-medium text-slate-600 text-center">
                           {globalIdx++}
                         </td>
-                        <td className="py-2 px-2 border-r border-slate-300 text-[10px] font-bold text-slate-800 leading-tight">
+                        <td className="py-2 px-2 border-r border-slate-300 text-xs font-bold text-slate-800 leading-tight">
                           {item.description}
                         </td>
-                        <td className="py-2 px-2 border-r border-slate-300 text-[10px] font-bold text-slate-800 text-center">
+                        <td className="py-2 px-2 border-r border-slate-300 text-xs font-bold text-slate-800 text-center">
                           {item.qty}
                         </td>
-                        <td className="py-2 px-2 border-r border-slate-300 text-[10px] text-slate-600 text-center">
+                        <td className="py-2 px-2 border-r border-slate-300 text-xs text-slate-600 text-center">
                           {item.gst_percent}
                         </td>
-                        <td className="py-2 px-2 border-r border-slate-300 text-[10px] text-slate-800 text-right">
+                        <td className="py-2 px-2 border-r border-slate-300 text-xs text-slate-800 text-right">
                           {parseFloat(item.unit_price).toFixed(2)}
                         </td>
-                        <td className="py-2 px-2 text-[10px] font-bold text-slate-900 text-right">
+                        <td className="py-2 px-2 text-xs font-bold text-slate-900 text-right">
                           {parseFloat(item.amount).toFixed(2)}
                         </td>
                       </tr>
@@ -2529,7 +2529,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
                 <tr className="bg-slate-50 border-t-2 border-slate-900">
                   <td
                     colSpan={5}
-                    className="py-2 px-2 text-right text-[10px] font-bold text-slate-500 border-r border-slate-900 uppercase tracking-wide"
+                    className="py-2 px-2 text-right text-xs font-bold text-slate-500 border-r border-slate-900 uppercase tracking-wide"
                   >
                     Subtotal
                   </td>
@@ -2541,7 +2541,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
                   <tr className="bg-rose-50 border-t border-slate-300">
                     <td
                       colSpan={5}
-                      className="py-2 px-2 text-right text-[10px] font-bold text-rose-600 border-r border-slate-900 uppercase tracking-wide"
+                      className="py-2 px-2 text-right text-xs font-bold text-rose-600 border-r border-slate-900 uppercase tracking-wide"
                     >
                       Discount
                     </td>
@@ -2553,7 +2553,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
                 <tr className="bg-slate-100 border-t-2 border-slate-900">
                   <td
                     colSpan={5}
-                    className="py-3 px-2 text-right text-[10px] font-black text-slate-900 border-r border-slate-900 uppercase tracking-wide"
+                    className="py-3 px-2 text-right text-xs font-black text-slate-900 border-r border-slate-900 uppercase tracking-wide"
                   >
                     Net Amount
                   </td>
