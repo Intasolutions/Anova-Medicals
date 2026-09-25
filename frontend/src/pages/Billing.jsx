@@ -1195,6 +1195,48 @@ const Billing = ({ dateRange: externalDateRange }) => {
         );
       }
 
+      const rawItems = [
+        ...baseItems.map((i) => ({ ...i, stock_deducted: true })),
+        ...uniquePharmacyItems,
+        ...uniqueCasualtyMeds,
+        ...uniqueCasualtyServices,
+        ...uniqueLabItems,
+      ];
+      
+      const consolidatedItems = [];
+      rawItems.forEach(item => {
+          if (item.dept === "PHARMACY") {
+              const parsedUnitPrice = parseFloat(item.unit_price) || 0;
+              const parsedAmount = parseFloat(item.amount) || 0;
+              const parsedQty = parseFloat(item.qty) || 0;
+              
+              const existingIdx = consolidatedItems.findIndex(
+                  i => i.dept === "PHARMACY" &&
+                       i.description === item.description &&
+                       parseFloat(i.unit_price || 0) === parsedUnitPrice
+              );
+              
+              if (existingIdx !== -1) {
+                  const ex = consolidatedItems[existingIdx];
+                  ex.qty = (parseFloat(ex.qty || 0) + parsedQty).toString();
+                  ex.amount = (parseFloat(ex.amount || 0) + parsedAmount).toFixed(2);
+                  ex.deducted_qty = (parseFloat(ex.deducted_qty || 0) + (parseFloat(item.deducted_qty) || 0)).toString();
+                  
+                  if (item.batch && ex.batch && !ex.batch.includes(item.batch)) {
+                      ex.batch = `${ex.batch}, ${item.batch}`;
+                  } else if (item.batch && !ex.batch) {
+                      ex.batch = item.batch;
+                  }
+                  if (!ex.id && item.id) ex.id = item.id;
+                  if (!ex.item_id && item.item_id) ex.item_id = item.item_id;
+              } else {
+                  consolidatedItems.push({ ...item });
+              }
+          } else {
+              consolidatedItems.push({ ...item });
+          }
+      });
+
       setFormData({
         id: invoice.id,
         invoice_number: invoice.invoice_number,
@@ -1214,13 +1256,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
             ? visitData.patient.registration_number
             : "") ||
           "N/A",
-        items: [
-          ...baseItems.map((i) => ({ ...i, stock_deducted: true })),
-          ...uniquePharmacyItems,
-          ...uniqueCasualtyMeds,
-          ...uniqueCasualtyServices,
-          ...uniqueLabItems,
-        ],
+        items: consolidatedItems,
       });
 
       if (invoice.patient_id || (visitData && visitData.patient)) {
