@@ -170,6 +170,7 @@ const Pharmacy = () => {
 
     // POS
     const [cart, setCart] = useState([]);
+    const [skippedPrescriptionItems, setSkippedPrescriptionItems] = useState([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [gstRate, setGstRate] = useState(0); // Default to 0% GST
     const [patientSearch, setPatientSearch] = useState('');
@@ -776,10 +777,15 @@ const Pharmacy = () => {
             // Tracks what THIS load has added -- the cart starts empty now,
             // so reading `cart` here would always be stale.
             const itemsInCart = new Set();
+            const skipped = [];
 
             for (const med of medList) {
                 const { name, dosage, duration, qty, note } = med;
-                if (alreadySoldNames.has(name.toLowerCase()) || itemsInCart.has(name.toLowerCase())) continue;
+                if (alreadySoldNames.has(name.toLowerCase())) {
+                    skipped.push(med);
+                    continue;
+                }
+                if (itemsInCart.has(name.toLowerCase())) continue;
                 // Mark it before the lookup: an Rx listing the same drug twice
                 // would otherwise add two lines for it.
                 itemsInCart.add(name.toLowerCase());
@@ -804,8 +810,55 @@ const Pharmacy = () => {
                         note: note
                     });
                 }
-            } setCart(newCart); if (newCart.length > 0) showToast('success', 'Rx loaded');
+            } 
+            setSkippedPrescriptionItems(skipped);
+            setCart(newCart); 
+            if (newCart.length > 0) showToast('success', 'Rx loaded');
+            if (skipped.length > 0) showToast('info', 'Some previously dispensed items were skipped.');
         } catch (err) { console.error(err); } finally { setLoading(false); }
+    };
+
+    const loadSkippedItems = async () => {
+        setLoading(true);
+        const newCart = [...cart];
+        const itemsInCart = new Set(newCart.map(i => i.name.toLowerCase()));
+        
+        try {
+            for (const med of skippedPrescriptionItems) {
+                const { name, dosage, duration, qty, note } = med;
+                if (itemsInCart.has(name.toLowerCase())) continue;
+                itemsInCart.add(name.toLowerCase());
+
+                const { data } = await api.get(`pharmacy/stock/?search=${encodeURIComponent(name)}`);
+                const results = data.results || data || [];
+                const match = results.find(r => r.name.toLowerCase() === name.toLowerCase()) || results[0];
+                if (match) {
+                    const tps = match.tablets_per_strip || 1;
+                    const stripPrice = match.mrp;
+                    const tabletPrice = stripPrice / tps;
+                    newCart.push({
+                        ...match,
+                        qty: qty,
+                        original_qty: qty,
+                        selling_price: tabletPrice,
+                        strip_price: stripPrice,
+                        gst_applied: gstRate,
+                        original_mrp: match.mrp,
+                        dosage: dosage,
+                        duration: duration,
+                        note: note
+                    });
+                }
+            }
+            setCart(newCart);
+            setSkippedPrescriptionItems([]);
+            showToast('success', 'Skipped items loaded');
+        } catch (err) {
+            console.error(err);
+            showToast('error', 'Failed to load skipped items');
+        } finally {
+            setLoading(false);
+        }
     };
     const handleFileChange = (e) => { if (e.target.files && e.target.files[0]) setFileToUpload(e.target.files[0]); };
     const handleConfirmUpload = async () => { if (!fileToUpload || !selectedSupplier) return; const formData = new FormData(); formData.append('file', fileToUpload); formData.append('supplier_name', selectedSupplier); setUploadLoading(true); try { const { data } = await api.post('pharmacy/bulk-upload/', formData, { headers: { 'Content-Type': 'multipart/form-data' } }); setUploadResult({ success: true, message: 'Upload Successful', details: `${data.items_processed} items processed.`, invoice: data.invoice_no }); showToast('success', 'Inventory updated'); if (activeTab === 'purchases') fetchRecentImports(); setFileToUpload(null); } catch (err) { showToast('error', 'Upload failed.'); setUploadResult({ success: false, message: 'Upload Failed', details: err.response?.data?.error || "Error uploading file." }); } finally { setUploadLoading(false); } };
@@ -1377,6 +1430,19 @@ const Pharmacy = () => {
                                         )}
                                     </div>
                                 </div>
+                                {skippedPrescriptionItems.length > 0 && (
+                                    <div className="mb-3 p-3 bg-blue-50 border border-blue-200 rounded-xl flex flex-col gap-2 shadow-sm">
+                                        <p className="text-[10px] font-black text-blue-800 tracking-wide uppercase leading-tight">
+                                            {skippedPrescriptionItems.length} prescribed item{skippedPrescriptionItems.length > 1 ? 's' : ''} already dispensed
+                                        </p>
+                                        <button 
+                                            onClick={loadSkippedItems} 
+                                            className="self-start px-3 py-1.5 bg-blue-600 text-white text-[10px] font-black uppercase tracking-wider rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                                        >
+                                            Load Again Anyway
+                                        </button>
+                                    </div>
+                                )}
                                 {selectedPatient ? (
                                     <div className="p-4 bg-white border-2 border-gray-900 rounded-xl flex items-center justify-between shadow-sm">
                                         <div>

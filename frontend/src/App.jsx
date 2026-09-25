@@ -132,8 +132,8 @@ function App() {
                   {/* Doctor - ADMIN, DOCTOR */}
                   <Route path="/doctor" element={<RoleProtectedRoute allowedRoles={['ADMIN', 'DOCTOR']}><Doctor /></RoleProtectedRoute>} />
 
-                  {/* Pharmacy - ADMIN, PHARMACY */}
-                  <Route path="/pharmacy" element={<RoleProtectedRoute allowedRoles={['ADMIN', 'PHARMACY']}><Pharmacy /></RoleProtectedRoute>} />
+                  {/* Pharmacy - ADMIN, PHARMACY, RECEPTION */}
+                  <Route path="/pharmacy" element={<RoleProtectedRoute allowedRoles={['ADMIN', 'PHARMACY', 'RECEPTION']}><Pharmacy /></RoleProtectedRoute>} />
 
                   {/* Default fallback */}
                   <Route path="*" element={<Navigate to="/" />} />

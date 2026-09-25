@@ -345,8 +345,10 @@ const Doctor = () => {
 
         // Safe external check just for the toast (stale check is okay for just showing a toast)
         const normalizedName = med.name.trim().toLowerCase();
-        if (selectedMeds.find(m => m.name.trim().toLowerCase() === normalizedName)) {
-            showToast('info', `${med.name} already in prescription`);
+        const existing = selectedMeds.find(m => m.name.trim().toLowerCase() === normalizedName);
+        if (existing) {
+            handleMedFieldChange(existing._id, 'count', String(parseInt(existing.count || '1') + 1));
+            showToast('success', `Increased qty of ${med.name}`);
             setMedSearch(''); setMedResults([]); return;
         }
 

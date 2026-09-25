@@ -321,16 +321,25 @@ const Billing = ({ dateRange: externalDateRange }) => {
   };
 
   const handleSelectStock = (itemData, index) => {
-    // Prevent duplication
     const existing = formData.items.findIndex(
       (i, idx) => i.description === itemData.name && idx !== index,
     );
     if (existing !== -1) {
-      showToast("error", "Item already added to invoice!");
+      const newItems = [...formData.items];
+      const existingQty = parseFloat(newItems[existing].qty) || 1;
+      newItems[existing].qty = existingQty + 1;
+      
+      const unitPrice = parseFloat(newItems[existing].unit_price) || 0;
+      newItems[existing].amount = (unitPrice * newItems[existing].qty).toFixed(2);
+      
+      // Clear the current empty row since we added to an existing row
+      newItems.splice(index, 1);
+      
+      setFormData({ ...formData, items: newItems });
       setStockSearch({ index: -1, term: "", results: [] });
+      showToast("success", `Increased quantity of ${itemData.name}`);
       return;
     }
-
     const newItems = [...formData.items];
     const qty = parseFloat(newItems[index].qty) || 1;
 
@@ -511,22 +520,46 @@ const Billing = ({ dateRange: externalDateRange }) => {
         console.log(`  - amount: ${item.amount}`);
         console.log(`  - gst: ${item.gst}%`);
 
-        // Note: pharmacy_items from backend are already at tablet level prices if processed by PharmacySale
-        newFormData.items.push({
-          dept: "PHARMACY",
-          description: item.name,
-          qty: item.qty,
-          unit_price: parseFloat(item.unit_price),
-          amount: parseFloat(item.amount),
-          hsn: item.hsn || "",
-          batch: item.batch || "",
-          gst_percent: item.gst || 0,
-          expiry: "",
-          dosage: item.dosage || "",
-          duration: item.duration || "",
-          stock_deducted: true,
-          deducted_qty: item.qty,
-        });
+        // Consolidate identical items (same name and price)
+        const parsedUnitPrice = parseFloat(item.unit_price) || 0;
+        const parsedAmount = parseFloat(item.amount) || 0;
+        const parsedQty = parseFloat(item.qty) || 0;
+
+        const existingIdx = newFormData.items.findIndex(
+          i => i.dept === "PHARMACY" && 
+               i.description === item.name && 
+               i.unit_price === parsedUnitPrice
+        );
+
+        if (existingIdx !== -1) {
+          const ex = newFormData.items[existingIdx];
+          ex.qty = (parseFloat(ex.qty) + parsedQty).toString();
+          ex.amount = (parseFloat(ex.amount) + parsedAmount).toFixed(2);
+          ex.deducted_qty = (parseFloat(ex.deducted_qty || 0) + parsedQty).toString();
+          
+          // Append batch if it's different and not empty
+          if (item.batch && ex.batch && !ex.batch.includes(item.batch)) {
+            ex.batch = `${ex.batch}, ${item.batch}`;
+          } else if (item.batch && !ex.batch) {
+            ex.batch = item.batch;
+          }
+        } else {
+          newFormData.items.push({
+            dept: "PHARMACY",
+            description: item.name,
+            qty: parsedQty.toString(),
+            unit_price: parsedUnitPrice,
+            amount: parsedAmount,
+            hsn: item.hsn || "",
+            batch: item.batch || "",
+            gst_percent: item.gst || 0,
+            expiry: "",
+            dosage: item.dosage || "",
+            duration: item.duration || "",
+            stock_deducted: true,
+            deducted_qty: parsedQty.toString(),
+          });
+        }
       });
       console.log("=== END PHARMACY ITEMS ===");
     }

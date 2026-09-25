@@ -18,7 +18,7 @@ const Sidebar = () => {
         { name: 'Reception', icon: Users, path: '/reception', roles: ['ADMIN', 'RECEPTION', 'LAB'] },
         { name: 'Casualty', icon: Activity, path: '/casualty', roles: ['ADMIN', 'CASUALTY'], hidden: true },
         { name: 'Doctor', icon: Stethoscope, path: '/doctor', roles: ['ADMIN', 'DOCTOR'] },
-        { name: 'Pharmacy', icon: Pill, path: '/pharmacy', roles: ['ADMIN', 'PHARMACY'] },
+        { name: 'Pharmacy', icon: Pill, path: '/pharmacy', roles: ['ADMIN', 'PHARMACY', 'RECEPTION'] },
         { name: 'Laboratory', icon: FlaskConical, path: '/lab', roles: ['ADMIN', 'LAB'] },
         { name: 'Reports', icon: BarChart3, path: '/reports', roles: ['ADMIN'] },
         { name: 'Manage', icon: Settings, path: '/manage', roles: ['ADMIN'] },
