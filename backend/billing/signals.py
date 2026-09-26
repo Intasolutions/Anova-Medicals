@@ -304,25 +304,56 @@ def handle_invoice_updates(sender, instance, created, **kwargs):
                 delta = current_qty - already_deducted
                 
                 if delta != 0:
-                    stock = None
+                    # --- FIXED MULTI-BATCH DEDUCTION LOGIC ---
                     if batch:
                         stock = PharmacyStock.objects.select_for_update().filter(
                             name__iexact=name, batch_no__iexact=batch, is_deleted=False
                         ).first()
-                    if not stock and not batch:
-                        stock = PharmacyStock.objects.select_for_update().filter(
-                            name__iexact=name, is_deleted=False
-                        ).order_by('expiry_date').first()
                         
-                    if stock:
-                        if stock.qty_available < delta:
-                            raise ValidationError({'error': f"Insufficient stock for {name}. Available: {stock.qty_available}, Requested: {delta}"})
-                        stock.qty_available -= delta
-                        stock.save()
-                        
-                        InvoiceItem.objects.filter(id=item.id).update(
-                            deducted_qty=current_qty, stock_deducted=True
-                        )
+                        if stock:
+                            if stock.qty_available < delta:
+                                raise ValidationError({'error': f"Insufficient stock for {name}. Available: {stock.qty_available}, Requested: {delta}"})
+                            stock.qty_available -= delta
+                            stock.save()
+                    else:
+                        if delta > 0:
+                            # Fetch all available batches for this medicine, ordered by expiry date
+                            stocks = list(PharmacyStock.objects.select_for_update().filter(
+                                name__iexact=name, is_deleted=False, qty_available__gt=0
+                            ).order_by('expiry_date'))
+                            
+                            total_available = sum(s.qty_available for s in stocks)
+                            
+                            if total_available < delta:
+                                # If no stock is found at all, show 0 to avoid confusion
+                                available_str = total_available if stocks else 0
+                                raise ValidationError({'error': f"Insufficient stock for {name}. Available: {available_str}, Requested: {delta}"})
+                                
+                            # Deduct across batches (FIFO)
+                            remaining_to_deduct = delta
+                            for s in stocks:
+                                if remaining_to_deduct <= 0:
+                                    break
+                                    
+                                deduct_amount = min(s.qty_available, remaining_to_deduct)
+                                s.qty_available -= deduct_amount
+                                s.save()
+                                remaining_to_deduct -= deduct_amount
+                        else:
+                            # Returning stock (delta is negative)
+                            # Add back to the oldest active batch, matching original behavior
+                            stock = PharmacyStock.objects.select_for_update().filter(
+                                name__iexact=name, is_deleted=False
+                            ).order_by('expiry_date').first()
+                            
+                            if stock:
+                                stock.qty_available -= delta # Subtracting a negative adds it
+                                stock.save()
+                            
+                    # Update InvoiceItem with deducted_qty
+                    InvoiceItem.objects.filter(id=item.id).update(
+                        deducted_qty=current_qty, stock_deducted=True
+                    )
 
     # 3. Close visit if fully paid
     visit = instance.visit

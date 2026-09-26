@@ -944,33 +944,27 @@ const Billing = ({ dateRange: externalDateRange }) => {
           const newServices = validItems
             .filter((i) => i.dept === "CASUALTY" && i.ref_id)
             .map((i) => i.ref_id);
+            
+          const labTestNames = validItems
+            .filter((i) => i.dept === "LAB")
+            .map((i) => i.description);
+          const serviceNames = validItems
+            .filter((i) => i.dept === "CASUALTY")
+            .map((i) => i.description);
+          const pharmacyKeys = validItems
+            .filter((i) => i.dept === "PHARMACY")
+            .map((i) => `${i.description}-${i.batch || ""}`);
 
-          if (newLabTests.length > 0 || newServices.length > 0) {
-            try {
-              const visitRes = await api.get(`/reception/visits/${visitId}/`);
-              const visitData = visitRes.data;
-
-              const existingLabs = (visitData.lab_tests || []).map(
-                (t) => t.id || t,
-              );
-              const existingServices = (visitData.casualty_services || []).map(
-                (s) => s.id || s,
-              );
-
-              const mergedLabs = Array.from(
-                new Set([...existingLabs, ...newLabTests]),
-              );
-              const mergedServices = Array.from(
-                new Set([...existingServices, ...newServices]),
-              );
-
-              await api.patch(`/reception/visits/${visitId}/`, {
-                lab_tests: mergedLabs,
-                casualty_services: mergedServices,
-              });
-            } catch (err) {
-              console.error("Failed to sync labs/services to visit", err);
-            }
+          try {
+            await api.patch(`/reception/visits/${visitId}/`, {
+              lab_tests: newLabTests,
+              casualty_services: newServices,
+              lab_test_names: labTestNames,
+              casualty_service_names: serviceNames,
+              pharmacy_keys: pharmacyKeys,
+            });
+          } catch (err) {
+            console.error("Failed to sync labs/services to visit", err);
           }
         }
       }

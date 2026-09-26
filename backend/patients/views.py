@@ -367,9 +367,16 @@ class VisitViewSet(viewsets.ModelViewSet):
         print(f"=========================\n")
 
         # --- Sync Lab Tests on Update ---
+        lab_test_names = self.request.data.get('lab_test_names')
+        if lab_test_names is not None and isinstance(lab_test_names, list):
+            from lab.models import LabCharge
+            # Delete any lab charge that is not in the updated explicit name list
+            LabCharge.objects.filter(visit=visit).exclude(test_name__in=lab_test_names).delete()
+            
         lab_tests = self.request.data.get('lab_tests')
         if lab_tests is not None and isinstance(lab_tests, list):
             from lab.models import LabCharge, LabTest
+            
             # Find existing tests for this visit
             existing_charges = set(LabCharge.objects.filter(visit=visit).values_list('test_name', flat=True))
             
@@ -403,11 +410,18 @@ class VisitViewSet(viewsets.ModelViewSet):
                     print(f"Error assigning lab test {test_id} to visit {visit.id}: {e}")
 
         # --- Sync Casualty Services on Update ---
+        casualty_service_names = self.request.data.get('casualty_service_names')
+        if casualty_service_names is not None and isinstance(casualty_service_names, list):
+            from casualty.models import CasualtyService
+            # Delete any casualty service that is not in the updated explicit name list
+            CasualtyService.objects.filter(visit=visit).exclude(service_definition__name__in=casualty_service_names).delete()
+            
         casualty_services = self.request.data.get('casualty_services')
         if casualty_services is not None and isinstance(casualty_services, list):
             from casualty.models import CasualtyService, CasualtyServiceDefinition
+            
             # Find existing services for this visit
-            existing_services = CasualtyService.objects.filter(visit=visit).values_list('service_definition_id', flat=True)
+            existing_services = set(CasualtyService.objects.filter(visit=visit).values_list('service_definition_id', flat=True))
             
             for srv_id in casualty_services:
                 try:
@@ -424,6 +438,34 @@ class VisitViewSet(viewsets.ModelViewSet):
                 except Exception as e:
                     print(f"Error assigning casualty service {srv_id} to visit {visit.id}: {e}")
                     
+        # --- Sync Pharmacy OP Sales / Casualty Medicines on Update ---
+        pharmacy_keys = self.request.data.get('pharmacy_keys')
+        if pharmacy_keys is not None and isinstance(pharmacy_keys, list):
+            try:
+                from casualty.models import CasualtyMedicine
+                for cm in CasualtyMedicine.objects.filter(visit=visit):
+                    batch = cm.med_stock.batch_no or ""
+                    key = f"{cm.med_stock.name}-{batch}"
+                    if key not in pharmacy_keys:
+                        cm.delete()
+            except Exception as e:
+                print(f"Error deleting casualty medicines: {e}")
+
+            try:
+                from pharmacy.models import PharmacySale
+                for sale in PharmacySale.objects.filter(visit=visit):
+                    for item in sale.items.all():
+                        batch = item.med_stock.batch_no or ""
+                        key = f"{item.med_stock.name}-{batch}"
+                        if key not in pharmacy_keys:
+                            item.delete()
+                            
+                    # Clean up empty sales
+                    if not sale.items.exists():
+                        sale.delete()
+            except Exception as e:
+                print(f"Error deleting pharmacy sale items: {e}")
+
         # Check for Doctor change
         if visit.doctor and visit.doctor != old_doctor:
             from core.models import Notification

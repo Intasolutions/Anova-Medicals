@@ -389,7 +389,8 @@ const Pharmacy = () => {
                     uniqueMap.get(normalized).qty_available += item.qty_available;
                 }
             });
-            setMedResults(Array.from(uniqueMap.values())); 
+            const aggregated = Array.from(uniqueMap.values());
+            setMedResults(aggregated.filter(item => item.qty_available > 0));
         } catch (err) { setMedResults([]); }
     };
     const addToCart = (med) => {

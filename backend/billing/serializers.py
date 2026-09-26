@@ -190,7 +190,18 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
         if items_data is not None:
             # Sync Items: Keep existing, create new, remove missing
-            keep_ids = []
+            keep_ids = [item_data.get('id') for item_data in items_data if item_data.get('id')]
+            
+            # CRITICAL FIX: Remove missing items FIRST!
+            # If we delete first, the pre_delete signal returns the stock.
+            # Then when we create/update the items below, they can safely deduct from the full stock
+            # without throwing an "Available: X, Requested: Y" false positive.
+            instance.items.exclude(id__in=keep_ids).delete()
+
+            # Merge duplicate new items by description
+            merged_items = {}
+            item_order = []
+            
             for item_data in items_data:
                 item_id = item_data.get('id')
                 if item_id:
@@ -199,18 +210,26 @@ class InvoiceSerializer(serializers.ModelSerializer):
                         for attr, value in item_data.items():
                             setattr(item_instance, attr, value)
                         item_instance.save()
-                        keep_ids.append(item_instance.id)
                     else:
                         # Fallback: create if ID not found but provided (unlikely)
-                        new_item = InvoiceItem.objects.create(invoice=instance, **item_data)
-                        keep_ids.append(new_item.id)
+                        InvoiceItem.objects.create(invoice=instance, **item_data)
                 else:
-                    # New item
-                    new_item = InvoiceItem.objects.create(invoice=instance, **item_data)
-                    keep_ids.append(new_item.id)
+                    # New item, merge by description
+                    desc = item_data.get('description')
+                    if desc in merged_items:
+                        existing = merged_items[desc]
+                        new_qty = item_data.get('qty', 1) or 1
+                        new_amount = item_data.get('amount', 0) or 0
+                        existing['qty'] = (existing.get('qty') or 0) + new_qty
+                        existing['amount'] = (existing.get('amount') or 0) + new_amount
+                        if existing['qty']:
+                            existing['unit_price'] = existing['amount'] / existing['qty']
+                    else:
+                        merged_items[desc] = dict(item_data)
+                        item_order.append(desc)
 
-            # Remove missing items
-            instance.items.exclude(id__in=keep_ids).delete()
+            for desc in item_order:
+                InvoiceItem.objects.create(invoice=instance, **merged_items[desc])
 
         # Always recompute from the actual line items -- this is the source of truth,
         # not whatever the client sent, and must reflect any items sync above.
@@ -253,4 +272,10 @@ class InvoiceSerializer(serializers.ModelSerializer):
                     )
 
         instance.save()
+        
+        # Clear DRF's prefetch cache so the newly updated items are returned to the frontend
+        # instead of the stale cached items from the initial GET request.
+        if hasattr(instance, '_prefetched_objects_cache'):
+            instance._prefetched_objects_cache.pop('items', None)
+            
         return instance
