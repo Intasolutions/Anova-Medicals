@@ -13,6 +13,7 @@ class DoctorNote(BaseModel):
     diagnosis = models.TextField(blank=True, default='')
     prescription = models.JSONField(default=dict, blank=True)
     notes = models.TextField(blank=True)
+    review_note = models.TextField(blank=True, default='')
     lab_referral_details = models.TextField(blank=True)
 
     class Meta:

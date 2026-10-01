@@ -26,10 +26,11 @@ class InvoiceSerializer(serializers.ModelSerializer):
     patient_display = serializers.SerializerMethodField()
     patient_id = serializers.SerializerMethodField()
     registration_number = serializers.SerializerMethodField()
+    review_note = serializers.SerializerMethodField()
 
     class Meta:
         model = Invoice
-        fields = ['id', 'invoice_number', 'visit', 'patient', 'patient_name', 'total_amount', 'discount_amount', 'refund_amount', 'payment_status', 'payment_mode', 'remarks', 'items', 'payments', 'amount_paid', 'balance_due', 'patient_display', 'patient_id', 'registration_number', 'created_at']
+        fields = ['id', 'invoice_number', 'visit', 'patient', 'patient_name', 'total_amount', 'discount_amount', 'refund_amount', 'payment_status', 'payment_mode', 'remarks', 'items', 'payments', 'amount_paid', 'balance_due', 'patient_display', 'patient_id', 'registration_number', 'review_note', 'created_at']
 
     def validate_discount_amount(self, value):
         if value is not None and value < 0:
@@ -67,6 +68,11 @@ class InvoiceSerializer(serializers.ModelSerializer):
         if obj.visit and obj.visit.patient:
             return obj.visit.patient.registration_number
         return "N/A"
+
+    def get_review_note(self, obj):
+        if obj.visit and hasattr(obj.visit, 'doctor_note'):
+            return obj.visit.doctor_note.review_note
+        return ""
 
     def create(self, validated_data):
         items_data = validated_data.pop('items', [])

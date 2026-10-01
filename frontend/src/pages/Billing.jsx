@@ -470,6 +470,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
         (visit.patient && visit.patient.registration_number) ||
         (patientObj && patientObj.registration_number) ||
         "N/A",
+      review_note: visit.review_note || "",
       items: [],
     };
 
@@ -1250,6 +1251,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
             ? visitData.patient.registration_number
             : "") ||
           "N/A",
+        review_note: invoice.review_note || "",
         items: consolidatedItems,
       });
 
@@ -2632,6 +2634,18 @@ const Billing = ({ dateRange: externalDateRange }) => {
               </tbody>
             </table>
           </div>
+
+          {/* Review Note */}
+          {formData.review_note && (
+            <div className="mt-4 p-4 border border-slate-900 rounded-lg bg-slate-50 print:bg-white print:border-slate-400">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-1">
+                Instructions
+              </label>
+              <p className="text-sm font-bold text-slate-900">
+                {formData.review_note}
+              </p>
+            </div>
+          )}
 
           {/* Footer */}
           <div>

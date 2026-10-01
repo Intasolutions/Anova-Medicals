@@ -116,6 +116,11 @@ const HistoryModal = ({ history, onClose }) => {
                                 <span className="font-bold block mb-1 text-slate-400 uppercase text-[10px]">Additional Notes</span>{history.notes}
                             </div>
                         )}
+                        {history.review_note && (
+                            <div className="p-4 bg-blue-50 rounded-2xl border border-blue-100 text-blue-800 text-sm font-medium">
+                                <span className="font-bold block mb-1 text-blue-500 uppercase text-[10px]">Follow Up & Instructions</span>{history.review_note}
+                            </div>
+                        )}
                     </div>
                     {/* Prescription */}
                     {meds.length > 0 && (
@@ -265,7 +270,7 @@ const Doctor = () => {
     const [savingProgress, setSavingProgress] = useState(false);
     const [lastSavedAt, setLastSavedAt] = useState(null);
 
-    const [notes, setNotes] = useState({ complaints: '', examination: '', diagnosis: '', notes: '' });
+    const [notes, setNotes] = useState({ complaints: '', examination: '', diagnosis: '', notes: '', review_note: '' });
     const [vitals, setVitals] = useState({ bp: '', temp: '', pulse: '', spo2: '', weight: '', grbs: '' });
     const [medicalHistory, setMedicalHistory] = useState('');
     const [medSearch, setMedSearch] = useState('');
@@ -449,7 +454,7 @@ const Doctor = () => {
             if (activeVisitRef.current !== vId) return;
             setExistingNoteId(existing.note_id || existing.id);
             if (!draftLoaded) {
-                setNotes({ complaints: existing.complaints || '', examination: existing.examination || '', diagnosis: existing.diagnosis || '', notes: existing.notes || '' });
+                setNotes({ complaints: existing.complaints || '', examination: existing.examination || '', diagnosis: existing.diagnosis || '', notes: existing.notes || '', review_note: existing.review_note || '' });
             }
             if (existing.prescription && typeof existing.prescription === 'object' && (!draftLoaded || draftMeds.length === 0)) {
                 const medPromises = Object.entries(existing.prescription).map(async ([name, details]) => {
@@ -596,6 +601,7 @@ const Doctor = () => {
                 visit: vId,
                 diagnosis: notes.diagnosis || '',
                 notes: notes.notes || '',
+                review_note: notes.review_note || '',
                 complaints: notes.complaints || '',
                 examination: notes.examination || '',
                 prescription: prescriptionObj,
@@ -687,6 +693,7 @@ const Doctor = () => {
                 visit: selectedVisit.v_id || selectedVisit.id,
                 diagnosis: notes.diagnosis,
                 notes: notes.notes,
+                review_note: notes.review_note,
                 complaints: notes.complaints,
                 examination: notes.examination,
                 prescription: prescriptionObj,
@@ -828,7 +835,7 @@ const Doctor = () => {
         const currentVId = selectedVisit.v_id || selectedVisit.id;
         activeVisitRef.current = currentVId;
 
-        setNotes({ complaints: '', examination: '', diagnosis: '', notes: '' });
+        setNotes({ complaints: '', examination: '', diagnosis: '', notes: '', review_note: '' });
         setVitals(selectedVisit.vitals && Object.values(selectedVisit.vitals).some(Boolean)
             ? selectedVisit.vitals : { bp: '', temp: '', pulse: '', spo2: '', weight: '', grbs: '' });
         setMedicalHistory(selectedVisit.patient_medical_history || '');
@@ -1448,6 +1455,16 @@ const Doctor = () => {
                                                     </AnimatePresence>
                                                 )}
                                             </div>
+                                        </div>
+
+                                        {/* Review Notes */}
+                                        <div className="bg-slate-50/50 rounded-[24px] border border-slate-100 p-6">
+                                            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 mb-3">
+                                                <div className="p-1.5 bg-blue-100 rounded-lg text-blue-600"><ClipboardList size={16} /></div>
+                                                Follow Up & Instructions
+                                            </label>
+                                            <input className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:border-blue-500 focus:bg-white outline-none transition-all placeholder:text-slate-400"
+                                                placeholder="e.g. Review after 3 days with CBC..." value={notes.review_note || ''} onChange={e => setNotes({ ...notes, review_note: e.target.value })} />
                                         </div>
                                     </div>
 
