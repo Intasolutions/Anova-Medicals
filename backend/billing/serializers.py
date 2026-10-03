@@ -46,13 +46,14 @@ class InvoiceSerializer(serializers.ModelSerializer):
             })
 
     def get_amount_paid(self, obj):
-        return sum(p.amount for p in obj.payments.all())
+        return sum((p.amount for p in obj.payments.all() if p.amount is not None), Decimal('0'))
 
     def get_balance_due(self, obj):
-        paid = sum(p.amount for p in obj.payments.all())
-        discount = obj.discount_amount or 0
-        refund = obj.refund_amount or 0
-        return max(0, obj.total_amount - discount - refund - paid)
+        paid = sum((p.amount for p in obj.payments.all() if p.amount is not None), Decimal('0'))
+        discount = Decimal(str(obj.discount_amount or '0'))
+        refund = Decimal(str(obj.refund_amount or '0'))
+        total = Decimal(str(obj.total_amount or '0'))
+        return max(Decimal('0'), total - discount - refund - paid)
 
     def get_patient_display(self, obj):
         if obj.visit and obj.visit.patient:

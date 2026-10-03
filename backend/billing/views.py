@@ -62,7 +62,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(visit__patient_id=visit_patient)
             
         queryset = queryset.select_related('visit', 'visit__patient', 'visit__doctor')
-        queryset = queryset.prefetch_related('items')
+        queryset = queryset.prefetch_related('items', 'payments')
                 
         return queryset
 
@@ -212,12 +212,14 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         collection_today = PaymentTransaction.objects.filter(created_at__date=today).exclude(invoice__payment_status='CANCELLED').aggregate(Sum('amount'))['amount__sum'] or 0
 
         # total_pending needs to be calculated in python because balance_due is not a DB field.
-        total_pending = 0
+        from decimal import Decimal
+        total_pending = Decimal('0')
         for inv in pending_query.prefetch_related('payments'):
-            paid = sum(p.amount for p in inv.payments.all())
-            discount = inv.discount_amount or 0
-            refund = inv.refund_amount or 0
-            total_pending += max(0, inv.total_amount - discount - refund - paid)
+            paid = sum((p.amount for p in inv.payments.all() if p.amount is not None), Decimal('0'))
+            discount = Decimal(str(inv.discount_amount or '0'))
+            refund = Decimal(str(inv.refund_amount or '0'))
+            total = Decimal(str(inv.total_amount or '0'))
+            total_pending += max(Decimal('0'), total - discount - refund - paid)
         
         count = Invoice.objects.filter(created_at__date=today).exclude(payment_status='CANCELLED').count()
 

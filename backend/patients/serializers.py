@@ -267,7 +267,7 @@ class VisitSerializer(serializers.ModelSerializer):
     def get_lab_results(self, obj):
         # Return completed lab results for this visit
         try:
-            charges = obj.lab_charges.filter(status='COMPLETED')
+            charges = [c for c in obj.lab_charges.all() if c.status == 'COMPLETED']
             results = []
             for c in charges:
                 results.append({
@@ -316,11 +316,14 @@ class VisitSerializer(serializers.ModelSerializer):
         everything actually paid. Cancelled bills are not money owed.
         """
         total = Decimal('0')
-        for inv in visit.invoices.exclude(payment_status='CANCELLED'):
-            paid = sum((p.amount for p in inv.payments.all()), Decimal('0'))
-            discount = inv.discount_amount or Decimal('0')
-            refund = inv.refund_amount or Decimal('0')
-            total += (inv.total_amount or Decimal('0')) - discount - refund - paid
+        for inv in visit.invoices.all():
+            if inv.payment_status == 'CANCELLED':
+                continue
+            paid = sum((p.amount for p in inv.payments.all() if p.amount is not None), Decimal('0'))
+            discount = Decimal(str(inv.discount_amount or '0'))
+            refund = Decimal(str(inv.refund_amount or '0'))
+            inv_total = Decimal(str(inv.total_amount or '0'))
+            total += inv_total - discount - refund - paid
         return total
 
     def get_outstanding_balance(self, obj):

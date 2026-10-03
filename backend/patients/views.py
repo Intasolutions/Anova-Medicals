@@ -172,11 +172,17 @@ class VisitViewSet(viewsets.ModelViewSet):
             'pharmacy_sales',
             'pharmacy_sales__items',
             'pharmacy_sales__items__med_stock',
+            'pharmacy_sales__returns',
+            'pharmacy_sales__returns__items',
+            'pharmacy_sales__returns__items__med_stock',
             'casualty_services',
+            'casualty_services__service_definition',
+            'casualty_services__visit__patient',
             'casualty_observations',
             'casualty_medicines',
             'casualty_medicines__med_stock',
-            'invoices'
+            'invoices',
+            'invoices__payments'
         )
             
         return qs

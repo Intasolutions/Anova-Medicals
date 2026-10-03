@@ -92,18 +92,26 @@ class DoctorReportView(BaseReportView):
         ).select_related('visit__doctor', 'visit__patient')
 
         if request.query_params.get('export') == 'csv':
-            data = [[n.id, n.visit.doctor.username if n.visit.doctor else "N/A", n.visit.patient.full_name, n.diagnosis, n.created_at] for n in notes]
+            data = []
+            for n in notes:
+                doctor_name = n.visit.doctor.username if getattr(n, 'visit', None) and getattr(n.visit, 'doctor', None) else "N/A"
+                patient_name = n.visit.patient.full_name if getattr(n, 'visit', None) and getattr(n.visit, 'patient', None) else "Unknown"
+                data.append([n.id, doctor_name, patient_name, n.diagnosis, n.created_at])
             return self.export_csv("doctor_report", ["Note ID", "Doctor", "Patient", "Diagnosis", "Date"], data)
 
-        details = [{
-            "id": n.id,
-            "doctor": n.visit.doctor.username if n.visit.doctor else "N/A",
-            "patient": n.visit.patient.full_name,
-            "diagnosis": n.diagnosis,
-            "prescription": n.prescription,
-            "notes": n.notes,
-            "date": n.created_at
-        } for n in notes]
+        details = []
+        for n in notes:
+            doctor_name = n.visit.doctor.username if getattr(n, 'visit', None) and getattr(n.visit, 'doctor', None) else "N/A"
+            patient_name = n.visit.patient.full_name if getattr(n, 'visit', None) and getattr(n.visit, 'patient', None) else "Unknown"
+            details.append({
+                "id": n.id,
+                "doctor": doctor_name,
+                "patient": patient_name,
+                "diagnosis": n.diagnosis,
+                "prescription": n.prescription,
+                "notes": n.notes,
+                "date": n.created_at
+            })
 
         return Response({
             "start_date": start_date,

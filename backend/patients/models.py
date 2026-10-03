@@ -145,5 +145,5 @@ class Visit(BaseModel):
             return 0.00
             
         if hasattr(self.doctor, 'consultation_fee'):
-            return float(self.doctor.consultation_fee)
+            return float(self.doctor.consultation_fee or 0.00)
         return 0.00
