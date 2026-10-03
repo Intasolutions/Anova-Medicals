@@ -215,7 +215,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         from decimal import Decimal
         total_pending = Decimal('0')
         for inv in pending_query.prefetch_related('payments'):
-            paid = sum((p.amount for p in inv.payments.all() if p.amount is not None), Decimal('0'))
+            paid = sum((Decimal(str(p.amount)) for p in inv.payments.all() if p.amount is not None), Decimal('0'))
             discount = Decimal(str(inv.discount_amount or '0'))
             refund = Decimal(str(inv.refund_amount or '0'))
             total = Decimal(str(inv.total_amount or '0'))

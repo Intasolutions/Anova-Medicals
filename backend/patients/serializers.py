@@ -319,7 +319,7 @@ class VisitSerializer(serializers.ModelSerializer):
         for inv in visit.invoices.all():
             if inv.payment_status == 'CANCELLED':
                 continue
-            paid = sum((p.amount for p in inv.payments.all() if p.amount is not None), Decimal('0'))
+            paid = sum((Decimal(str(p.amount)) for p in inv.payments.all() if p.amount is not None), Decimal('0'))
             discount = Decimal(str(inv.discount_amount or '0'))
             refund = Decimal(str(inv.refund_amount or '0'))
             inv_total = Decimal(str(inv.total_amount or '0'))

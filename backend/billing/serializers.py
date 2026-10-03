@@ -46,10 +46,10 @@ class InvoiceSerializer(serializers.ModelSerializer):
             })
 
     def get_amount_paid(self, obj):
-        return sum((p.amount for p in obj.payments.all() if p.amount is not None), Decimal('0'))
+        return sum((Decimal(str(p.amount)) for p in obj.payments.all() if p.amount is not None), Decimal('0'))
 
     def get_balance_due(self, obj):
-        paid = sum((p.amount for p in obj.payments.all() if p.amount is not None), Decimal('0'))
+        paid = sum((Decimal(str(p.amount)) for p in obj.payments.all() if p.amount is not None), Decimal('0'))
         discount = Decimal(str(obj.discount_amount or '0'))
         refund = Decimal(str(obj.refund_amount or '0'))
         total = Decimal(str(obj.total_amount or '0'))
