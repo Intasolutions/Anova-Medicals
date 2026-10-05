@@ -258,8 +258,6 @@ class VisitViewSet(viewsets.ModelViewSet):
         close_previous = self.request.data.get('close_previous', False)
         
         if patient and close_previous:
-            # Auto-close previous open visits for this patient based on frontend confirmation
-            # Exclude LAB and BILLING just in case, to prevent forcefully closing active critical flows
             Visit.objects.filter(
                 patient=patient, 
                 status='OPEN'

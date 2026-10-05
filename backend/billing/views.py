@@ -154,7 +154,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 )
 
             # Recalculate Totals
-            total_paid = sum(p.amount for p in invoice.payments.all())
+            # Must bypass the prefetch cache to include the newly created payments
+            total_paid = sum(p.amount for p in PaymentTransaction.objects.filter(invoice=invoice))
 
             # Update Invoice Status
             # Allow small buffer for float errors (converted to Decimal)
