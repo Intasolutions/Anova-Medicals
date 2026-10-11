@@ -268,7 +268,48 @@ class LabChargeViewSet(viewsets.ModelViewSet):
             
         return qs
 
+    def _ensure_package_subcharges(self, request):
+        """
+        Auto-heals any package charges that are missing sub-charges
+        (e.g. if they were stripped by legacy sync or created without bundled tests).
+        """
+        from .models import LabTest
+        params = getattr(request, 'query_params', getattr(request, 'GET', {}))
+        start_date = params.get('start_date')
+        end_date = params.get('end_date')
+        visit_id = params.get('visit')
+
+        orphaned = LabCharge.objects.filter(parent_charge__isnull=True, sub_charges__isnull=True)
+        if visit_id:
+            orphaned = orphaned.filter(visit_id=visit_id)
+        if start_date:
+            orphaned = orphaned.filter(created_at__date__gte=start_date)
+        if end_date:
+            orphaned = orphaned.filter(created_at__date__lte=end_date)
+
+        for charge in orphaned[:50]:
+            clean_name = charge.test_name.strip() if charge.test_name else ''
+            test_obj = LabTest.objects.filter(name__iexact=clean_name, is_package=True).first()
+            if test_obj and test_obj.package_tests.exists():
+                for sub_test in test_obj.package_tests.all():
+                    if not LabCharge.objects.filter(visit=charge.visit, test_name=sub_test.name, parent_charge=charge).exists():
+                        LabCharge.objects.create(
+                            visit=charge.visit,
+                            test_name=sub_test.name,
+                            sub_name=sub_test.sub_name,
+                            amount=0,
+                            status=charge.status or 'PENDING',
+                            parent_charge=charge
+                        )
+
     def list(self, request, *args, **kwargs):
+        # Auto-heal orphaned packages in the current view
+        try:
+            self._ensure_package_subcharges(request)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning("Package subcharge auto-heal error: %s", e)
+
         response = super().list(request, *args, **kwargs)
         
         # Calculate status counts using the filtered queryset EXCEPT status
@@ -327,6 +368,18 @@ class LabChargeViewSet(viewsets.ModelViewSet):
         
         # Save the update
         instance = serializer.save()
+
+        # --- CASCADE PARENT STATUS DOWN TO SUB-CHARGES ---
+        if instance.sub_charges.exists() and new_status != old_status:
+            sub_charges = instance.sub_charges.exclude(status__in=['COMPLETED', 'CANCELLED'])
+            update_data = {'status': new_status}
+            if new_status == 'DRAWN':
+                update_data['drawn_date'] = serializer.validated_data.get('drawn_date') or timezone.now()
+            elif new_status == 'RECEIVED':
+                update_data['received_date'] = serializer.validated_data.get('received_date') or timezone.now()
+            elif new_status == 'CANCELLED':
+                update_data['status'] = 'CANCELLED'
+            sub_charges.update(**update_data)
 
         # --- PARENT PACKAGE SYNC (Status & Dates) ---
         if instance.parent_charge:

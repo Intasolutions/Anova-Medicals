@@ -1282,48 +1282,160 @@ const Laboratory = () => {
 
                                                 {/* Tests List & Actions */}
                                                 <td className="px-6 py-4">
-                                                    <div className="flex flex-col gap-2">
-                                                        {group.items.map((test, idx) => {
-                                                            const isPkg = labTests.find(t => t.name === test.test_name)?.is_package;
-                                                            return (
-                                                            <div key={test.lc_id} className="flex flex-wrap items-center gap-3 border-b border-slate-100 pb-2 last:border-0 last:pb-0">
-                                                                <div className="flex items-center gap-2">
-                                                                    {!isPkg && <div className={`w-1.5 h-1.5 shrink-0 rounded-full ${test.status === 'COMPLETED' ? 'bg-emerald-500' : test.status === 'CANCELLED' ? 'bg-red-500' : 'bg-amber-500'}`} />}
-                                                                    <span className={`font-bold text-[11px] uppercase ${isPkg ? 'text-slate-400 border border-slate-200 px-1.5 py-0.5 rounded-md text-[9px]' : test.status === 'COMPLETED' ? 'text-emerald-700' : test.status === 'CANCELLED' ? 'text-red-400 line-through' : 'text-slate-700'}`}>
-                                                                        {test.test_name} {isPkg && '(PACKAGE)'}
-                                                                    </span>
-                                                                </div>
-                                                                {!isPkg && (
-                                                                <div className="flex flex-wrap items-center gap-1.5 ml-2">
-                                                                    {test.status === 'PENDING' && (
-                                                                        <button onClick={() => handleUpdateStatus(test.lc_id, 'DRAWN')} className="px-2 py-0.5 bg-fuchsia-50 text-fuchsia-600 text-[10px] font-bold rounded shadow-sm border border-fuchsia-100 hover:bg-fuchsia-100">
-                                                                            Mark Drawn
-                                                                        </button>
-                                                                    )}
-                                                                    {test.status === 'DRAWN' && (
-                                                                        <button onClick={() => handleUpdateStatus(test.lc_id, 'RECEIVED')} className="px-2 py-0.5 bg-cyan-50 text-cyan-600 text-[10px] font-bold rounded shadow-sm border border-cyan-100 hover:bg-cyan-100">
-                                                                            Mark Received
-                                                                        </button>
-                                                                    )}
-                                                                    {['RECEIVED', 'VERIFICATION'].includes(test.status) && (
-                                                                        <button onClick={() => handleOpenResultEntry(test)} className={`px-2 py-0.5 text-[10px] font-bold rounded shadow-sm border ${test.status === 'VERIFICATION' ? 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'}`}>
-                                                                            {test.status === 'VERIFICATION' ? 'Verify' : 'Result'}
-                                                                        </button>
-                                                                    )}
-                                                                    {test.status === 'COMPLETED' && (
-                                                                        <button onClick={() => handleOpenPrintModal(test)} className="px-2 py-0.5 bg-slate-900 text-white text-[10px] font-bold rounded shadow-sm flex items-center gap-1 hover:bg-slate-700">
-                                                                            <Printer size={10} /> Print
-                                                                        </button>
-                                                                    )}
-                                                                    {!['COMPLETED', 'CANCELLED'].includes(test.status) && (
-                                                                        <button onClick={() => handleUpdateStatus(test.lc_id, 'CANCELLED')} className="px-2 py-0.5 bg-red-50 text-red-600 text-[10px] font-bold rounded shadow-sm border border-red-100 hover:bg-red-100">
-                                                                            Cancel
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                                )}
-                                                            </div>
-                                                        )})}
+                                                    <div className="flex flex-col gap-2.5">
+                                                        {(() => {
+                                                            // Map sub-charges to their parent charge
+                                                            const subChargeMap = {};
+                                                            group.items.forEach(item => {
+                                                                if (item.parent_charge) {
+                                                                    if (!subChargeMap[item.parent_charge]) subChargeMap[item.parent_charge] = [];
+                                                                    subChargeMap[item.parent_charge].push(item);
+                                                                }
+                                                            });
+                                                            const topLevelItems = group.items.filter(item => !item.parent_charge);
+                                                            // Also include any sub-charges whose parent is not in group.items (safety fallback)
+                                                            const orphanSubCharges = group.items.filter(item => item.parent_charge && !group.items.some(p => p.lc_id === item.parent_charge));
+                                                            const itemsToDisplay = [...topLevelItems, ...orphanSubCharges];
+
+                                                            return itemsToDisplay.map((test) => {
+                                                                const isPkg = labTests.find(t => t.name?.toLowerCase().trim() === test.test_name?.toLowerCase().trim())?.is_package;
+                                                                const childSubTests = subChargeMap[test.lc_id] || [];
+
+                                                                return (
+                                                                    <div key={test.lc_id} className="border-b border-slate-100 pb-2 last:border-0 last:pb-0">
+                                                                        {/* Test / Package Header */}
+                                                                        <div className="flex flex-wrap items-center gap-2.5">
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                <div className={`w-2 h-2 shrink-0 rounded-full ${test.status === 'COMPLETED' ? 'bg-emerald-500' : test.status === 'CANCELLED' ? 'bg-red-500' : test.status === 'DRAWN' ? 'bg-fuchsia-500' : test.status === 'RECEIVED' ? 'bg-cyan-500' : 'bg-amber-500'}`} />
+                                                                                <span className={`font-bold uppercase tracking-tight ${isPkg ? 'text-indigo-900 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded text-[10px]' : test.status === 'COMPLETED' ? 'text-emerald-700 text-[11px]' : test.status === 'CANCELLED' ? 'text-red-400 line-through text-[11px]' : 'text-slate-700 text-[11px]'}`}>
+                                                                                    {test.test_name} {isPkg && '(PACKAGE)'}
+                                                                                </span>
+                                                                            </div>
+
+                                                                            {/* Package Bulk Actions OR Single Test Actions */}
+                                                                            {isPkg ? (
+                                                                                <div className="flex flex-wrap items-center gap-1.5 ml-auto sm:ml-2">
+                                                                                    {test.status === 'PENDING' && (
+                                                                                        <button 
+                                                                                            onClick={() => handleUpdateStatus(test.lc_id, 'DRAWN')} 
+                                                                                            className="px-2.5 py-0.5 bg-fuchsia-100 text-fuchsia-700 hover:bg-fuchsia-200 text-[10px] font-bold rounded shadow-sm border border-fuchsia-200 transition-colors"
+                                                                                            title="Mark entire package and sub-tests as sample drawn"
+                                                                                        >
+                                                                                            Mark All Drawn
+                                                                                        </button>
+                                                                                    )}
+                                                                                    {test.status === 'DRAWN' && (
+                                                                                        <button 
+                                                                                            onClick={() => handleUpdateStatus(test.lc_id, 'RECEIVED')} 
+                                                                                            className="px-2.5 py-0.5 bg-cyan-100 text-cyan-700 hover:bg-cyan-200 text-[10px] font-bold rounded shadow-sm border border-cyan-200 transition-colors"
+                                                                                            title="Mark entire package and sub-tests as received in lab"
+                                                                                        >
+                                                                                            Mark All Received
+                                                                                        </button>
+                                                                                    )}
+                                                                                    {childSubTests.length === 0 && ['RECEIVED', 'VERIFICATION'].includes(test.status) && (
+                                                                                        <button onClick={() => handleOpenResultEntry(test)} className="px-2 py-0.5 text-[10px] font-bold rounded shadow-sm border bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100">
+                                                                                            Result
+                                                                                        </button>
+                                                                                    )}
+                                                                                    {test.status === 'COMPLETED' && (
+                                                                                        <button onClick={() => handleOpenPrintModal(test)} className="px-2 py-0.5 bg-slate-900 text-white text-[10px] font-bold rounded shadow-sm flex items-center gap-1 hover:bg-slate-700">
+                                                                                            <Printer size={10} /> Print Report
+                                                                                        </button>
+                                                                                    )}
+                                                                                    {!['COMPLETED', 'CANCELLED'].includes(test.status) && (
+                                                                                        <button onClick={() => handleUpdateStatus(test.lc_id, 'CANCELLED')} className="px-2 py-0.5 bg-red-50 text-red-600 text-[10px] font-bold rounded shadow-sm border border-red-100 hover:bg-red-100">
+                                                                                            Cancel
+                                                                                        </button>
+                                                                                    )}
+                                                                                </div>
+                                                                            ) : (
+                                                                                <div className="flex flex-wrap items-center gap-1.5 ml-auto sm:ml-2">
+                                                                                    {test.status === 'PENDING' && (
+                                                                                        <button onClick={() => handleUpdateStatus(test.lc_id, 'DRAWN')} className="px-2 py-0.5 bg-fuchsia-50 text-fuchsia-600 text-[10px] font-bold rounded shadow-sm border border-fuchsia-100 hover:bg-fuchsia-100">
+                                                                                            Mark Drawn
+                                                                                        </button>
+                                                                                    )}
+                                                                                    {test.status === 'DRAWN' && (
+                                                                                        <button onClick={() => handleUpdateStatus(test.lc_id, 'RECEIVED')} className="px-2 py-0.5 bg-cyan-50 text-cyan-600 text-[10px] font-bold rounded shadow-sm border border-cyan-100 hover:bg-cyan-100">
+                                                                                            Mark Received
+                                                                                        </button>
+                                                                                    )}
+                                                                                    {['RECEIVED', 'VERIFICATION'].includes(test.status) && (
+                                                                                        <button onClick={() => handleOpenResultEntry(test)} className={`px-2 py-0.5 text-[10px] font-bold rounded shadow-sm border ${test.status === 'VERIFICATION' ? 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'}`}>
+                                                                                            {test.status === 'VERIFICATION' ? 'Verify' : 'Result'}
+                                                                                        </button>
+                                                                                    )}
+                                                                                    {test.status === 'COMPLETED' && (
+                                                                                        <button onClick={() => handleOpenPrintModal(test)} className="px-2 py-0.5 bg-slate-900 text-white text-[10px] font-bold rounded shadow-sm flex items-center gap-1 hover:bg-slate-700">
+                                                                                            <Printer size={10} /> Print
+                                                                                        </button>
+                                                                                    )}
+                                                                                    {!['COMPLETED', 'CANCELLED'].includes(test.status) && (
+                                                                                        <button onClick={() => handleUpdateStatus(test.lc_id, 'CANCELLED')} className="px-2 py-0.5 bg-red-50 text-red-600 text-[10px] font-bold rounded shadow-sm border border-red-100 hover:bg-red-100">
+                                                                                            Cancel
+                                                                                        </button>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+
+                                                                        {/* Nested Sub-Tests for Package */}
+                                                                        {isPkg && childSubTests.length > 0 && (
+                                                                            <div className="ml-3 mt-1.5 pl-3 border-l-2 border-indigo-100/80 flex flex-col gap-1.5">
+                                                                                {childSubTests.map(subTest => (
+                                                                                    <div key={subTest.lc_id} className="flex flex-wrap items-center justify-between gap-2 py-0.5 bg-slate-50/50 hover:bg-slate-50 px-2 rounded-lg transition-colors">
+                                                                                        <div className="flex items-center gap-2">
+                                                                                            <div className={`w-1.5 h-1.5 shrink-0 rounded-full ${subTest.status === 'COMPLETED' ? 'bg-emerald-500' : subTest.status === 'CANCELLED' ? 'bg-red-500' : subTest.status === 'DRAWN' ? 'bg-fuchsia-500' : subTest.status === 'RECEIVED' ? 'bg-cyan-500' : 'bg-amber-500'}`} />
+                                                                                            <span className={`text-[10px] font-bold ${subTest.status === 'COMPLETED' ? 'text-emerald-700' : subTest.status === 'CANCELLED' ? 'text-red-400 line-through' : 'text-slate-700'}`}>
+                                                                                                {subTest.test_name}
+                                                                                            </span>
+                                                                                            <span className={`text-[8px] font-black uppercase px-1 py-0.2 rounded ${
+                                                                                                subTest.status === 'COMPLETED' ? 'bg-emerald-100 text-emerald-700' :
+                                                                                                subTest.status === 'DRAWN' ? 'bg-fuchsia-100 text-fuchsia-700' :
+                                                                                                subTest.status === 'RECEIVED' ? 'bg-cyan-100 text-cyan-700' :
+                                                                                                subTest.status === 'VERIFICATION' ? 'bg-indigo-100 text-indigo-700' :
+                                                                                                'bg-slate-100 text-slate-500'
+                                                                                            }`}>
+                                                                                                {subTest.status}
+                                                                                            </span>
+                                                                                        </div>
+
+                                                                                        <div className="flex flex-wrap items-center gap-1 ml-auto">
+                                                                                            {subTest.status === 'PENDING' && (
+                                                                                                <button onClick={() => handleUpdateStatus(subTest.lc_id, 'DRAWN')} className="px-1.5 py-0.5 bg-fuchsia-50 text-fuchsia-600 text-[9px] font-bold rounded border border-fuchsia-100 hover:bg-fuchsia-100">
+                                                                                                    Mark Drawn
+                                                                                                </button>
+                                                                                            )}
+                                                                                            {subTest.status === 'DRAWN' && (
+                                                                                                <button onClick={() => handleUpdateStatus(subTest.lc_id, 'RECEIVED')} className="px-1.5 py-0.5 bg-cyan-50 text-cyan-600 text-[9px] font-bold rounded border border-cyan-100 hover:bg-cyan-100">
+                                                                                                    Mark Received
+                                                                                                </button>
+                                                                                            )}
+                                                                                            {['RECEIVED', 'VERIFICATION'].includes(subTest.status) && (
+                                                                                                <button onClick={() => handleOpenResultEntry(subTest)} className={`px-1.5 py-0.5 text-[9px] font-bold rounded border ${subTest.status === 'VERIFICATION' ? 'bg-indigo-50 text-indigo-600 border-indigo-100 hover:bg-indigo-100' : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'}`}>
+                                                                                                    {subTest.status === 'VERIFICATION' ? 'Verify' : 'Result'}
+                                                                                                </button>
+                                                                                            )}
+                                                                                            {subTest.status === 'COMPLETED' && (
+                                                                                                <button onClick={() => handleOpenPrintModal(subTest)} className="px-1.5 py-0.5 bg-slate-900 text-white text-[9px] font-bold rounded flex items-center gap-0.5 hover:bg-slate-700">
+                                                                                                    <Printer size={8} /> Print
+                                                                                                </button>
+                                                                                            )}
+                                                                                            {!['COMPLETED', 'CANCELLED'].includes(subTest.status) && (
+                                                                                                <button onClick={() => handleUpdateStatus(subTest.lc_id, 'CANCELLED')} className="px-1.5 py-0.5 bg-red-50 text-red-600 text-[9px] font-bold rounded border border-red-100 hover:bg-red-100">
+                                                                                                    Cancel
+                                                                                                </button>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    </div>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            });
+                                                        })()}
                                                     </div>
                                                 </td>
                                                 

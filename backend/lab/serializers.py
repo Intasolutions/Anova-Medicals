@@ -328,21 +328,34 @@ class LabChargeSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         test_name = validated_data.get('test_name')
         visit = validated_data.get('visit')
+        clean_name = test_name.strip() if test_name else ''
+        
+        from .models import LabTest
+        test_obj = LabTest.objects.filter(name__iexact=clean_name).first()
         
         # Prevent exact duplicates for the same visit
-        existing_charge = LabCharge.objects.filter(visit=visit, test_name=test_name).first()
+        existing_charge = LabCharge.objects.filter(visit=visit, test_name__iexact=clean_name).first()
         if existing_charge:
+            # If this is a package and sub-charges were missing, auto-create them now
+            if test_obj and test_obj.is_package and test_obj.package_tests.exists():
+                for sub_test in test_obj.package_tests.all():
+                    if not LabCharge.objects.filter(visit=visit, test_name=sub_test.name, parent_charge=existing_charge).exists():
+                        LabCharge.objects.create(
+                            visit=visit,
+                            test_name=sub_test.name,
+                            sub_name=sub_test.sub_name,
+                            amount=0,
+                            status=existing_charge.status or 'PENDING',
+                            parent_charge=existing_charge
+                        )
             return existing_charge
-
-        from .models import LabTest
-        test_obj = LabTest.objects.filter(name=test_name).first()
 
         if test_obj and test_obj.is_package:
             # Create the parent charge
             parent_charge = super().create(validated_data)
             # Create sub-tests
             for sub_test in test_obj.package_tests.all():
-                if not LabCharge.objects.filter(visit=visit, test_name=sub_test.name).exists():
+                if not LabCharge.objects.filter(visit=visit, test_name=sub_test.name, parent_charge=parent_charge).exists():
                     LabCharge.objects.create(
                         visit=visit,
                         test_name=sub_test.name,

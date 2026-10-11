@@ -376,8 +376,9 @@ class VisitViewSet(viewsets.ModelViewSet):
         lab_test_names = self.request.data.get('lab_test_names')
         if lab_test_names is not None and isinstance(lab_test_names, list):
             from lab.models import LabCharge
-            # Delete any lab charge that is not in the updated explicit name list
-            LabCharge.objects.filter(visit=visit).exclude(test_name__in=lab_test_names).delete()
+            # Delete only parent/standalone lab charges that are not in the updated explicit name list.
+            # NEVER delete sub-charges belonging to a parent package!
+            LabCharge.objects.filter(visit=visit, parent_charge__isnull=True).exclude(test_name__in=lab_test_names).delete()
             
         lab_tests = self.request.data.get('lab_tests')
         if lab_tests is not None and isinstance(lab_tests, list):
@@ -415,6 +416,23 @@ class VisitViewSet(viewsets.ModelViewSet):
                                         existing_charges.add(sub_test.name)
                 except Exception as e:
                     print(f"Error assigning lab test {test_id} to visit {visit.id}: {e}")
+
+        # Ensure all package tests have their sub-charges present on this visit
+        from lab.models import LabCharge, LabTest
+        for pc in LabCharge.objects.filter(visit=visit, parent_charge__isnull=True):
+            clean_name = pc.test_name.strip() if pc.test_name else ''
+            test_obj = LabTest.objects.filter(name__iexact=clean_name, is_package=True).first()
+            if test_obj and test_obj.package_tests.exists():
+                for sub_test in test_obj.package_tests.all():
+                    if not LabCharge.objects.filter(visit=visit, test_name=sub_test.name, parent_charge=pc).exists():
+                        LabCharge.objects.create(
+                            visit=visit,
+                            test_name=sub_test.name,
+                            sub_name=sub_test.sub_name,
+                            amount=0,
+                            status=pc.status or 'PENDING',
+                            parent_charge=pc
+                        )
 
         # --- Sync Casualty Services on Update ---
         casualty_service_names = self.request.data.get('casualty_service_names')
