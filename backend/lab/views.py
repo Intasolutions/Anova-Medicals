@@ -37,11 +37,46 @@ class IsLabOrAdmin(permissions.BasePermission):
         return request.user.is_superuser or getattr(request.user, "role", None) in ["LAB", "ADMIN", "DOCTOR", "RECEPTION", "PHARMACY"]
 
 
+class CanArrangeLabCatalog(permissions.BasePermission):
+    """The report layout is the lab's to decide, so other desks can't change it."""
+    def has_permission(self, request, view):
+        user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        return user.is_superuser or getattr(user, "role", None) in ["LAB", "ADMIN"]
+
+
+def save_display_order(queryset, ids):
+    """
+    Apply a new order given as a list of ids, which must cover exactly the rows in
+    queryset. A partial list would leave the rest with clashing positions; it usually
+    means the screen is out of date (e.g. someone just added a test), so it's refused.
+    Returns an error message, or None on success.
+    """
+    if not isinstance(ids, list) or not all(type(i) is int for i in ids):
+        return 'ids must be a list of integer ids.'
+    rows = {row.id: row for row in queryset.select_for_update()}
+    if len(ids) != len(set(ids)) or set(ids) != set(rows):
+        return 'This list has changed since it was opened. Please refresh and try again.'
+    for position, row_id in enumerate(ids, start=1):
+        rows[row_id].display_order = position
+    queryset.model.objects.bulk_update(rows.values(), ['display_order'])
+    return None
+
+
 class LabCategoryViewSet(viewsets.ModelViewSet):
-    queryset = LabCategory.objects.all().order_by('name')
+    queryset = LabCategory.objects.all().order_by('display_order', 'name')
     serializer_class = LabCategorySerializer
     permission_classes = [IsLabOrAdmin]
     pagination_class = None
+
+    @action(detail=False, methods=['post'], permission_classes=[CanArrangeLabCatalog])
+    @transaction.atomic
+    def reorder(self, request):
+        error = save_display_order(LabCategory.objects.all(), request.data.get('ids'))
+        if error:
+            return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(self.get_serializer(self.get_queryset(), many=True).data)
 
 
 class LabSupplierViewSet(viewsets.ModelViewSet):
@@ -55,13 +90,25 @@ class LabSupplierViewSet(viewsets.ModelViewSet):
 
 
 class LabTestViewSet(viewsets.ModelViewSet):
-    queryset = LabTest.objects.all().order_by('category', 'name')
+    queryset = LabTest.objects.all().order_by('category', 'display_order', 'name')
     serializer_class = LabTestSerializer
     permission_classes = [IsLabOrAdmin]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'category']
     ordering_fields = ['category', 'name', 'price']
     pagination_class = None
+
+    @action(detail=False, methods=['post'], permission_classes=[CanArrangeLabCatalog])
+    @transaction.atomic
+    def reorder(self, request):
+        category = request.data.get('category')
+        if not category or not isinstance(category, str):
+            return Response({'error': 'category is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        tests = LabTest.objects.filter(category__iexact=category)
+        error = save_display_order(tests, request.data.get('ids'))
+        if error:
+            return Response({'error': error}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(self.get_serializer(tests.order_by('display_order', 'name'), many=True).data)
 
 
 class LabInventoryViewSet(viewsets.ModelViewSet):
@@ -253,7 +300,7 @@ class LabChargeViewSet(viewsets.ModelViewSet):
     filterset_fields = ['visit', 'status', 'visit__patient']
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().select_related('parent_charge')
         visit_patient = self.request.query_params.get('visit__patient')
         if visit_patient:
             qs = qs.filter(visit__patient_id=visit_patient)

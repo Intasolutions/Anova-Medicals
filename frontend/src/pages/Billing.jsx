@@ -218,7 +218,7 @@ const Billing = ({ dateRange: externalDateRange }) => {
     if (showLoading) setLoading(true);
     try {
       const { data } = await api.get(
-        `/billing/invoices/?unpaid=true${dateRange.start ? `&created_at__date__gte=${dateRange.start}&created_at__date__lte=${dateRange.end}` : ""}`,
+        `/billing/invoices/?unpaid=true&page_size=10000${dateRange.start ? `&created_at__date__gte=${dateRange.start}&created_at__date__lte=${dateRange.end}` : ""}`,
       );
       setUnpaidInvoices(data.results || (Array.isArray(data) ? data : []));
     } catch (err) {
@@ -231,9 +231,10 @@ const Billing = ({ dateRange: externalDateRange }) => {
   const fetchPendingVisits = async (showLoading = false) => {
     if (showLoading) setLoading(true);
     try {
-      // Visits where assigned_role is BILLING OR have unpaid/draft invoices
+      // Visits parked at Billing with no open invoice. Visits that do have one
+      // appear in the queue through fetchUnpaidInvoices instead.
       const { data } = await api.get(
-        `/reception/visits/?billing_queue=true${dateRange.start ? `&created_at__date__gte=${dateRange.start}&created_at__date__lte=${dateRange.end}` : ""}`,
+        `/reception/visits/?billing_queue=true&page_size=10000${dateRange.start ? `&created_at__date__gte=${dateRange.start}&created_at__date__lte=${dateRange.end}` : ""}`,
       );
       setPendingVisits(data.results || data || []);
     } catch (err) {
@@ -750,13 +751,16 @@ const Billing = ({ dateRange: externalDateRange }) => {
               if (qtyMatch && qtyMatch[1]) qty = parseInt(qtyMatch[1], 10);
             }
 
-            // Match with Pharmacy Sale
-            const pharmacyRecord = freshPharmacySales.find(
-              (i) => i.name.toLowerCase() === medName.toLowerCase(),
-            );
-            const stockItem = pharmacyStock.find(
-              (s) => s.name.toLowerCase() === medName.toLowerCase(),
-            );
+            // Match with Pharmacy Sale (flexible with trailing dots, whitespace, and prefix match)
+            const cleanPresName = medName.trim().replace(/\.+$/, "").toLowerCase();
+            const pharmacyRecord = freshPharmacySales.find((i) => {
+              const cleanI = (i.name || "").trim().replace(/\.+$/, "").toLowerCase();
+              return cleanI === cleanPresName || (cleanPresName.length > 3 && cleanI.startsWith(cleanPresName));
+            });
+            const stockItem = pharmacyStock.find((s) => {
+              const cleanS = (s.name || "").trim().replace(/\.+$/, "").toLowerCase();
+              return cleanS === cleanPresName || (cleanPresName.length > 3 && cleanS.startsWith(cleanPresName));
+            });
 
             let unitPrice = 0,
               amount = 0,

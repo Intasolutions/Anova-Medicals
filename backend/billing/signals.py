@@ -295,65 +295,68 @@ def handle_invoice_updates(sender, instance, created, **kwargs):
 
     # 2. Deduct Stock
     if instance.payment_status not in ('DRAFT', 'CANCELLED'):
-        for item in instance.items.all():
-            if item.dept == 'PHARMACY':
-                name = item.description.strip() if item.description else ""
-                batch = item.batch.strip() if item.batch else ""
-                current_qty = int(item.qty)
-                already_deducted = int(item.deducted_qty)
-                delta = current_qty - already_deducted
-                
-                if delta != 0:
-                    # --- FIXED MULTI-BATCH DEDUCTION LOGIC ---
-                    if batch:
-                        stock = PharmacyStock.objects.select_for_update().filter(
-                            name__iexact=name, batch_no__iexact=batch, is_deleted=False
-                        ).first()
-                        
-                        if stock:
-                            if stock.qty_available < delta:
-                                raise ValidationError({'error': f"Insufficient stock for {name}. Available: {stock.qty_available}, Requested: {delta}"})
-                            stock.qty_available -= delta
-                            stock.save()
-                    else:
+        from django.db import transaction
+        with transaction.atomic():
+            for item in instance.items.all():
+                if item.dept == 'PHARMACY':
+                    name = item.description.strip() if item.description else ""
+                    batch = item.batch.strip() if item.batch else ""
+                    current_qty = int(item.qty)
+                    already_deducted = int(item.deducted_qty)
+                    delta = current_qty - already_deducted
+                    
+                    if delta != 0:
+                        clean_name = name.rstrip('.').strip()
+                        name_q = Q(name__iexact=name) | Q(name__iexact=clean_name) | Q(name__iexact=f"{clean_name}.")
+
                         if delta > 0:
                             # Fetch all available batches for this medicine, ordered by expiry date
                             stocks = list(PharmacyStock.objects.select_for_update().filter(
-                                name__iexact=name, is_deleted=False, qty_available__gt=0
+                                name_q, is_deleted=False, qty_available__gt=0
                             ).order_by('expiry_date'))
-                            
+
+                            # If batch was explicitly specified, prioritize it first
+                            if batch:
+                                stocks.sort(key=lambda s: 0 if s.batch_no.lower() == batch.lower() else 1)
+
                             total_available = sum(s.qty_available for s in stocks)
-                            
+
                             if total_available < delta:
                                 # If no stock is found at all, show 0 to avoid confusion
                                 available_str = total_available if stocks else 0
                                 raise ValidationError({'error': f"Insufficient stock for {name}. Available: {available_str}, Requested: {delta}"})
-                                
-                            # Deduct across batches (FIFO)
+
+                            # Deduct across batches (prioritized batch first, then FIFO)
                             remaining_to_deduct = delta
                             for s in stocks:
                                 if remaining_to_deduct <= 0:
                                     break
-                                    
+
                                 deduct_amount = min(s.qty_available, remaining_to_deduct)
                                 s.qty_available -= deduct_amount
                                 s.save()
                                 remaining_to_deduct -= deduct_amount
                         else:
                             # Returning stock (delta is negative)
-                            # Add back to the oldest active batch, matching original behavior
-                            stock = PharmacyStock.objects.select_for_update().filter(
-                                name__iexact=name, is_deleted=False
-                            ).order_by('expiry_date').first()
-                            
+                            return_qty = -delta
+                            stock = None
+                            if batch:
+                                stock = PharmacyStock.objects.select_for_update().filter(
+                                    name_q, batch_no__iexact=batch, is_deleted=False
+                                ).first()
+                            if not stock:
+                                stock = PharmacyStock.objects.select_for_update().filter(
+                                    name_q, is_deleted=False
+                                ).order_by('expiry_date').first()
+
                             if stock:
-                                stock.qty_available -= delta # Subtracting a negative adds it
+                                stock.qty_available += return_qty
                                 stock.save()
-                            
-                    # Update InvoiceItem with deducted_qty
-                    InvoiceItem.objects.filter(id=item.id).update(
-                        deducted_qty=current_qty, stock_deducted=True
-                    )
+
+                        # Update InvoiceItem with deducted_qty
+                        InvoiceItem.objects.filter(id=item.id).update(
+                            deducted_qty=current_qty, stock_deducted=True
+                        )
 
     # 3. Close visit if fully paid
     visit = instance.visit
@@ -387,22 +390,27 @@ from django.db.models.signals import pre_delete, post_delete
 def return_stock_on_item_delete(sender, instance, **kwargs):
     from pharmacy.models import PharmacyStock
     if instance.dept == 'PHARMACY' and instance.stock_deducted and instance.deducted_qty > 0:
-        name = instance.description.strip() if instance.description else ""
-        batch = instance.batch.strip() if instance.batch else ""
-        
-        stock = None
-        if batch:
-            stock = PharmacyStock.objects.select_for_update().filter(
-                name__iexact=name, batch_no__iexact=batch, is_deleted=False
-            ).first()
-        if not stock and not batch:
-            stock = PharmacyStock.objects.select_for_update().filter(
-                name__iexact=name, is_deleted=False
-            ).first()
+        from django.db import transaction
+        with transaction.atomic():
+            name = instance.description.strip() if instance.description else ""
+            batch = instance.batch.strip() if instance.batch else ""
             
-        if stock:
-            stock.qty_available += instance.deducted_qty
-            stock.save()
+            clean_name = name.rstrip('.').strip()
+            name_q = Q(name__iexact=name) | Q(name__iexact=clean_name) | Q(name__iexact=f"{clean_name}.")
+
+            stock = None
+            if batch:
+                stock = PharmacyStock.objects.select_for_update().filter(
+                    name_q, batch_no__iexact=batch, is_deleted=False
+                ).first()
+            if not stock:
+                stock = PharmacyStock.objects.select_for_update().filter(
+                    name_q, is_deleted=False
+                ).order_by('expiry_date').first()
+                
+            if stock:
+                stock.qty_available += instance.deducted_qty
+                stock.save()
 
 @receiver(post_save, sender=InvoiceItem)
 @receiver(post_delete, sender=InvoiceItem)

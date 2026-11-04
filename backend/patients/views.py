@@ -140,24 +140,20 @@ class VisitViewSet(viewsets.ModelViewSet):
                 Q(lab_charges__status='PENDING')
             ).distinct()
             
-        # Support for Billing Queue: patients waiting at Billing with no invoice
-        # created yet, OR any visit that has an actually unpaid/partial invoice.
-        # A visit tagged BILLING+OPEN whose only invoice is already PAID must
-        # NOT surface here -- otherwise a fully-paid bill can keep showing as
-        # pending indefinitely if the visit's own status is ever out of sync
-        # with its invoice (e.g. via a code path that doesn't close the visit).
+        # Support for Billing Queue: patients parked at the billing desk who have
+        # no open invoice. Visits with an open invoice reach the queue through
+        # /billing/invoices/?unpaid=true, so returning them here too would only
+        # produce a second card, wrongly labelled as not yet billed.
         billing_queue = self.request.query_params.get('billing_queue')
         if billing_queue == 'true':
-            from django.db.models import Q
             # Anyone parked at the billing desk must be visible there, whether or
             # not they still owe money -- a patient who prepaid at the lab and was
             # then sent on by the doctor has a fully-paid invoice, and requiring
             # invoices__isnull=True made them vanish from the counter entirely.
-            qs = qs.filter(
-                Q(assigned_role='BILLING', status='OPEN') |
-                Q(invoices__payment_status__in=['DRAFT', 'PENDING', 'PARTIAL'])
-            ).distinct()
-            
+            qs = qs.filter(assigned_role='BILLING', status='OPEN').exclude(
+                invoices__payment_status__in=['DRAFT', 'PENDING', 'PARTIAL']
+            )
+
         # Filter Logic: Date filtering (created_at__date__gte/lte)
         start_date = self.request.query_params.get('created_at__date__gte')
         end_date = self.request.query_params.get('created_at__date__lte')

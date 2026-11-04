@@ -1,4 +1,4 @@
-from django.db import transaction
+from django.db import models, transaction
 from rest_framework import serializers
 from pharmacy.models import Supplier as SharedSupplier
 from .models import (
@@ -42,10 +42,22 @@ class LabBatchSerializer(serializers.ModelSerializer):
         return 'OK'
 
 
+def next_display_order(queryset):
+    """Position just after the last row, so new entries land at the end of the list."""
+    highest = queryset.aggregate(highest=models.Max('display_order'))['highest']
+    return (highest or 0) + 1
+
+
 class LabCategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = LabCategory
-        fields = ['id', 'name', 'description']
+        fields = ['id', 'name', 'description', 'display_order']
+        # Changed only through the reorder endpoint.
+        read_only_fields = ['display_order']
+
+    def create(self, validated_data):
+        validated_data['display_order'] = next_display_order(LabCategory.objects.all())
+        return super().create(validated_data)
 
 
 class LabTestParameterSerializer(serializers.ModelSerializer):
@@ -69,13 +81,18 @@ class LabTestSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = LabTest
-        fields = ['id', 'name', 'sub_name', 'category', 'price', 'gender', 'normal_range', 'description', 'parameters', 'required_items', 'is_package', 'package_tests']
+        fields = ['id', 'name', 'sub_name', 'category', 'price', 'gender', 'normal_range', 'description', 'parameters', 'required_items', 'is_package', 'package_tests', 'display_order']
+        # Changed only through the reorder endpoint.
+        read_only_fields = ['display_order']
 
     def create(self, validated_data):
         parameters_data = validated_data.pop('parameters', [])
         required_items_data = validated_data.pop('required_items', [])
         package_tests_data = validated_data.pop('package_tests', [])
-        
+
+        validated_data['display_order'] = next_display_order(
+            LabTest.objects.filter(category__iexact=validated_data.get('category', ''))
+        )
         lab_test = LabTest.objects.create(**validated_data)
         
         if package_tests_data:
@@ -94,10 +111,15 @@ class LabTestSerializer(serializers.ModelSerializer):
         parameters_data = validated_data.pop('parameters', None)
         required_items_data = validated_data.pop('required_items', None)
         
+        new_category = validated_data.get('category', instance.category)
+        if new_category.lower() != instance.category.lower():
+            instance.display_order = next_display_order(LabTest.objects.filter(category__iexact=new_category))
+
         instance.name = validated_data.get('name', instance.name)
         instance.sub_name = validated_data.get('sub_name', instance.sub_name)
-        instance.category = validated_data.get('category', instance.category)
+        instance.category = new_category
         instance.price = validated_data.get('price', instance.price)
+        instance.gender = validated_data.get('gender', instance.gender)
         instance.normal_range = validated_data.get('normal_range', instance.normal_range)
         instance.description = validated_data.get('description', instance.description)
         instance.is_package = validated_data.get('is_package', instance.is_package)
@@ -313,6 +335,8 @@ class LabChargeSerializer(serializers.ModelSerializer):
     patient_address = serializers.CharField(source='visit.patient.address', read_only=True)
     doctor_name = serializers.SerializerMethodField()
     payment_status = serializers.SerializerMethodField()
+    # Name of the package this test belongs to, shown on the printed report.
+    parent_test_name = serializers.CharField(source='parent_charge.test_name', read_only=True, default=None)
 
     class Meta:
         model = LabCharge
@@ -320,7 +344,7 @@ class LabChargeSerializer(serializers.ModelSerializer):
             'lc_id', 'visit', 'visit_id', 'patient_name', 'registration_number', 'patient_age', 'patient_sex',
             'patient_phone', 'patient_address', 'doctor_name', 'payment_status',
             'test_name', 'sub_name', 'amount', 'status', 'results', 'report_date', 'drawn_date', 'received_date', 'technician_name',
-            'specimen', 'notes', 'created_at', 'updated_at', 'parent_charge'
+            'specimen', 'notes', 'created_at', 'updated_at', 'parent_charge', 'parent_test_name'
         ]
         read_only_fields = ['lc_id', 'created_at', 'updated_at']
 

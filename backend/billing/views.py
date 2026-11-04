@@ -35,8 +35,9 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         year = self.request.query_params.get('year')
         
         if self.request.query_params.get('unpaid') == 'true':
-            queryset = queryset.exclude(payment_status='PAID')
-            
+            # A cancelled invoice is not owed by anyone, so it isn't "unpaid".
+            queryset = queryset.exclude(payment_status__in=['PAID', 'CANCELLED'])
+
         if date_str:
             try:
                 queryset = queryset.filter(created_at__date=date_str)
@@ -61,7 +62,8 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         if visit_patient:
             queryset = queryset.filter(visit__patient_id=visit_patient)
             
-        queryset = queryset.select_related('visit', 'visit__patient', 'visit__doctor')
+        # visit__doctor_note is read per row by InvoiceSerializer.get_review_note.
+        queryset = queryset.select_related('visit', 'visit__patient', 'visit__doctor', 'visit__doctor_note')
         queryset = queryset.prefetch_related('items', 'payments')
                 
         return queryset

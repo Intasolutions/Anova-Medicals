@@ -266,6 +266,8 @@ class LabCharge(BaseModel):
 class LabCategory(BaseModel):
     name = models.CharField(max_length=50, unique=True)
     description = models.TextField(blank=True, null=True)
+    # Position of this category on printed lab reports (lowest first).
+    display_order = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return self.name
@@ -281,6 +283,8 @@ class LabTest(BaseModel):
     description = models.TextField(blank=True, null=True, help_text="Common description/interpretation for the whole test")
     is_package = models.BooleanField(default=False)
     package_tests = models.ManyToManyField('self', symmetrical=False, blank=True, related_name='packages')
+    # Position of this test within its category on printed lab reports (lowest first).
+    display_order = models.PositiveIntegerField(default=0)
 
     class Meta:
         indexes = [

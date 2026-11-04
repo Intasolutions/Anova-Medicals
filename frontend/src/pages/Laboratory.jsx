@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { Card, Button, Input, Table } from '../components/UI';
 import Pagination from '../components/Pagination';
+import LabOrderManager from '../components/LabOrderManager';
+import { groupChargesForReport, packageNamesForReport, sortCatalogTests, sortChargesForReport } from '../utils/labReportOrder';
 import api from '../api/axios';
 import { useSearch } from '../context/SearchContext';
 import { useToast } from '../context/ToastContext';
@@ -281,6 +283,7 @@ const Laboratory = () => {
             fetchCharges(true);
             fetchPendingVisits(false);
             fetchLabTests();
+            fetchCategories(); // Reports printed from the queue follow the category order
 
             // Removed 4-second polling to reduce server load
             fetchCharges(false);
@@ -315,6 +318,7 @@ const Laboratory = () => {
             fetchCategories();
         } else if (activeTab === 'categories') {
             fetchCategories();
+            fetchLabTests();
         } else if (activeTab === 'suppliers') {
             fetchLabSuppliers();
         } else {
@@ -522,6 +526,10 @@ const Laboratory = () => {
         setEditingTestId(test.id);
         setShowTestModal(true);
     };
+
+    const reportPackageNames = printCharge
+        ? packageNamesForReport(printCharge.tests || [printCharge], labTests)
+        : [];
 
     // Group tests by category
     const groupedTests = labTests.reduce((acc, test) => {
@@ -1039,10 +1047,22 @@ const Laboratory = () => {
                 report_date: maxReport || firstItem.report_date
             });
         } else {
-            // It's a single charge (fallback) or from a different context
+            // It's a single charge (fallback) or from a different context.
+            // A package's results sit on its tests, so those print along with it.
+            let tests = [groupOrCharge];
+            if (labTests.find(t => t.name === groupOrCharge.test_name)?.is_package) {
+                let visitCharges = chargesData.results;
+                try {
+                    const { data } = await api.get(`lab/charges/?visit=${groupOrCharge.visit_id}&page_size=10000`);
+                    visitCharges = data.results || data;
+                } catch (err) {
+                    console.warn('Could not reload the package tests, using the ones on screen', err);
+                }
+                tests = [groupOrCharge, ...visitCharges.filter(c => c.parent_charge === groupOrCharge.lc_id)];
+            }
             setPrintCharge({
                 ...groupOrCharge,
-                tests: [groupOrCharge],
+                tests,
                 isGroup: false,
                 groupStatus: groupOrCharge.status,
                 drawn_date: groupOrCharge.drawn_date,
@@ -1737,7 +1757,7 @@ const Laboratory = () => {
                                     </thead>
                                     <tbody className="divide-y divide-slate-50">
                                         {Object.entries(
-                                            labTests.filter(test => {
+                                            sortCatalogTests(labTests, categories).filter(test => {
                                                 const matchSearch = test.name.toLowerCase().includes(catalogSearch.toLowerCase());
                                                 const matchType = catalogTypeFilter === 'ALL' ? true : (catalogTypeFilter === 'PACKAGE' ? test.is_package : !test.is_package);
                                                 const matchCat = catalogCategoryFilter === 'ALL' ? true : (test.category || 'UNCATEGORIZED') === catalogCategoryFilter;
@@ -1781,31 +1801,13 @@ const Laboratory = () => {
                     )}
                     {/* 4. CATEGORIES TAB */}
                     {activeTab === 'categories' && (
-                        <div className="flex flex-col h-full">
-                            <div className="flex-1 overflow-auto">
-                                <table className="w-full text-left border-collapse">
-                                    <thead className="bg-slate-50 sticky top-0 shadow-sm">
-                                        <tr>
-                                            {['Category Name', 'Actions'].map(h => (
-                                                <th key={h} className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">{h}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-50">
-                                        {categories.map(cat => (
-                                            <tr key={cat.id} className="hover:bg-slate-50 transition-colors group">
-                                                <td className="px-6 py-4 font-bold text-slate-900 text-sm w-full">{cat.name}</td>
-                                                <td className="px-6 py-4">
-                                                    <button onClick={() => handleDeleteCategory(cat.id)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all" title="Delete">
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
+                        <LabOrderManager
+                            categories={categories}
+                            labTests={labTests}
+                            onSaved={() => Promise.all([fetchCategories(), fetchLabTests()])}
+                            onDeleteCategory={handleDeleteCategory}
+                            showToast={showToast}
+                        />
                     )}
                     {/* 5. SUPPLIERS TAB */}
                     {activeTab === 'suppliers' && (
@@ -2670,7 +2672,7 @@ const Laboratory = () => {
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-slate-100">
-                                                {(printCharge.tests || []).map((test, idx) => (
+                                                {sortChargesForReport(printCharge.tests || [], labTests, categories).map((test, idx) => (
                                                     <tr key={idx}>
                                                         <td className="p-4 font-bold text-slate-800">
                                                             {test.test_name}
@@ -2691,14 +2693,12 @@ const Laboratory = () => {
                                 ) : (
                                     // *** REPORT VIEW (Original) ***
                                     <div className="mb-12 space-y-12">
-                                        {Object.entries(
-                                            (printCharge.tests || [printCharge]).filter(t => t.status !== 'CANCELLED').reduce((acc, testItem) => {
-                                                const cat = labTests.find(t => t.name === testItem.test_name)?.category || 'UNCATEGORIZED';
-                                                if (!acc[cat]) acc[cat] = [];
-                                                acc[cat].push(testItem);
-                                                return acc;
-                                            }, {})
-                                        ).map(([category, testsInCategory]) => (
+                                        {reportPackageNames.length > 0 && (
+                                            <p className="text-sm font-black text-slate-900 uppercase tracking-wider text-right">
+                                                Package: {reportPackageNames.join(', ')}
+                                            </p>
+                                        )}
+                                        {groupChargesForReport(printCharge.tests || [printCharge], labTests, categories).map(([category, testsInCategory]) => (
                                             <div key={category} className="mb-6">
                                                 {category !== 'UNCATEGORIZED' && (
                                                     <h2 className="text-lg font-black text-slate-900 uppercase tracking-widest text-center border-y border-slate-200 py-3 mb-6 bg-slate-50">
@@ -2950,7 +2950,7 @@ const Laboratory = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {(printCharge.tests || []).filter(t => t.status !== 'CANCELLED').map((test, idx) => (
+                                            {sortChargesForReport((printCharge.tests || []).filter(t => t.status !== 'CANCELLED'), labTests, categories).map((test, idx) => (
                                                 <tr key={idx}>
                                                     <td className="px-2 py-2 font-bold text-slate-800 text-xs">
                                                         {test.test_name}
@@ -2970,6 +2970,13 @@ const Laboratory = () => {
                                 ) : (
                                     <table className="w-full text-left border-collapse">
                                         <thead>
+                                            {reportPackageNames.length > 0 && (
+                                                <tr>
+                                                    <th colSpan="4" className="px-2 pb-1 text-xs font-black text-black uppercase tracking-wider text-right">
+                                                        Package: {reportPackageNames.join(', ')}
+                                                    </th>
+                                                </tr>
+                                            )}
                                             <tr className="border-b-2 border-slate-300 text-black">
                                                 <th className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest w-[40%]">Parameter Name</th>
                                                 <th className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-widest w-[20%]">Result Value</th>
@@ -2978,14 +2985,7 @@ const Laboratory = () => {
                                             </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
-                                            {Object.entries(
-                                                (printCharge.tests || [printCharge]).filter(t => t.status !== 'CANCELLED' && !labTests.find(ct => ct.name === t.test_name)?.is_package).reduce((acc, testItem) => {
-                                                    const cat = labTests.find(t => t.name === testItem.test_name)?.category || 'UNCATEGORIZED';
-                                                    if (!acc[cat]) acc[cat] = [];
-                                                    acc[cat].push(testItem);
-                                                    return acc;
-                                                }, {})
-                                            ).map(([category, testsInCategory]) => (
+                                            {groupChargesForReport(printCharge.tests || [printCharge], labTests, categories).map(([category, testsInCategory]) => (
                                                 <React.Fragment key={category}>
                                                     {category !== 'UNCATEGORIZED' && (
                                                         <tr>
