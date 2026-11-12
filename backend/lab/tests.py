@@ -1,7 +1,9 @@
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from rest_framework.test import APITestCase
 
-from lab.models import LabCategory, LabCharge, LabTest
+from lab.models import LabCategory, LabCharge, LabTest, LabTestParameter
 from patients.models import Patient, Visit
 
 
@@ -105,3 +107,40 @@ class LabOrderTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.esr.refresh_from_db()
         self.assertEqual(self.esr.gender, 'F')
+
+
+class ParameterOrderTests(APITestCase):
+    def setUp(self):
+        user, _ = get_user_model().objects.get_or_create(username='lab', defaults={'role': 'LAB'})
+        self.client.force_authenticate(user)
+        self.test = LabTest.objects.create(name='CBC', category='HAEMATOLOGY', price=100)
+
+    def save(self, names):
+        rows = [{'name': name, 'is_heading': name.isupper()} for name in names]
+        return self.client.patch(f'/api/lab/tests/{self.test.id}/', {'parameters': rows}, format='json')
+
+    def listed(self):
+        return [p['name'] for p in self.client.get(f'/api/lab/tests/{self.test.id}/').data['parameters']]
+
+    def test_parameters_come_back_in_the_saved_order(self):
+        self.save(['Haemoglobin', 'DIFFERENTIAL COUNT', 'Neutrophils', 'Lymphocytes'])
+        self.save(['DIFFERENTIAL COUNT', 'Lymphocytes', 'Neutrophils', 'Haemoglobin'])
+        self.assertEqual(self.listed(), ['DIFFERENTIAL COUNT', 'Lymphocytes', 'Neutrophils', 'Haemoglobin'])
+        self.assertEqual(
+            list(LabTestParameter.objects.filter(test=self.test).values_list('display_order', flat=True)),
+            [1, 2, 3, 4],
+        )
+
+    def test_order_is_kept_when_creating_a_test(self):
+        response = self.client.post('/api/lab/tests/', {
+            'name': 'LFT', 'category': 'BIOCHEMISTRY', 'price': 100,
+            'parameters': [{'name': 'Zinc'}, {'name': 'Albumin'}, {'name': 'Bilirubin'}],
+        }, format='json')
+        self.assertEqual([p['name'] for p in response.data['parameters']], ['Zinc', 'Albumin', 'Bilirubin'])
+
+    def test_a_failed_save_keeps_the_old_parameters(self):
+        self.save(['Haemoglobin', 'Platelets'])
+        with patch('lab.serializers.LabTestParameter.objects.bulk_create', side_effect=RuntimeError('db down')):
+            with self.assertRaises(RuntimeError):
+                self.save(['Platelets', 'Haemoglobin'])
+        self.assertEqual(self.listed(), ['Haemoglobin', 'Platelets'])

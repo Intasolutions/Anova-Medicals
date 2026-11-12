@@ -67,3 +67,47 @@ export const groupChargesForReport = (charges, catalog, categories) => {
     });
     return [...groups.values()];
 };
+
+// Saved results as a list of rows. Very old results were stored as an object keyed by name.
+export const resultRows = (results) => (Array.isArray(results)
+    ? results
+    : Object.entries(results || {}).map(([name, value]) => ({ name, ...(value && typeof value === 'object' ? value : { value }) })));
+
+const parameterKey = (name) => (name || '').trim().replace(/\s+/g, ' ').toUpperCase();
+
+// Puts saved result rows in the test's current parameter order (Edit Test form).
+// Rows are matched to parameters by name. A row with no matching parameter (added
+// while entering results, or its parameter was renamed or removed) stays right after
+// the row it followed, so nothing is dropped.
+export const sortResultRows = (results, parameters) => {
+    const rows = resultRows(results);
+    if (!parameters?.length || rows.length < 2) return rows;
+
+    const positions = new Map();
+    parameters.forEach((parameter, index) => {
+        const key = parameterKey(parameter.name);
+        if (!positions.has(key)) positions.set(key, []);
+        positions.get(key).push(index);
+    });
+
+    // Each matched row starts a block; unmatched rows join the block before them.
+    const used = new Map();
+    let current = { rank: -1, seq: -1, rows: [] };
+    const blocks = [current];
+    rows.forEach((row, seq) => {
+        const key = parameterKey(row.name);
+        const taken = used.get(key) || 0;
+        const position = positions.get(key)?.[taken];
+        if (position === undefined) {
+            current.rows.push(row);
+            return;
+        }
+        used.set(key, taken + 1);
+        current = { rank: position, seq, rows: [row] };
+        blocks.push(current);
+    });
+
+    return blocks
+        .sort((a, b) => a.rank - b.rank || a.seq - b.seq)
+        .flatMap((block) => block.rows);
+};

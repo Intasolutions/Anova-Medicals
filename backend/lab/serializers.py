@@ -74,6 +74,14 @@ class LabTestRequiredItemSerializer(serializers.ModelSerializer):
         fields = ['id', 'inventory_item', 'item_name', 'qty_per_test']
 
 
+def save_parameters(lab_test, parameters_data):
+    """Parameters are stored in the order the form sends them."""
+    LabTestParameter.objects.bulk_create([
+        LabTestParameter(test=lab_test, display_order=position, **param_data)
+        for position, param_data in enumerate(parameters_data, start=1)
+    ])
+
+
 class LabTestSerializer(serializers.ModelSerializer):
     parameters = LabTestParameterSerializer(many=True, required=False)
     required_items = LabTestRequiredItemSerializer(many=True, required=False)
@@ -85,6 +93,7 @@ class LabTestSerializer(serializers.ModelSerializer):
         # Changed only through the reorder endpoint.
         read_only_fields = ['display_order']
 
+    @transaction.atomic
     def create(self, validated_data):
         parameters_data = validated_data.pop('parameters', [])
         required_items_data = validated_data.pop('required_items', [])
@@ -98,14 +107,14 @@ class LabTestSerializer(serializers.ModelSerializer):
         if package_tests_data:
             lab_test.package_tests.set(package_tests_data)
         
-        for param_data in parameters_data:
-            LabTestParameter.objects.create(test=lab_test, **param_data)
-            
+        save_parameters(lab_test, parameters_data)
+
         for item_data in required_items_data:
             LabTestRequiredItem.objects.create(test=lab_test, **item_data)
             
         return lab_test
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         package_tests_data = validated_data.pop('package_tests', None)
         parameters_data = validated_data.pop('parameters', None)
@@ -130,9 +139,8 @@ class LabTestSerializer(serializers.ModelSerializer):
 
         if parameters_data is not None:
             instance.parameters.all().delete()
-            for param_data in parameters_data:
-                LabTestParameter.objects.create(test=instance, **param_data)
-                
+            save_parameters(instance, parameters_data)
+
         if required_items_data is not None:
             instance.required_items.all().delete()
             for item_data in required_items_data:

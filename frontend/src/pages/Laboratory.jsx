@@ -23,7 +23,9 @@ import {
 import { Card, Button, Input, Table } from '../components/UI';
 import Pagination from '../components/Pagination';
 import LabOrderManager from '../components/LabOrderManager';
-import { groupChargesForReport, packageNamesForReport, sortCatalogTests, sortChargesForReport } from '../utils/labReportOrder';
+import ParameterListEditor from '../components/ParameterListEditor';
+import { newParameterKey, withParameterKeys, withoutParameterKeys } from '../utils/parameterKeys';
+import { groupChargesForReport, packageNamesForReport, sortCatalogTests, sortChargesForReport, sortResultRows } from '../utils/labReportOrder';
 import api from '../api/axios';
 import { useSearch } from '../context/SearchContext';
 import { useToast } from '../context/ToastContext';
@@ -491,11 +493,12 @@ const Laboratory = () => {
         if (testSubmitting) return;
         setTestSubmitting(true);
         try {
+            const payload = { ...testCatalogForm, parameters: withoutParameterKeys(testCatalogForm.parameters) };
             if (editingTestId) {
-                await api.patch(`lab/tests/${editingTestId}/`, testCatalogForm);
+                await api.patch(`lab/tests/${editingTestId}/`, payload);
                 showToast('success', 'Test Updated Successfully');
             } else {
-                await api.post('lab/tests/', testCatalogForm);
+                await api.post('lab/tests/', payload);
                 showToast('success', 'Test Added Successfully');
             }
             setShowTestModal(false);
@@ -518,7 +521,7 @@ const Laboratory = () => {
             gender: test.gender || 'B',
             normal_range: test.normal_range || '',
             description: test.description || '',
-            parameters: test.parameters || [],
+            parameters: withParameterKeys(test.parameters || []),
             required_items: test.required_items || [],
             is_package: test.is_package || false,
             package_tests: test.package_tests || []
@@ -731,15 +734,9 @@ const Laboratory = () => {
 
         // 1. Check if results already exist (Edit Mode)
         if (charge.results && (Array.isArray(charge.results) ? charge.results.length > 0 : Object.keys(charge.results).length > 0)) {
-            let initialResults = [];
-            if (Array.isArray(charge.results)) {
-                initialResults = charge.results;
-            } else {
-                initialResults = Object.entries(charge.results).map(([key, val]) => ({
-                    name: key,
-                    ...val
-                }));
-            }
+            const normalizeName = str => str?.toLowerCase().replace(/[^a-z0-9]/g, '');
+            const catalogTest = labTests.find(t => normalizeName(t.name) === normalizeName(charge.test_name));
+            const initialResults = sortResultRows(charge.results, catalogTest?.parameters);
             setResultData({
                 results: initialResults,
                 technician_name: charge.technician_name || '',
@@ -1982,107 +1979,17 @@ const Laboratory = () => {
                                             <label className="text-xs font-bold text-slate-400 uppercase tracking-widest ml-1">Test Parameters</label>
                                             <button
                                                 type="button"
-                                                onClick={() => setTestCatalogForm(prev => ({ ...prev, parameters: [...prev.parameters, { name: '', unit: '', normal_range: '', description: '', is_heading: false }] }))}
+                                                onClick={() => setTestCatalogForm(prev => ({ ...prev, parameters: [...prev.parameters, { _key: newParameterKey(), name: '', unit: '', normal_range: '', description: '', is_heading: false }] }))}
                                                 className="text-xs font-bold text-blue-600 hover:bg-blue-50 px-2 py-1 rounded transition-colors"
                                             >
                                                 + Add Parameter
                                             </button>
                                         </div>
 
-                                        {testCatalogForm.parameters.length > 0 && (
-                                            <div className="flex gap-2 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest items-center">
-                                                <span className="flex-1">Parameter Name</span>
-                                                <span className="w-[60px] text-center">Heading?</span>
-                                                <span className="flex-1">Details</span>
-                                                <span className="w-[30px]"></span>
-                                            </div>
-                                        )}
-
-                                        <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
-                                            {testCatalogForm.parameters.length === 0 && (
-                                                <div className="p-4 rounded-xl bg-slate-50 border border-dashed border-slate-200 text-center">
-                                                    <p className="text-xs text-slate-400 font-medium">No parameters defined. This will be treated as a single test.</p>
-                                                </div>
-                                            )}
-                                            {testCatalogForm.parameters.map((param, idx) => (
-                                                <div key={idx} className="flex gap-2 items-start animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                                    <input
-                                                        placeholder="e.g. Hemoglobin"
-                                                        value={param.name}
-                                                        onChange={e => {
-                                                            const newParams = [...testCatalogForm.parameters];
-                                                            newParams[idx].name = e.target.value;
-                                                            setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
-                                                        }}
-                                                        className="flex-1 w-full px-3 py-1.5 bg-slate-50 border-2 border-slate-100 rounded-lg outline-none focus:border-blue-500 transition-all text-xs font-bold text-slate-700 h-9"
-                                                    />
-                                                    <div className="w-[60px] flex justify-center items-center h-9">
-                                                        <input 
-                                                            type="checkbox"
-                                                            checked={param.is_heading || false}
-                                                            onChange={e => {
-                                                                const newParams = [...testCatalogForm.parameters];
-                                                                newParams[idx].is_heading = e.target.checked;
-                                                                if (e.target.checked) {
-                                                                    newParams[idx].unit = '';
-                                                                    newParams[idx].normal_range = '';
-                                                                }
-                                                                setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
-                                                            }}
-                                                            className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                                                        />
-                                                    </div>
-                                                    {!param.is_heading ? (
-                                                        <div className="flex gap-2 flex-1 flex-col">
-                                                            <div className="flex gap-2 w-full">
-                                                                <input
-                                                                    placeholder="Unit (e.g. mg/dL)"
-                                                                    value={param.unit || ''}
-                                                                    onChange={e => {
-                                                                        const newParams = [...testCatalogForm.parameters];
-                                                                        newParams[idx].unit = e.target.value;
-                                                                        setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
-                                                                    }}
-                                                                    className="w-16 px-2 py-1.5 bg-slate-50 border-2 border-slate-100 rounded-lg outline-none focus:border-blue-500 transition-all text-xs font-bold text-slate-700 h-9"
-                                                                />
-                                                                <textarea
-                                                                    placeholder="Normal Range (e.g. 12-16)"
-                                                                    value={param.normal_range || ''}
-                                                                    onChange={e => {
-                                                                        const newParams = [...testCatalogForm.parameters];
-                                                                        newParams[idx].normal_range = e.target.value;
-                                                                        setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
-                                                                    }}
-                                                                    className="flex-1 bg-slate-50 border-2 border-slate-100 rounded min-h-[36px] px-2 py-1 text-xs outline-none focus:border-blue-500 transition-all font-bold text-slate-700"
-                                                                />
-                                                            </div>
-                                                            <textarea
-                                                                placeholder="Parameter Description / Interpretation Notes"
-                                                                value={param.description || ''}
-                                                                onChange={e => {
-                                                                    const newParams = [...testCatalogForm.parameters];
-                                                                    newParams[idx].description = e.target.value;
-                                                                    setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
-                                                                }}
-                                                                className="w-full bg-slate-50 border-2 border-slate-100 rounded min-h-[36px] px-2 py-1 text-xs outline-none focus:border-blue-500 transition-all font-bold text-slate-500"
-                                                            />
-                                                        </div>
-                                                    ) : (
-                                                        <div className="flex-1 text-xs text-slate-400 italic flex items-center px-2">Subheading only - no range/unit required</div>
-                                                    )}
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => {
-                                                            const newParams = testCatalogForm.parameters.filter((_, i) => i !== idx);
-                                                            setTestCatalogForm({ ...testCatalogForm, parameters: newParams });
-                                                        }}
-                                                        className="w-8 h-9 flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all flex-shrink-0"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                </div>
-                                            ))}
-                                        </div>
+                                        <ParameterListEditor
+                                            parameters={testCatalogForm.parameters}
+                                            onChange={(parameters) => setTestCatalogForm(prev => ({ ...prev, parameters }))}
+                                        />
                                     </div>
 
                                     {/* SECTION: Required Inventory (Recipe) */}
@@ -2728,10 +2635,7 @@ const Laboratory = () => {
                                                                 </tr>
                                                             </thead>
                                                             <tbody className="divide-y divide-slate-100">
-                                                                {(Array.isArray(testItem.results)
-                                                                    ? testItem.results
-                                                                    : Object.entries(testItem.results || {}).map(([key, val]) => ({ name: key, ...val }))
-                                                                ).map((val, idx) => {
+                                                                {sortResultRows(testItem.results, catalogTest?.parameters).map((val, idx) => {
                                                                     const paramDesc = catalogTest?.parameters?.find(p => p.name === val.name)?.description;
                                                                     return val.is_heading ? (
                                                                         <tr key={idx}>
@@ -3011,10 +2915,7 @@ const Laboratory = () => {
                                                                         </td>
                                                                     </tr>
                                                                 )}
-                                                                {(Array.isArray(testItem.results)
-                                                                    ? testItem.results
-                                                                    : Object.entries(testItem.results || {}).map(([key, val]) => ({ name: key, ...val }))
-                                                                ).map((val, idx) => {
+                                                                {sortResultRows(testItem.results, catalogTest?.parameters).map((val, idx) => {
                                                                     const paramDesc = catalogTest?.parameters?.find(p => p.name === val.name)?.description;
                                                                     return val.is_heading ? (
                                                                         <tr key={`h-${idx}`}>
@@ -3671,7 +3572,7 @@ const Laboratory = () => {
                                                                 </thead>
                                                                 <tbody className="divide-y divide-slate-100 font-medium">
                                                                     {Array.isArray(test.results) 
-                                                                        ? test.results.filter(r => !r.is_heading).map((r, i) => (
+                                                                        ? sortResultRows(test.results, labTests.find(t => t.name === test.test_name)?.parameters).filter(r => !r.is_heading).map((r, i) => (
                                                                             <tr key={i}>
                                                                                 <td className="py-2 text-slate-700">{r.name}</td>
                                                                                 <td className="py-2 text-right font-bold text-blue-700">{r.value || '--'}</td>

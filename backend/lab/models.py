@@ -302,6 +302,11 @@ class LabTestParameter(BaseModel):
     unit = models.CharField(max_length=50, blank=True, null=True)
     normal_range = models.TextField(blank=True, null=True)
     description = models.TextField(blank=True, null=True, help_text="Description box under this parameter")
+    # Position within its test on the result form and the printed report.
+    display_order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['display_order', 'id']
 
     def __str__(self):
         return f"{self.name} ({self.test.name})"
