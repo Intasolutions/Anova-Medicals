@@ -13,6 +13,28 @@ import { useToast } from '../context/ToastContext';
 import { socket } from '../socket';
 import { useAuth } from '../context/AuthContext';
 
+// --- Medicine pricing ---
+// A tablet costs the MRP of the batch it comes from (MRP per strip / tablets
+// per strip), rounded the way the bill rounds it. The sale takes tablets from
+// the earliest-expiring batch with stock first, then the next batch, each at
+// its own price -- these two helpers show the pharmacist that same amount.
+const batchTabPrice = (b) => parseFloat(((b.mrp || 0) / (b.tablets_per_strip || 1)).toFixed(2));
+const cartLineAmount = (item) => {
+    const batches = item.batches && item.batches.length ? item.batches : [item];
+    let left = item.qty;
+    let amount = 0;
+    for (const b of batches) {
+        if (left <= 0) break;
+        const take = Math.min(left, b.qty_available);
+        amount += take * batchTabPrice(b);
+        left -= take;
+    }
+    // Stock changed since the search: price the rest at the last batch listed.
+    if (left > 0) amount += left * batchTabPrice(batches[batches.length - 1]);
+    return amount;
+};
+const cartTabPrice = (item) => (item.qty ? cartLineAmount(item) / item.qty : batchTabPrice(item));
+
 // --- Premium Tooltip ---
 const ActionTooltip = ({ text, children }) => (
     <div className="group relative flex items-center justify-center">
@@ -63,7 +85,7 @@ const ReceiptTemplate = ({ sale }) => (
                     <span className="col-span-6 truncate">{item.name}</span>
                     <span className="col-span-2 text-center truncate">{item.batch_no}</span>
                     <span className="col-span-1 text-center">{item.qty}</span>
-                    <span className="col-span-3 text-right">{(item.selling_price * item.qty).toFixed(2)}</span>
+                    <span className="col-span-3 text-right">{cartLineAmount(item).toFixed(2)}</span>
                 </div>
             ))}
         </div>
@@ -377,16 +399,22 @@ const Pharmacy = () => {
     const searchMeds = async (q) => {
         setMedSearch(q);
         if (!q || q.length < 2) { setMedResults([]); return; }
-        try { 
-            const { data } = await api.get(`pharmacy/stock/?search=${q}`); 
+        try {
+            // Only batches that have stock, oldest expiry first: the first row of
+            // each medicine is then the batch the sale takes tablets from first,
+            // so the price on the card is the price charged.
+            const { data } = await api.get(`pharmacy/stock/?search=${encodeURIComponent(q)}&stock_status=AVAILABLE`);
             const results = data.results || data || [];
             const uniqueMap = new Map();
             results.forEach(item => {
                 const normalized = item.name.trim().toLowerCase();
                 if (!uniqueMap.has(normalized)) {
-                    uniqueMap.set(normalized, { ...item, name: item.name.trim() });
+                    uniqueMap.set(normalized, { ...item, name: item.name.trim(), batches: [item] });
                 } else {
-                    uniqueMap.get(normalized).qty_available += item.qty_available;
+                    const group = uniqueMap.get(normalized);
+                    group.qty_available += item.qty_available;
+                    // The sale only takes from batches with exactly this name.
+                    if (item.name === group.batches[0].name) group.batches.push(item);
                 }
             });
             const aggregated = Array.from(uniqueMap.values());
@@ -619,7 +647,7 @@ const Pharmacy = () => {
             setLoading(false);
         }
     };
-    const calculateTotals = () => { const subtotal = cart.reduce((acc, item) => acc + (item.selling_price * item.qty), 0); return { subtotal, net: subtotal.toFixed(2) }; };
+    const calculateTotals = () => { const subtotal = cart.reduce((acc, item) => acc + cartLineAmount(item), 0); return { subtotal, net: subtotal.toFixed(2) }; };
     useEffect(() => {
         if (cart.length > 0) {
             setCart(prevCart => prevCart.map(item => {
@@ -779,6 +807,7 @@ const Pharmacy = () => {
             // so reading `cart` here would always be stale.
             const itemsInCart = new Set();
             const skipped = [];
+            const notInStock = [];
 
             for (const med of medList) {
                 const { name, dosage, duration, qty, note } = med;
@@ -791,15 +820,24 @@ const Pharmacy = () => {
                 // would otherwise add two lines for it.
                 itemsInCart.add(name.toLowerCase());
 
-                const { data } = await api.get(`pharmacy/stock/?search=${encodeURIComponent(name)}`);
+                // Batches of this medicine that have stock, oldest expiry first.
+                // The first is the batch the sale takes from first; the stock is
+                // all of them together (one empty or small batch used to make
+                // the cart say OOS). No stand-in medicine: if the prescribed one
+                // has no stock, the pharmacist is told instead.
+                const { data } = await api.get(`pharmacy/stock/?search=${encodeURIComponent(name)}&stock_status=AVAILABLE&page_size=200`);
                 const results = data.results || data || [];
-                const match = results.find(r => r.name.toLowerCase() === name.toLowerCase()) || results[0];
+                const sameName = results.filter(r => r.name.toLowerCase() === name.toLowerCase());
+                const match = sameName[0];
                 if (match) {
+                    const batches = sameName.filter(r => r.name === match.name);
                     const tps = match.tablets_per_strip || 1;
                     const stripPrice = match.mrp; // Selling at MRP
                     const tabletPrice = stripPrice / tps;
                     newCart.push({
                         ...match,
+                        qty_available: batches.reduce((sum, b) => sum + b.qty_available, 0),
+                        batches,
                         qty: qty,
                         original_qty: qty,
                         selling_price: tabletPrice,
@@ -810,12 +848,15 @@ const Pharmacy = () => {
                         duration: duration,
                         note: note
                     });
+                } else {
+                    notInStock.push(name);
                 }
-            } 
+            }
             setSkippedPrescriptionItems(skipped);
-            setCart(newCart); 
+            setCart(newCart);
             if (newCart.length > 0) showToast('success', 'Rx loaded');
             if (skipped.length > 0) showToast('info', 'Some previously dispensed items were skipped.');
+            if (notInStock.length > 0) showToast('error', `Not in stock: ${notInStock.join(', ')}`);
         } catch (err) { console.error(err); } finally { setLoading(false); }
     };
 
@@ -823,22 +864,28 @@ const Pharmacy = () => {
         setLoading(true);
         const newCart = [...cart];
         const itemsInCart = new Set(newCart.map(i => i.name.toLowerCase()));
-        
+        const notInStock = [];
+
         try {
             for (const med of skippedPrescriptionItems) {
                 const { name, dosage, duration, qty, note } = med;
                 if (itemsInCart.has(name.toLowerCase())) continue;
                 itemsInCart.add(name.toLowerCase());
 
-                const { data } = await api.get(`pharmacy/stock/?search=${encodeURIComponent(name)}`);
+                // Same lookup as loadPrescription: batches with stock, oldest first.
+                const { data } = await api.get(`pharmacy/stock/?search=${encodeURIComponent(name)}&stock_status=AVAILABLE&page_size=200`);
                 const results = data.results || data || [];
-                const match = results.find(r => r.name.toLowerCase() === name.toLowerCase()) || results[0];
+                const sameName = results.filter(r => r.name.toLowerCase() === name.toLowerCase());
+                const match = sameName[0];
                 if (match) {
+                    const batches = sameName.filter(r => r.name === match.name);
                     const tps = match.tablets_per_strip || 1;
                     const stripPrice = match.mrp;
                     const tabletPrice = stripPrice / tps;
                     newCart.push({
                         ...match,
+                        qty_available: batches.reduce((sum, b) => sum + b.qty_available, 0),
+                        batches,
                         qty: qty,
                         original_qty: qty,
                         selling_price: tabletPrice,
@@ -849,11 +896,14 @@ const Pharmacy = () => {
                         duration: duration,
                         note: note
                     });
+                } else {
+                    notInStock.push(name);
                 }
             }
             setCart(newCart);
             setSkippedPrescriptionItems([]);
             showToast('success', 'Skipped items loaded');
+            if (notInStock.length > 0) showToast('error', `Not in stock: ${notInStock.join(', ')}`);
         } catch (err) {
             console.error(err);
             showToast('error', 'Failed to load skipped items');
@@ -1485,7 +1535,7 @@ const Pharmacy = () => {
                                         <div className="flex justify-between items-start mb-2">
                                             <div className="flex-1 pr-2">
                                                 <p className="text-xs font-bold text-gray-900 line-clamp-1">{item.name}</p>
-                                                <p className="text-[10px] font-black text-slate-500 uppercase mt-0.5 tracking-wider">₹{item.selling_price.toFixed(2)} / Tab</p>
+                                                <p className="text-[10px] font-black text-slate-500 uppercase mt-0.5 tracking-wider">₹{cartTabPrice(item).toFixed(2)} / Tab</p>
                                                 {(item.dosage || item.duration) && (
                                                     <div className="flex flex-wrap items-center gap-1 mt-1.5">
                                                         {item.dosage && <span className="text-[12px] font-black border border-gray-300 text-gray-700 px-1 py-0.5 rounded uppercase">{item.dosage}</span>}
@@ -1520,7 +1570,7 @@ const Pharmacy = () => {
                                                     else showToast('error', 'OOS');
                                                 }} className="w-5 h-5 flex items-center justify-center text-gray-600 hover:bg-white hover:text-gray-900 transition-colors">+</button>
                                             </div>
-                                            <p className="text-xs font-black text-gray-900">₹{(item.selling_price * item.qty).toFixed(2)}</p>
+                                            <p className="text-xs font-black text-gray-900">₹{cartLineAmount(item).toFixed(2)}</p>
                                         </div>
                                     </div>
                                 ))}

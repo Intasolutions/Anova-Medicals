@@ -31,6 +31,21 @@ import { useDialog } from "../context/DialogContext";
 import { socket } from "../socket";
 import Pagination from "../components/Pagination";
 
+// One medicine is one bill row. When its tablets came from several batches the
+// row names all of them ("A, B"); these helpers keep each batch recognisable,
+// so a saved row still matches the pharmacy sale lines it came from.
+const rowBatches = (batch) =>
+  String(batch || "").split(",").map((b) => b.trim()).filter(Boolean);
+const addBatch = (rowBatch, batch) => {
+  const list = rowBatches(rowBatch);
+  if (batch && !list.includes(batch)) list.push(batch);
+  return list.join(", ");
+};
+// Price shown on a combined row: its amount per tablet (each batch was charged
+// its own MRP, so this is the exact total spread over the tablets).
+const rowUnitPrice = (amount, qty) =>
+  parseFloat(qty) ? parseFloat((parseFloat(amount) / parseFloat(qty)).toFixed(2)) : 0;
+
 const Billing = ({ dateRange: externalDateRange }) => {
   const { showToast } = useToast();
   const { confirm } = useDialog();
@@ -522,29 +537,24 @@ const Billing = ({ dateRange: externalDateRange }) => {
         console.log(`  - amount: ${item.amount}`);
         console.log(`  - gst: ${item.gst}%`);
 
-        // Consolidate identical items (same name and price)
+        // One row per medicine. Batches of it may have different prices (each
+        // charged its own MRP), so the row adds up their amounts.
         const parsedUnitPrice = parseFloat(item.unit_price) || 0;
         const parsedAmount = parseFloat(item.amount) || 0;
         const parsedQty = parseFloat(item.qty) || 0;
 
         const existingIdx = newFormData.items.findIndex(
-          i => i.dept === "PHARMACY" && 
-               i.description === item.name && 
-               i.unit_price === parsedUnitPrice
+          i => i.dept === "PHARMACY" &&
+               i.description === item.name
         );
 
         if (existingIdx !== -1) {
           const ex = newFormData.items[existingIdx];
           ex.qty = (parseFloat(ex.qty) + parsedQty).toString();
           ex.amount = (parseFloat(ex.amount) + parsedAmount).toFixed(2);
+          ex.unit_price = rowUnitPrice(ex.amount, ex.qty);
           ex.deducted_qty = (parseFloat(ex.deducted_qty || 0) + parsedQty).toString();
-          
-          // Append batch if it's different and not empty
-          if (item.batch && ex.batch && !ex.batch.includes(item.batch)) {
-            ex.batch = `${ex.batch}, ${item.batch}`;
-          } else if (item.batch && !ex.batch) {
-            ex.batch = item.batch;
-          }
+          ex.batch = addBatch(ex.batch, item.batch);
         } else {
           newFormData.items.push({
             dept: "PHARMACY",
@@ -956,9 +966,18 @@ const Billing = ({ dateRange: externalDateRange }) => {
           const serviceNames = validItems
             .filter((i) => i.dept === "CASUALTY")
             .map((i) => i.description);
+          // One key per batch. The visit deletes every pharmacy sale line
+          // whose "name-batch" is not listed, so a row "X" with batch "A, B"
+          // must list X-A and X-B (the whole "X-A, B" matched neither line,
+          // and the patient's pharmacy sale was deleted).
           const pharmacyKeys = validItems
             .filter((i) => i.dept === "PHARMACY")
-            .map((i) => `${i.description}-${i.batch || ""}`);
+            .flatMap((i) => {
+              const batches = rowBatches(i.batch);
+              return batches.length
+                ? batches.map((b) => `${i.description}-${b}`)
+                : [`${i.description}-`];
+            });
 
           try {
             await api.patch(`/reception/visits/${visitId}/`, {
@@ -1177,8 +1196,16 @@ const Billing = ({ dateRange: externalDateRange }) => {
             deducted_qty: 0,
           }));
 
+        // One key per batch: a row "X" with batch "A, B" already bills the
+        // sale lines X/A and X/B. (Keyed on the whole "A, B" text, those lines
+        // looked new and were billed a second time.)
         const existingKeys = new Set(
-          baseItems.map((i) => `${i.description}-${i.batch || ""}`),
+          baseItems.flatMap((i) => {
+            const batches = rowBatches(i.batch);
+            return batches.length
+              ? batches.map((b) => `${i.description}-${b}`)
+              : [`${i.description}-`];
+          }),
         );
         uniquePharmacyItems = visitPharmacyItems.filter(
           (i) => !existingKeys.has(`${i.description}-${i.batch || ""}`),
@@ -1205,28 +1232,25 @@ const Billing = ({ dateRange: externalDateRange }) => {
       const consolidatedItems = [];
       rawItems.forEach(item => {
           if (item.dept === "PHARMACY") {
-              const parsedUnitPrice = parseFloat(item.unit_price) || 0;
               const parsedAmount = parseFloat(item.amount) || 0;
               const parsedQty = parseFloat(item.qty) || 0;
-              
-              const existingIdx = consolidatedItems.findIndex(
+
+              // One row per medicine (its batches may differ in price). A row
+              // already saved on this bill is never merged into another one:
+              // saving would delete it, and deleting a saved pharmacy row puts
+              // its tablets back into stock although the patient has them.
+              const existingIdx = item.id ? -1 : consolidatedItems.findIndex(
                   i => i.dept === "PHARMACY" &&
-                       i.description === item.description &&
-                       parseFloat(i.unit_price || 0) === parsedUnitPrice
+                       i.description === item.description
               );
-              
+
               if (existingIdx !== -1) {
                   const ex = consolidatedItems[existingIdx];
                   ex.qty = (parseFloat(ex.qty || 0) + parsedQty).toString();
                   ex.amount = (parseFloat(ex.amount || 0) + parsedAmount).toFixed(2);
+                  ex.unit_price = rowUnitPrice(ex.amount, ex.qty);
                   ex.deducted_qty = (parseFloat(ex.deducted_qty || 0) + (parseFloat(item.deducted_qty) || 0)).toString();
-                  
-                  if (item.batch && ex.batch && !ex.batch.includes(item.batch)) {
-                      ex.batch = `${ex.batch}, ${item.batch}`;
-                  } else if (item.batch && !ex.batch) {
-                      ex.batch = item.batch;
-                  }
-                  if (!ex.id && item.id) ex.id = item.id;
+                  ex.batch = addBatch(ex.batch, item.batch);
                   if (!ex.item_id && item.item_id) ex.item_id = item.item_id;
               } else {
                   consolidatedItems.push({ ...item });

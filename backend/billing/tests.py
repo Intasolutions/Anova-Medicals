@@ -76,6 +76,50 @@ class BillingQueueTests(APITestCase):
         Visit.objects.create(patient=self._patient(), assigned_role='BILLING', status='CLOSED')
         self.assertEqual(self._ids(self.VISITS_URL), set())
 
+    def _stock(self, batch_no, qty, mrp):
+        from datetime import date
+        from pharmacy.models import PharmacyStock
+        return PharmacyStock.objects.create(
+            name='CIPZEN FORTE', batch_no=batch_no, expiry_date=date(2028, 1, 1), qty_available=qty,
+            mrp=Decimal(mrp), selling_price=Decimal(mrp), tablets_per_strip=10,
+        )
+
+    def _bill(self, items):
+        response = self.client.post('/api/billing/invoices/', {
+            'patient_name': 'Test Patient', 'payment_status': 'PENDING',
+            'total_amount': '0.00', 'discount_amount': '0.00', 'items': items,
+        }, format='json')
+        self.assertEqual(response.status_code, 201, response.data)
+        return Invoice.objects.get(id=response.data['id'])
+
+    def test_combining_rows_does_not_take_stock_twice(self):
+        # One medicine sold from two batches: the sale already took both from stock.
+        a = self._stock('A', 10, '73.41')
+        b = self._stock('B', 10, '110.85')
+        row = dict(dept='PHARMACY', description='CIPZEN FORTE', stock_deducted=True)
+        invoice = self._bill([
+            {**row, 'qty': 5, 'unit_price': '7.34', 'amount': '36.70', 'batch': 'A', 'deducted_qty': 5},
+            {**row, 'qty': 5, 'unit_price': '11.08', 'amount': '55.40', 'batch': 'B', 'deducted_qty': 5},
+        ])
+        [line] = invoice.items.all()
+        self.assertEqual((line.qty, line.amount, line.deducted_qty, line.batch), (10, Decimal('92.10'), 10, 'A, B'))
+        a.refresh_from_db()
+        b.refresh_from_db()
+        self.assertEqual((a.qty_available, b.qty_available), (10, 10))
+
+    def test_combining_manual_row_with_sold_row_takes_only_the_manual_part(self):
+        a = self._stock('A', 10, '73.41')
+        invoice = self._bill([
+            {'dept': 'PHARMACY', 'description': 'CIPZEN FORTE', 'qty': 2, 'unit_price': '7.34', 'amount': '14.68',
+             'batch': 'A', 'stock_deducted': False, 'deducted_qty': 0},
+            {'dept': 'PHARMACY', 'description': 'CIPZEN FORTE', 'qty': 5, 'unit_price': '7.34', 'amount': '36.70',
+             'batch': 'A', 'stock_deducted': True, 'deducted_qty': 5},
+        ])
+        [line] = invoice.items.all()
+        self.assertEqual((line.qty, line.deducted_qty), (7, 7))
+        a.refresh_from_db()
+        self.assertEqual(a.qty_available, 8)  # only the 2 added at the billing desk
+
     def test_unpaid_query_count_does_not_grow_with_invoices(self):
         visit = self._parked_visit()
         self._invoice('DRAFT', visit=visit)

@@ -293,7 +293,9 @@ class PharmacyStockViewSet(viewsets.ModelViewSet):
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'content', 'barcode', 'batch_no']
     ordering_fields = ['expiry_date', 'qty_available', 'updated_at', 'supplier__supplier_name']
-    ordering = ['expiry_date']
+    # `id` breaks ties between batches with the same expiry, so screens list
+    # batches in the same order the sale takes stock from them.
+    ordering = ['expiry_date', 'id']
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
@@ -315,8 +317,8 @@ class PharmacyStockViewSet(viewsets.ModelViewSet):
             qs = qs.filter(qty_available__gte=10)
         elif stock_status == 'AVAILABLE':
             qs = qs.filter(qty_available__gt=0)
-            
-        return qs.order_by('expiry_date')
+
+        return qs.order_by('expiry_date', 'id')
 
     @action(detail=False, methods=['get'], url_path='low-stock')
     def low_stock(self, request):
@@ -387,16 +389,22 @@ class PharmacyStockViewSet(viewsets.ModelViewSet):
 
         results = []
         for item in qs:
-            # Fetch latest stock details for pricing
             latest = PharmacyStock.objects.filter(name=item['name'], is_deleted=False).order_by('-expiry_date').first()
+            # Price from the batch the patient will actually get: the
+            # earliest-expiring batch that still has stock, which is the batch
+            # the sale takes tablets from first. (This used to be the
+            # latest-expiring batch, even an empty one.)
+            priced = PharmacyStock.objects.filter(
+                name=item['name'], is_deleted=False, qty_available__gt=0
+            ).order_by('expiry_date', 'id').first() or latest
             results.append({
                 # Use name as ID to unique key it in frontend lists
                 'id': item['name'],
                 'name': item['name'],
                 'qty_available': item['total_qty'] or 0,
                 'content': latest.content if latest else '',
-                'mrp': latest.mrp if latest else 0,
-                'tablets_per_strip': latest.tablets_per_strip if latest else 1,
+                'mrp': priced.mrp if priced else 0,
+                'tablets_per_strip': priced.tablets_per_strip if priced else 1,
                 'medicine_type': latest.medicine_type if latest else 'TABLET'
             })
         

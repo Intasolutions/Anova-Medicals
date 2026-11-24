@@ -1,3 +1,5 @@
+from decimal import Decimal, ROUND_HALF_UP
+
 from django.db import transaction
 from django.db.models import Q
 from rest_framework import serializers
@@ -6,6 +8,25 @@ from .models import (
     PharmacySale, PharmacySaleItem,
     PharmacyReturn, PharmacyReturnItem
 )
+
+
+def round_like_screen(value):
+    """
+    Round to paise exactly the way the screens do, JavaScript's
+    `number.toFixed(2)`: half-up on the binary value of the float. Using the
+    same rounding means a price the doctor, POS and bill show never differs
+    by a paisa.
+    """
+    return Decimal(float(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+
+
+def price_per_tab(stock):
+    """
+    The one price of a batch: its MRP (per strip) divided by tablets per strip.
+    Every screen and the bill use this, so the patient pays the MRP printed on
+    the strip they actually receive.
+    """
+    return round_like_screen(float(stock.mrp) / (stock.tablets_per_strip or 1))
 
 
 class SupplierSerializer(serializers.ModelSerializer):
@@ -327,15 +348,16 @@ class PharmacySaleSerializer(serializers.ModelSerializer):
             if initial_med_stock.is_deleted:
                 raise serializers.ValidationError("Selected medicine stock is deleted.")
 
-            unit_price_fallback = item.get('unit_price') or (initial_med_stock.selling_price / initial_med_stock.tablets_per_strip)
             gst_percent = item.get('gst_percent', 0)
 
-            # Find all available batches for this medicine, ordered by expiry date (FIFO)
+            # Find all available batches for this medicine, ordered by expiry date (FIFO).
+            # `id` breaks ties between batches with the same expiry, so the order
+            # is the same one the pharmacy screen shows.
             available_batches = list(PharmacyStock.objects.filter(
                 name=initial_med_stock.name,
                 is_deleted=False,
                 qty_available__gt=0
-            ).order_by('expiry_date'))
+            ).order_by('expiry_date', 'id'))
 
             # Prioritize the explicitly requested batch by moving it to the front of the list
             available_batches.sort(key=lambda x: 0 if x.id == initial_med_stock.id else 1)
@@ -352,10 +374,13 @@ class PharmacySaleSerializer(serializers.ModelSerializer):
                     break
                 
                 deduct_qty = min(remaining_qty, batch.qty_available)
-                
-                # Calculate per-tablet price for this specific batch if unit_price wasn't hardcoded
-                batch_unit_price = item.get('unit_price') or (batch.selling_price / batch.tablets_per_strip)
-                amount = float(batch_unit_price) * deduct_qty
+
+                # Each batch is charged at its own MRP per tablet. The price the
+                # screen sent is not used: it belongs to whichever batch the
+                # screen happened to show, which may not be the batch (or the
+                # only batch) these tablets come from.
+                batch_unit_price = price_per_tab(batch)
+                amount = batch_unit_price * deduct_qty
                 
                 # reduce stock
                 batch.qty_available -= deduct_qty
@@ -404,23 +429,44 @@ class PharmacySaleSerializer(serializers.ModelSerializer):
                 payment_status='PENDING'
             )
             
-            # Link items to the invoice
-            for sale_item in sale.items.all():
+            # Link items to the invoice: one bill row per medicine. When the
+            # tablets came from several batches, the row's amount is the sum of
+            # each batch at its own price, its price is that amount per tablet,
+            # and its batch lists every batch ("A, B") -- the same row Billing
+            # builds for a registered patient.
+            rows = {}
+            for sale_item in sale.items.select_related('med_stock').order_by('id'):
+                name = sale_item.med_stock.name
+                row = rows.get(name)
+                if row is None:
+                    rows[name] = {
+                        'first': sale_item, 'qty': sale_item.qty, 'amount': sale_item.amount,
+                        'batches': [sale_item.med_stock.batch_no],
+                    }
+                else:
+                    row['qty'] += sale_item.qty
+                    row['amount'] += sale_item.amount
+                    if sale_item.med_stock.batch_no not in row['batches']:
+                        row['batches'].append(sale_item.med_stock.batch_no)
+
+            for name, row in rows.items():
+                first = row['first']
                 InvoiceItem.objects.create(
                     invoice=invoice,
                     item_id=sale.id, # Link back to PharmacySale
                     dept='PHARMACY',
-                    description=sale_item.med_stock.name,
-                    qty=sale_item.qty,
-                    unit_price=sale_item.unit_price,
-                    amount=sale_item.amount,
-                    hsn=sale_item.med_stock.hsn,
-                    batch=sale_item.med_stock.batch_no,
-                    gst_percent=sale_item.gst_percent,
+                    description=name,
+                    qty=row['qty'],
+                    unit_price=round_like_screen(float(row['amount']) / row['qty']),
+                    amount=row['amount'],
+                    hsn=first.med_stock.hsn,
+                    # The column holds 50 characters; never let a long list fail the sale.
+                    batch=', '.join(row['batches'])[:50],
+                    gst_percent=first.gst_percent,
                     stock_deducted=True,
-                    deducted_qty=sale_item.qty,
-                    dosage=sale_item.dosage,
-                    duration=sale_item.timing
+                    deducted_qty=row['qty'],
+                    dosage=first.dosage,
+                    duration=first.timing
                 )
                 
             # Skip the registered patient logic entirely

@@ -6,11 +6,10 @@ class RequestLoggingMiddleware:
 
     def __call__(self, request):
         if '/auth/token/' in request.path:
+            # Path and method only. The body is never printed: for a login it
+            # holds the password, for /auth/token/refresh/ a refresh token, and
+            # whatever is printed here ends up in the server logs.
             msg = f"\n!!! INCOMING LOGIN REQUEST !!!\nPath: {request.path}\nMethod: {request.method}\n"
-            try:
-                msg += f"Body: {request.body.decode('utf-8')}\n"
-            except:
-                msg += f"Body (Binary): {request.body}\n"
             msg += "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n"
             
             # FORCE PRINT TO CONSOLE

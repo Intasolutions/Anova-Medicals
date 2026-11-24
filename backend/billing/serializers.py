@@ -3,6 +3,36 @@ from django.db import models
 from rest_framework import serializers
 from .models import Invoice, InvoiceItem, PaymentTransaction
 
+def _join_batches(*values):
+    """'A' + 'B, A' -> 'A, B'. Keeps every batch of a combined row (the column holds 50 chars)."""
+    batches = []
+    for value in values:
+        for batch in str(value or '').split(','):
+            batch = batch.strip()
+            if batch and batch not in batches:
+                batches.append(batch)
+    return ', '.join(batches)[:50]
+
+
+def _merge_row(existing, item_data):
+    """
+    Add a repeat row into an existing one (a dict of row fields). Besides qty and
+    amount, the stock already taken for the repeat is carried over: the stock
+    signal deducts `qty - deducted_qty`, so dropping it would take the repeat's
+    tablets from stock a second time. Its batch is kept as well, so the row
+    still names every batch its tablets came from.
+    """
+    new_qty = item_data.get('qty', 1) or 1
+    new_amount = item_data.get('amount', 0) or 0
+    existing['qty'] = (existing.get('qty') or 0) + new_qty
+    existing['amount'] = (existing.get('amount') or 0) + new_amount
+    if existing['qty']:
+        existing['unit_price'] = existing['amount'] / existing['qty']
+    existing['deducted_qty'] = (existing.get('deducted_qty') or 0) + (item_data.get('deducted_qty') or 0)
+    existing['stock_deducted'] = bool(existing.get('stock_deducted')) or bool(item_data.get('stock_deducted'))
+    existing['batch'] = _join_batches(existing.get('batch'), item_data.get('batch'))
+
+
 class PaymentTransactionSerializer(serializers.ModelSerializer):
     class Meta:
         model = PaymentTransaction
@@ -107,12 +137,14 @@ class InvoiceSerializer(serializers.ModelSerializer):
                 ).first()
 
                 if existing_item:
-                    new_qty = item_data.get('qty', 1) or 1
-                    new_amount = item_data.get('amount', 0) or 0
-                    existing_item.qty = (existing_item.qty or 0) + new_qty
-                    existing_item.amount = (existing_item.amount or 0) + new_amount
-                    if existing_item.qty:
-                        existing_item.unit_price = existing_item.amount / existing_item.qty
+                    row = {
+                        'qty': existing_item.qty, 'amount': existing_item.amount,
+                        'deducted_qty': existing_item.deducted_qty,
+                        'stock_deducted': existing_item.stock_deducted, 'batch': existing_item.batch,
+                    }
+                    _merge_row(row, item_data)
+                    for field, value in row.items():
+                        setattr(existing_item, field, value)
                     existing_item.save()
                 else:
                     InvoiceItem.objects.create(invoice=invoice, **item_data)
@@ -154,13 +186,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
             for item_data in items_data:
                 desc = item_data.get('description')
                 if desc in merged_items:
-                    existing = merged_items[desc]
-                    new_qty = item_data.get('qty', 1) or 1
-                    new_amount = item_data.get('amount', 0) or 0
-                    existing['qty'] = (existing.get('qty') or 0) + new_qty
-                    existing['amount'] = (existing.get('amount') or 0) + new_amount
-                    if existing['qty']:
-                        existing['unit_price'] = existing['amount'] / existing['qty']
+                    _merge_row(merged_items[desc], item_data)
                 else:
                     merged_items[desc] = dict(item_data)
                     item_order.append(desc)
@@ -224,13 +250,7 @@ class InvoiceSerializer(serializers.ModelSerializer):
                     # New item, merge by description
                     desc = item_data.get('description')
                     if desc in merged_items:
-                        existing = merged_items[desc]
-                        new_qty = item_data.get('qty', 1) or 1
-                        new_amount = item_data.get('amount', 0) or 0
-                        existing['qty'] = (existing.get('qty') or 0) + new_qty
-                        existing['amount'] = (existing.get('amount') or 0) + new_amount
-                        if existing['qty']:
-                            existing['unit_price'] = existing['amount'] / existing['qty']
+                        _merge_row(merged_items[desc], item_data)
                     else:
                         merged_items[desc] = dict(item_data)
                         item_order.append(desc)
